@@ -12,10 +12,12 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.12.2",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "papaparse": "^5.5.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/papaparse": "^5.3.16",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }
