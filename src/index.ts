@@ -1,0 +1,488 @@
+#!/usr/bin/env node
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { BerlinOpenDataAPI } from './berlin-api.js';
+import { QueryProcessor } from './query-processor.js';
+
+class BerlinOpenDataMCPServer {
+  private server: Server;
+  private api: BerlinOpenDataAPI;
+  private queryProcessor: QueryProcessor;
+
+  constructor() {
+    this.server = new Server(
+      {
+        name: 'berlin-opendata-server',
+        version: '1.0.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+          prompts: {},
+        },
+      }
+    );
+
+    this.api = new BerlinOpenDataAPI();
+    this.queryProcessor = new QueryProcessor();
+
+    this.setupHandlers();
+  }
+
+  private setupHandlers() {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [
+        {
+          name: 'search_berlin_datasets',
+          description: 'Search Berlin open datasets using natural language queries. Perfect for discovering data about transportation, environment, demographics, etc.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Natural language search query in German or English (e.g., "bicycle infrastructure", "Luftqualität", "public transport data")',
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of results to return (default: 20)',
+                default: 20,
+              },
+            },
+            required: ['query'],
+          },
+        },
+        {
+          name: 'get_dataset_details',
+          description: 'Get detailed information about a specific Berlin dataset',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              dataset_id: {
+                type: 'string',
+                description: 'The ID or name of the dataset',
+              },
+            },
+            required: ['dataset_id'],
+          },
+        },
+        {
+          name: 'discover_data_topics',
+          description: 'Explore what types of data are available in Berlin. Shows popular categories, tags, and data themes.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              focus: {
+                type: 'string',
+                description: 'Optional focus area (e.g., "transportation", "environment", "demographics")',
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of items to return (default: 50)',
+                default: 50,
+              },
+            },
+          },
+        },
+        {
+          name: 'suggest_datasets',
+          description: 'Get intelligent dataset suggestions based on your interests or research needs',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              interest: {
+                type: 'string',
+                description: 'What you are interested in or researching (e.g., "sustainable transport", "urban planning")',
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of suggestions (default: 10)',
+                default: 10,
+              },
+            },
+            required: ['interest'],
+          },
+        },
+        {
+          name: 'get_portal_stats',
+          description: 'Get overview statistics about the Berlin Open Data Portal (total datasets, organizations, categories)',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
+        },
+        {
+          name: 'list_all_datasets',
+          description: 'List all datasets in the portal with pagination support. Use this to browse the entire catalog.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              offset: {
+                type: 'number',
+                description: 'Starting position (default: 0)',
+                default: 0,
+              },
+              limit: {
+                type: 'number',
+                description: 'Number of results to return (default: 100, max: 1000)',
+                default: 100,
+              },
+            },
+          },
+        },
+      ],
+    }));
+
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        switch (name) {
+          case 'search_berlin_datasets': {
+            const { query, limit = 20 } = args as { query: string; limit?: number };
+
+            const searchParams = this.queryProcessor.processQuery(query);
+            searchParams.limit = limit;
+
+            const results = await this.api.searchDatasets(searchParams);
+
+            // Create a conversational, structured response
+            let responseText = `# Search Results for "${query}"\n\n`;
+
+            if (results.results.length === 0) {
+              responseText += "I couldn't find any datasets matching your query. Try:\n";
+              responseText += "- Using different keywords\n";
+              responseText += "- Searching in German (e.g., 'Verkehr' instead of 'traffic')\n";
+              responseText += "- Using discover_data_topics to explore available categories\n";
+            } else {
+              responseText += `Found ${results.count} relevant dataset(s)`;
+              if (results.count > results.results.length) {
+                responseText += ` (showing first ${results.results.length})`;
+              }
+              responseText += `:\n\n`;
+
+              results.results.forEach((dataset, index) => {
+                responseText += `## ${index + 1}. ${dataset.title}\n`;
+                responseText += `**ID**: ${dataset.name}\n`;
+                responseText += `**Organization**: ${dataset.organization?.title || 'Unknown'}\n`;
+
+                if (dataset.notes && dataset.notes.length > 0) {
+                  const description = dataset.notes.length > 200
+                    ? dataset.notes.substring(0, 200) + '...'
+                    : dataset.notes;
+                  responseText += `**Description**: ${description}\n`;
+                }
+
+                if (dataset.resources && dataset.resources.length > 0) {
+                  responseText += `**Resources**: ${dataset.resources.length} files available`;
+                  const formats = [...new Set(dataset.resources.map(r => r.format).filter(Boolean))];
+                  if (formats.length > 0) {
+                    responseText += ` (${formats.join(', ')})`;
+                  }
+                  responseText += '\n';
+                }
+
+                if (dataset.tags && dataset.tags.length > 0) {
+                  responseText += `**Tags**: ${dataset.tags.slice(0, 5).map(t => t.name).join(', ')}`;
+                  if (dataset.tags.length > 5) {
+                    responseText += ` +${dataset.tags.length - 5} more`;
+                  }
+                  responseText += '\n';
+                }
+
+                responseText += '\n';
+              });
+
+              responseText += `\n💡 **Next steps**:\n`;
+              responseText += `- Use \`get_dataset_details\` with any dataset ID to get full details\n`;
+              responseText += `- Use \`suggest_datasets\` to find related datasets\n`;
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: responseText,
+                },
+              ],
+            };
+          }
+
+          case 'get_dataset_details': {
+            const { dataset_id } = args as { dataset_id: string };
+            const dataset = await this.api.getDataset(dataset_id);
+
+            let details = `# ${dataset.title}\n\n`;
+
+            // Basic information
+            details += `## Overview\n`;
+            details += `**ID**: ${dataset.id}\n`;
+            details += `**Organization**: ${dataset.organization?.title || 'Unknown'}\n`;
+
+            if (dataset.metadata_modified) {
+              const lastUpdate = new Date(dataset.metadata_modified).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              });
+              details += `**Last Updated**: ${lastUpdate}\n`;
+            }
+
+            details += `\n## Description\n`;
+            details += dataset.notes ? dataset.notes : 'No description available.';
+
+            // Tags
+            if (dataset.tags && dataset.tags.length > 0) {
+              details += `\n\n## Categories & Tags\n`;
+              details += dataset.tags.map(t => `\`${t.name}\``).join(', ');
+            }
+
+            // Resources
+            details += `\n\n## Available Resources\n`;
+            if (dataset.resources && dataset.resources.length > 0) {
+              details += `This dataset contains ${dataset.resources.length} resource(s):\n\n`;
+
+              dataset.resources.forEach((resource, index) => {
+                details += `### ${index + 1}. ${resource.name || 'Unnamed Resource'}\n`;
+                if (resource.format) {
+                  details += `**Format**: ${resource.format}\n`;
+                }
+                if (resource.description) {
+                  details += `**Description**: ${resource.description}\n`;
+                }
+                if (resource.url) {
+                  details += `**Download URL**: ${resource.url}\n`;
+                }
+                details += '\n';
+              });
+
+              details += `💡 **How to use**: You can download these resources directly from the URLs above.\n`;
+            } else {
+              details += 'No downloadable resources are available for this dataset.\n';
+            }
+
+            // Additional metadata
+            if (dataset.license_title || dataset.author || dataset.maintainer) {
+              details += `\n## Additional Information\n`;
+              if (dataset.license_title) {
+                details += `**License**: ${dataset.license_title}\n`;
+              }
+              if (dataset.author) {
+                details += `**Author**: ${dataset.author}\n`;
+              }
+              if (dataset.maintainer) {
+                details += `**Maintainer**: ${dataset.maintainer}\n`;
+              }
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: details,
+                },
+              ],
+            };
+          }
+
+          case 'discover_data_topics': {
+            const { focus, limit = 50 } = args as { focus?: string; limit?: number };
+            const [tags, organizations] = await Promise.all([
+              this.api.listTags(limit),
+              this.api.listOrganizations(),
+            ]);
+
+            let topicsText = '# Berlin Open Data: Available Topics\n\n';
+
+            if (focus) {
+              const focusKeywords = focus.toLowerCase().split(' ');
+              const relevantTags = tags.filter(t =>
+                focusKeywords.some(keyword => t.name.toLowerCase().includes(keyword))
+              );
+
+              if (relevantTags.length > 0) {
+                topicsText += `**${focus.charAt(0).toUpperCase() + focus.slice(1)}-related topics:**\n`;
+                topicsText += relevantTags.map(t => `- ${t.name}`).join('\n');
+                topicsText += '\n\n';
+              }
+            }
+
+            topicsText += `**Popular data categories (${Math.min(tags.length, 20)} of ${tags.length}):**\n`;
+            topicsText += tags.slice(0, 20).map(t => `- ${t.name}`).join('\n');
+            topicsText += `\n\n**Data providers (${organizations.length} organizations):**\n`;
+            topicsText += organizations.slice(0, 10).map(o => `- ${o.title}`).join('\n');
+
+            if (organizations.length > 10) {
+              topicsText += `\n... and ${organizations.length - 10} more organizations`;
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: topicsText,
+                },
+              ],
+            };
+          }
+
+          case 'suggest_datasets': {
+            const { interest, limit = 10 } = args as { interest: string; limit?: number };
+
+            // Use the interest as a search query to find relevant datasets
+            const searchParams = this.queryProcessor.processQuery(interest);
+            searchParams.limit = limit;
+            const results = await this.api.searchDatasets(searchParams);
+
+            let suggestionsText = `# Dataset Suggestions for "${interest}"\n\n`;
+
+            if (results.results.length > 0) {
+              suggestionsText += `Found ${results.results.length} relevant datasets:\n\n`;
+              results.results.forEach((dataset, index) => {
+                suggestionsText += `**${index + 1}. ${dataset.title}**\n`;
+                suggestionsText += `   - ID: ${dataset.name}\n`;
+                suggestionsText += `   - Organization: ${dataset.organization?.title || 'Unknown'}\n`;
+                if (dataset.notes && dataset.notes.length > 0) {
+                  const shortDesc = dataset.notes.length > 150
+                    ? dataset.notes.substring(0, 150) + '...'
+                    : dataset.notes;
+                  suggestionsText += `   - Description: ${shortDesc}\n`;
+                }
+                suggestionsText += `\n`;
+              });
+
+              suggestionsText += `\n*Tip: Use get_dataset_details with the dataset ID to learn more about any of these datasets.*`;
+            } else {
+              suggestionsText += 'No datasets found for this interest. Try different keywords or explore available topics with discover_data_topics.';
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: suggestionsText,
+                },
+              ],
+            };
+          }
+
+          case 'get_portal_stats': {
+            const stats = await this.api.getPortalStats();
+
+            let responseText = '# Berlin Open Data Portal Statistics\n\n';
+            responseText += `📊 **Total Datasets**: ${stats.total_datasets}\n`;
+            responseText += `🏛️ **Organizations**: ${stats.total_organizations}\n`;
+            responseText += `🏷️ **Categories/Tags**: ${stats.total_tags}\n`;
+
+            responseText += '\n💡 **Next steps**:\n';
+            responseText += '- Use `list_all_datasets` to browse all datasets\n';
+            responseText += '- Use `discover_data_topics` to explore categories\n';
+            responseText += '- Use `list_datasets_by_category` to filter by topic\n';
+
+            return {
+              content: [{ type: 'text', text: responseText }],
+            };
+          }
+
+          case 'list_all_datasets': {
+            const { offset = 0, limit = 100 } = args as { offset?: number; limit?: number };
+            const result = await this.api.listAllDatasets(offset, limit);
+
+            let responseText = `# All Berlin Open Datasets\n\n`;
+            responseText += `Showing ${offset + 1}-${Math.min(offset + limit, result.total)} of ${result.total} datasets\n\n`;
+
+            result.datasets.forEach((dataset: any, index: number) => {
+              responseText += `${offset + index + 1}. **${dataset.title}** (ID: ${dataset.name})\n`;
+            });
+
+            if (offset + limit < result.total) {
+              responseText += `\n📄 **More data available**: Use offset=${offset + limit} to see next page\n`;
+            }
+
+            responseText += `\n💡 Use \`get_dataset_details\` with any ID to see full information\n`;
+
+            return {
+              content: [{ type: 'text', text: responseText }],
+            };
+          }
+
+          default:
+            throw new Error(`Unknown tool: ${name}`);
+        }
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    });
+
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: [
+        {
+          name: 'berlin_data_discovery',
+          description: 'Help discover relevant Berlin open datasets based on user needs',
+          arguments: [
+            {
+              name: 'topic',
+              description: 'The topic or domain you are interested in',
+              required: true,
+            },
+            {
+              name: 'use_case',
+              description: 'What you plan to do with the data',
+              required: false,
+            },
+          ],
+        },
+      ],
+    }));
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      if (name === 'berlin_data_discovery') {
+        const { topic, use_case } = args as { topic: string; use_case?: string };
+
+        const promptText = `I need to find Berlin open datasets related to "${topic}"` +
+          (use_case ? ` for ${use_case}` : '') +
+          '. Please help me discover relevant datasets and provide information about their content, formats, and how to access them.';
+
+        return {
+          description: `Data discovery prompt for ${topic}`,
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: promptText,
+              },
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unknown prompt: ${name}`);
+    });
+  }
+
+  async run() {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    console.error('Berlin Open Data MCP Server running on stdio');
+  }
+}
+
+const server = new BerlinOpenDataMCPServer();
+server.run().catch(console.error);
