@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Exclude all docs except plans folder
+docs/*
+!docs/plans/
+!docs/plans/**
