@@ -1,0 +1,1790 @@
+# Berlin Open Data MCP Server - Implementation Plan
+
+## Overview
+
+This plan details the implementation of an enhanced Berlin Open Data MCP server that goes beyond basic search to enable data fetching, sampling, analysis, and agentic workflow chaining. The implementation follows a phased approach with frequent commits and test-driven development principles.
+
+## Key Implementation Decisions
+
+Based on project requirements and architectural discussions:
+
+1. **Keyword mapping strategy**: Keep focused mappings (current approach already finds 701 results for "verkehr"). Only expand if gaps emerge in actual usage.
+
+2. **Category/organization filtering tools**: SKIP implementation. The `search_berlin_datasets` tool already handles these use cases more effectively than exact tag filtering.
+
+3. **CSV parsing**: Use `papaparse` library from the start for robust handling of edge cases (delimiters, encoding, quotes, etc.).
+
+4. **Git repository**: Initialize before starting implementation (Phase 0).
+
+5. **Testing priority**: Focus on integration tests first. Manual testing with Claude Desktop is secondary and can be deferred.
+
+6. **Total expected commits**: 10-12 across all phases (Phase 0: 2, Phase 1: 3, Phase 2: 6, Phase 3: 3-4)
+
+## Prerequisites
+
+**Required knowledge:**
+- TypeScript/Node.js development
+- REST API integration
+- Model Context Protocol (MCP) basics
+- CSV/JSON data parsing
+
+**Tools & libraries already in use:**
+- `@modelcontextprotocol/sdk` - MCP server framework
+- `node-fetch` - HTTP requests
+- `typescript` - Type safety
+- `tsx` - Development runtime
+
+**New libraries to add:**
+- `papaparse` - Robust CSV parsing with edge case handling
+- `@types/papaparse` - TypeScript definitions for papaparse
+
+**Existing codebase structure:**
+```
+src/
+├── index.ts              # MCP server setup, tool handlers
+├── berlin-api.ts         # CKAN API integration
+├── query-processor.ts    # Natural language query processing
+└── types.ts             # TypeScript type definitions
+```
+
+**Initial setup requirements:**
+- Initialize git repository before starting implementation
+- Configure .gitignore for Node.js projects
+
+## Design Principles
+
+1. **DRY (Don't Repeat Yourself)**: Extract common patterns into reusable functions
+2. **YAGNI (You Aren't Gonna Need It)**: Build only what's specified, no premature optimization
+3. **TDD (Test-Driven Development)**: Write tests first when practical, always test after
+4. **Frequent commits**: Commit after each completed task with descriptive messages
+5. **Keep it simple**: Prefer readable code over clever solutions
+
+---
+
+## Phase 0: Project Setup
+
+**Goal**: Initialize git repository and prepare for implementation.
+
+### Task 0.1: Initialize Git Repository
+
+**What to do**: Create git repository with appropriate .gitignore.
+
+**Step-by-step**:
+
+1. **Initialize git**:
+```bash
+git init
+```
+
+2. **Create .gitignore** (if not already present):
+```
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+```
+
+3. **Initial commit**:
+```bash
+git add .
+git commit -m "Initial commit - Existing search functionality"
+```
+
+**Commit message**: `Initial commit - Existing search functionality`
+
+---
+
+### Task 0.2: Install Dependencies
+
+**What to do**: Add papaparse library for robust CSV parsing.
+
+**Step-by-step**:
+
+1. **Install papaparse**:
+```bash
+npm install papaparse
+npm install --save-dev @types/papaparse
+```
+
+2. **Verify installation**:
+```bash
+npm run build
+```
+
+**Commit message**: `Add papaparse library for CSV parsing`
+
+---
+
+## Phase 1: Portal Metadata & Navigation
+
+**Goal**: Enable users to understand the overall landscape of available datasets without searching.
+
+**IMPORTANT**: Category and organization filtering tools are SKIPPED. The `search_berlin_datasets` tool already handles these use cases more effectively (e.g., searching for "verkehr" finds 701 datasets vs. 2 with exact tag filtering). Only implement portal stats and list all datasets.
+
+### Task 1.1: Add Portal Statistics API Method
+
+**What to do**: Add a method to fetch high-level portal statistics.
+
+**Files to modify**:
+- `src/types.ts` - Add new interface
+- `src/berlin-api.ts` - Add new method
+
+**Step-by-step**:
+
+1. **Add type definition** in `src/types.ts`:
+```typescript
+export interface PortalStats {
+  total_datasets: number;
+  total_organizations: number;
+  total_tags: number;
+  last_updated?: string;
+}
+```
+
+2. **Add method to BerlinOpenDataAPI** in `src/berlin-api.ts`:
+```typescript
+async getPortalStats(): Promise<PortalStats> {
+  // CKAN doesn't have a dedicated stats endpoint, so we aggregate
+  const [datasets, orgs, tags] = await Promise.all([
+    this.makeRequest('package_search', { rows: 0 }), // Just get count
+    this.listOrganizations(),
+    this.listTags(0), // Get all tags for count
+  ]);
+
+  return {
+    total_datasets: datasets.count,
+    total_organizations: orgs.length,
+    total_tags: tags.length,
+  };
+}
+```
+
+**How to test**:
+```bash
+# In development mode
+npm run dev
+
+# In another terminal, test the API directly
+node -e "
+const { BerlinOpenDataAPI } = require('./dist/berlin-api.js');
+const api = new BerlinOpenDataAPI();
+api.getPortalStats().then(console.log);
+"
+```
+
+**Expected output**: Object with counts for datasets, organizations, and tags.
+
+**Commit message**: `Add getPortalStats method to BerlinOpenDataAPI`
+
+---
+
+### Task 1.2: Add List All Datasets with Pagination
+
+**What to do**: Extend existing `listDatasets` method to support pagination properly.
+
+**Files to modify**:
+- `src/berlin-api.ts` - Update existing method
+
+**Step-by-step**:
+
+1. **Update listDatasets method** in `src/berlin-api.ts`:
+
+Replace the existing method (around line 63) with:
+```typescript
+async listAllDatasets(offset: number = 0, limit: number = 100): Promise<{ datasets: string[]; total: number }> {
+  // Use package_search instead of package_list for better pagination
+  const result = await this.makeRequest('package_search', {
+    q: '*:*', // Match all
+    rows: limit,
+    start: offset,
+    fl: 'name,title', // Only fetch name and title fields
+  });
+
+  return {
+    datasets: result.results.map((d: any) => ({ name: d.name, title: d.title })),
+    total: result.count,
+  };
+}
+```
+
+**Why this approach**: `package_search` with `q: '*:*'` gives us proper pagination and counts, unlike `package_list` which has limitations.
+
+**How to test**:
+```bash
+npm run build
+node -e "
+const { BerlinOpenDataAPI } = require('./dist/berlin-api.js');
+const api = new BerlinOpenDataAPI();
+
+// Test pagination
+api.listAllDatasets(0, 10).then(result => {
+  console.log('First 10 datasets:', result.datasets.length);
+  console.log('Total:', result.total);
+
+  // Test offset
+  return api.listAllDatasets(10, 10);
+}).then(result => {
+  console.log('Next 10 datasets:', result.datasets.length);
+});
+"
+```
+
+**Expected output**: Two lists of 10 datasets each, plus total count.
+
+**Commit message**: `Update listAllDatasets with proper pagination support`
+
+---
+
+### Task 1.3: Add MCP Tools for Portal Metadata
+
+**What to do**: Expose the new API methods as MCP tools that Claude can use.
+
+**Files to modify**:
+- `src/index.ts` - Add new tool definitions and handlers
+
+**Step-by-step**:
+
+1. **Add tool definitions** in the `ListToolsRequestSchema` handler (around line 40):
+
+Add these to the `tools` array:
+```typescript
+{
+  name: 'get_portal_stats',
+  description: 'Get overview statistics about the Berlin Open Data Portal (total datasets, organizations, categories)',
+  inputSchema: {
+    type: 'object',
+    properties: {},
+  },
+},
+{
+  name: 'list_all_datasets',
+  description: 'List all datasets in the portal with pagination support. Use this to browse the entire catalog.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      offset: {
+        type: 'number',
+        description: 'Starting position (default: 0)',
+        default: 0,
+      },
+      limit: {
+        type: 'number',
+        description: 'Number of results to return (default: 100, max: 1000)',
+        default: 100,
+      },
+    },
+  },
+},
+```
+
+**Note**: DO NOT implement category and organization filtering tools. The `search_berlin_datasets` tool handles these use cases more effectively.
+
+2. **Add tool handlers** in the `CallToolRequestSchema` handler (around line 119):
+
+Add these cases to the switch statement:
+```typescript
+case 'get_portal_stats': {
+  const stats = await this.api.getPortalStats();
+
+  let responseText = '# Berlin Open Data Portal Statistics\n\n';
+  responseText += `📊 **Total Datasets**: ${stats.total_datasets}\n`;
+  responseText += `🏛️ **Organizations**: ${stats.total_organizations}\n`;
+  responseText += `🏷️ **Categories/Tags**: ${stats.total_tags}\n`;
+
+  responseText += '\n💡 **Next steps**:\n';
+  responseText += '- Use `list_all_datasets` to browse all datasets\n';
+  responseText += '- Use `discover_data_topics` to explore categories\n';
+  responseText += '- Use `search_berlin_datasets` to find specific topics\n';
+
+  return {
+    content: [{ type: 'text', text: responseText }],
+  };
+}
+
+case 'list_all_datasets': {
+  const { offset = 0, limit = 100 } = args as { offset?: number; limit?: number };
+  const result = await this.api.listAllDatasets(offset, limit);
+
+  let responseText = `# All Berlin Open Datasets\n\n`;
+  responseText += `Showing ${offset + 1}-${Math.min(offset + limit, result.total)} of ${result.total} datasets\n\n`;
+
+  result.datasets.forEach((dataset: any, index: number) => {
+    responseText += `${offset + index + 1}. **${dataset.title}** (ID: ${dataset.name})\n`;
+  });
+
+  if (offset + limit < result.total) {
+    responseText += `\n📄 **More data available**: Use offset=${offset + limit} to see next page\n`;
+  }
+
+  responseText += `\n💡 Use \`get_dataset_details\` with any ID to see full information\n`;
+
+  return {
+    content: [{ type: 'text', text: responseText }],
+  };
+}
+
+```
+
+**How to test**:
+You'll need to test this with an actual MCP client (like Claude Desktop). For now, verify the code compiles:
+
+```bash
+npm run build
+```
+
+Check for TypeScript errors. If it compiles successfully, you're good.
+
+**Commit message**: `Add MCP tools for portal stats and dataset listing`
+
+---
+
+### Phase 1 Complete!
+
+**Final checkpoint**:
+1. Build the project: `npm run build`
+2. Verify no TypeScript errors
+3. Test API methods directly (getPortalStats, listAllDatasets)
+4. Review your commits - should have 3 commits for Phase 1
+
+---
+
+## Phase 2: Data Fetching & Sampling
+
+**Goal**: Enable users to fetch actual dataset contents (CSV/JSON) with smart sampling to avoid context overflow.
+
+### Task 2.1: Create Data Fetcher Module
+
+**What to do**: Create a new module that downloads and parses dataset resources.
+
+**Files to create**:
+- `src/data-fetcher.ts` - New file
+
+**Step-by-step**:
+
+1. **Create the file** `src/data-fetcher.ts`:
+
+```typescript
+// ABOUTME: Downloads and parses dataset resources from URLs
+// ABOUTME: Handles CSV and JSON formats with robust error handling
+
+import fetch from 'node-fetch';
+import Papa from 'papaparse';
+
+export interface FetchedData {
+  format: string;
+  rows: any[];
+  totalRows: number;
+  columns: string[];
+  error?: string;
+}
+
+export class DataFetcher {
+  private readonly MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50MB limit
+  private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
+
+  async fetchResource(url: string, format: string): Promise<FetchedData> {
+    try {
+      // Download the resource
+      const response = await fetch(url, {
+        timeout: this.REQUEST_TIMEOUT,
+        headers: {
+          'User-Agent': 'Berlin-Open-Data-MCP-Server/1.0',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Check content length
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > this.MAX_DOWNLOAD_SIZE) {
+        throw new Error(`File too large: ${contentLength} bytes (max: ${this.MAX_DOWNLOAD_SIZE})`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      const text = await response.text();
+
+      // Parse based on format
+      return this.parseData(text, format, contentType);
+    } catch (error) {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private parseData(text: string, format: string, contentType: string): FetchedData {
+    const formatLower = format.toLowerCase();
+
+    // Try JSON first if format or content-type suggests it
+    if (formatLower.includes('json') || contentType.includes('json')) {
+      return this.parseJSON(text, format);
+    }
+
+    // Try CSV - use papaparse for robust parsing
+    if (formatLower.includes('csv') || contentType.includes('csv') || contentType.includes('text')) {
+      return this.parseCSV(text, format);
+    }
+
+    // Default to CSV parsing
+    return this.parseCSV(text, format);
+  }
+
+  private parseJSON(text: string, format: string): FetchedData {
+    try {
+      const parsed = JSON.parse(text);
+
+      // Handle different JSON structures
+      let rows: any[];
+      if (Array.isArray(parsed)) {
+        rows = parsed;
+      } else if (parsed.data && Array.isArray(parsed.data)) {
+        rows = parsed.data;
+      } else if (parsed.results && Array.isArray(parsed.results)) {
+        rows = parsed.results;
+      } else if (typeof parsed === 'object') {
+        // Single object - wrap in array
+        rows = [parsed];
+      } else {
+        throw new Error('Unexpected JSON structure');
+      }
+
+      // Extract columns from first row
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+      return {
+        format: 'JSON',
+        rows,
+        totalRows: rows.length,
+        columns,
+      };
+    } catch (error) {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: `JSON parse error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  private parseCSV(text: string, format: string): FetchedData {
+    try {
+      // Use papaparse for robust CSV parsing
+      // Automatically detects delimiters, handles quotes, encoding issues, etc.
+      const result = Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false, // Keep all as strings, we'll infer types later
+        encoding: 'utf-8',
+      });
+
+      if (result.errors.length > 0) {
+        console.warn('CSV parsing warnings:', result.errors);
+      }
+
+      const rows = result.data as any[];
+      const columns = result.meta.fields || [];
+
+      return {
+        format: 'CSV',
+        rows,
+        totalRows: rows.length,
+        columns,
+      };
+    } catch (error) {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: `CSV parse error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+}
+```
+
+**How to test**:
+
+Create a test script `test-fetcher.js`:
+```javascript
+const { DataFetcher } = require('./dist/data-fetcher.js');
+
+const fetcher = new DataFetcher();
+
+// Test with a known Berlin dataset URL (find one from the portal)
+// Example: A small CSV file
+const testUrl = 'https://www.berlin.de/sen/sbw/_assets/verkehr/daten-und-fakten/zahlen-und-fakten/verkehrsmengen/vz2019.csv';
+
+fetcher.fetchResource(testUrl, 'CSV').then(result => {
+  console.log('Format:', result.format);
+  console.log('Total rows:', result.totalRows);
+  console.log('Columns:', result.columns);
+  console.log('First row:', result.rows[0]);
+  console.log('Error:', result.error);
+});
+```
+
+```bash
+npm run build
+node test-fetcher.js
+```
+
+**Expected output**: Parsed CSV data with columns and rows.
+
+**Commit message**: `Add DataFetcher module for downloading and parsing resources`
+
+---
+
+### Task 2.2: Create Data Sampler Module
+
+**What to do**: Create a module that generates smart samples and statistics from fetched data.
+
+**Files to create**:
+- `src/data-sampler.ts` - New file
+
+**Step-by-step**:
+
+1. **Create the file** `src/data-sampler.ts`:
+
+```typescript
+// ABOUTME: Generates smart samples and statistics from dataset rows
+// ABOUTME: Prevents context overflow by limiting data size
+
+export interface ColumnStats {
+  name: string;
+  type: 'number' | 'string' | 'boolean' | 'date' | 'unknown';
+  uniqueCount: number;
+  nullCount: number;
+  sampleValues: any[];
+  min?: number;
+  max?: number;
+}
+
+export interface DataSample {
+  sampleRows: any[];
+  totalRows: number;
+  isTruncated: boolean;
+  columns: ColumnStats[];
+  summary: string;
+}
+
+export class DataSampler {
+  private readonly DEFAULT_SAMPLE_SIZE = 100;
+
+  generateSample(rows: any[], columns: string[], sampleSize?: number): DataSample {
+    const size = sampleSize || this.DEFAULT_SAMPLE_SIZE;
+    const isTruncated = rows.length > size;
+    const sampleRows = rows.slice(0, size);
+
+    // Generate column statistics
+    const columnStats = columns.map(colName => this.analyzeColumn(colName, rows));
+
+    // Generate summary text
+    const summary = this.generateSummary(rows.length, columns.length, isTruncated, columnStats);
+
+    return {
+      sampleRows,
+      totalRows: rows.length,
+      isTruncated,
+      columns: columnStats,
+      summary,
+    };
+  }
+
+  private analyzeColumn(columnName: string, rows: any[]): ColumnStats {
+    const values = rows.map(row => row[columnName]);
+    const nonNullValues = values.filter(v => v != null && v !== '');
+
+    // Infer type
+    const type = this.inferType(nonNullValues);
+
+    // Count unique values (limit to first 1000 rows for performance)
+    const uniqueValues = new Set(nonNullValues.slice(0, 1000));
+
+    // Get sample values (first 5 unique)
+    const sampleValues = Array.from(uniqueValues).slice(0, 5);
+
+    const stats: ColumnStats = {
+      name: columnName,
+      type,
+      uniqueCount: uniqueValues.size,
+      nullCount: values.length - nonNullValues.length,
+      sampleValues,
+    };
+
+    // For numeric columns, calculate min/max
+    if (type === 'number') {
+      const numbers = nonNullValues.map(v => parseFloat(v)).filter(n => !isNaN(n));
+      if (numbers.length > 0) {
+        stats.min = Math.min(...numbers);
+        stats.max = Math.max(...numbers);
+      }
+    }
+
+    return stats;
+  }
+
+  private inferType(values: any[]): 'number' | 'string' | 'boolean' | 'date' | 'unknown' {
+    if (values.length === 0) return 'unknown';
+
+    // Sample first 100 non-null values
+    const sample = values.slice(0, 100);
+
+    // Check if all are numbers
+    const numericCount = sample.filter(v => !isNaN(parseFloat(v)) && isFinite(v)).length;
+    if (numericCount / sample.length > 0.8) return 'number';
+
+    // Check if all are booleans
+    const boolCount = sample.filter(v =>
+      v === true || v === false || v === 'true' || v === 'false' || v === '0' || v === '1'
+    ).length;
+    if (boolCount / sample.length > 0.8) return 'boolean';
+
+    // Check if looks like dates
+    const dateCount = sample.filter(v => {
+      const str = String(v);
+      return /^\d{4}-\d{2}-\d{2}/.test(str) || /^\d{2}\/\d{2}\/\d{4}/.test(str);
+    }).length;
+    if (dateCount / sample.length > 0.8) return 'date';
+
+    return 'string';
+  }
+
+  private generateSummary(totalRows: number, totalColumns: number, isTruncated: boolean, columns: ColumnStats[]): string {
+    let summary = `Dataset contains ${totalRows} rows and ${totalColumns} columns.\n\n`;
+
+    if (isTruncated) {
+      summary += `⚠️ Sample limited to first ${this.DEFAULT_SAMPLE_SIZE} rows to prevent context overflow.\n\n`;
+    }
+
+    summary += '**Columns:**\n';
+    columns.forEach(col => {
+      summary += `- **${col.name}** (${col.type})`;
+      if (col.type === 'number' && col.min !== undefined && col.max !== undefined) {
+        summary += ` - Range: ${col.min} to ${col.max}`;
+      }
+      if (col.uniqueCount > 0) {
+        summary += ` - ${col.uniqueCount} unique values`;
+      }
+      if (col.nullCount > 0) {
+        summary += ` - ${col.nullCount} nulls`;
+      }
+      summary += '\n';
+    });
+
+    return summary;
+  }
+}
+```
+
+**How to test**:
+
+Create a test script `test-sampler.js`:
+```javascript
+const { DataSampler } = require('./dist/data-sampler.js');
+
+const sampler = new DataSampler();
+
+// Mock data
+const testData = [
+  { name: 'Alice', age: 30, city: 'Berlin', score: 95.5 },
+  { name: 'Bob', age: 25, city: 'Munich', score: 87.3 },
+  { name: 'Charlie', age: 35, city: 'Berlin', score: 92.1 },
+  { name: 'David', age: 28, city: 'Hamburg', score: null },
+];
+
+const columns = ['name', 'age', 'city', 'score'];
+
+const sample = sampler.generateSample(testData, columns);
+
+console.log('Summary:\n', sample.summary);
+console.log('\nColumn stats:', JSON.stringify(sample.columns, null, 2));
+console.log('\nSample rows:', sample.sampleRows);
+```
+
+```bash
+npm run build
+node test-sampler.js
+```
+
+**Expected output**: Summary text and column statistics showing inferred types and ranges.
+
+**Commit message**: `Add DataSampler module for smart sampling and statistics`
+
+---
+
+### Task 2.3: Add Resource Listing Method to API
+
+**What to do**: Add a helper method to easily list resources for a dataset.
+
+**Files to modify**:
+- `src/berlin-api.ts` - Add new method
+
+**Step-by-step**:
+
+1. **Add method** in `src/berlin-api.ts`:
+
+```typescript
+async listDatasetResources(datasetId: string): Promise<Array<{ id: string; name: string; format: string; url: string; description: string }>> {
+  const dataset = await this.getDataset(datasetId);
+
+  return dataset.resources.map(r => ({
+    id: r.id,
+    name: r.name,
+    format: r.format,
+    url: r.url,
+    description: r.description,
+  }));
+}
+```
+
+**How to test**:
+```bash
+npm run build
+node -e "
+const { BerlinOpenDataAPI } = require('./dist/berlin-api.js');
+const api = new BerlinOpenDataAPI();
+
+// Use a known dataset ID (find one from previous tests)
+api.searchDatasets({ query: 'verkehr', limit: 1 }).then(result => {
+  const datasetId = result.results[0].name;
+  console.log('Testing with dataset:', datasetId);
+  return api.listDatasetResources(datasetId);
+}).then(resources => {
+  console.log('Resources found:', resources.length);
+  resources.forEach(r => {
+    console.log('-', r.name, '(' + r.format + ')');
+  });
+});
+"
+```
+
+**Expected output**: List of resources with their formats and URLs.
+
+**Commit message**: `Add listDatasetResources helper method`
+
+---
+
+### Task 2.4: Integrate Fetcher and Sampler into Main Server
+
+**What to do**: Wire up the data fetching and sampling into the MCP server.
+
+**Files to modify**:
+- `src/index.ts` - Import and instantiate new modules
+
+**Step-by-step**:
+
+1. **Add imports** at the top of `src/index.ts`:
+```typescript
+import { DataFetcher } from './data-fetcher.js';
+import { DataSampler } from './data-sampler.js';
+```
+
+2. **Add instance variables** to the `BerlinOpenDataMCPServer` class (around line 16):
+```typescript
+private dataFetcher: DataFetcher;
+private dataSampler: DataSampler;
+```
+
+3. **Initialize in constructor** (around line 34):
+```typescript
+this.dataFetcher = new DataFetcher();
+this.dataSampler = new DataSampler();
+```
+
+**How to test**:
+```bash
+npm run build
+```
+
+Should compile without errors.
+
+**Commit message**: `Integrate DataFetcher and DataSampler into MCP server`
+
+---
+
+### Task 2.5: Add MCP Tools for Data Fetching
+
+**What to do**: Add MCP tool definitions for fetching dataset data.
+
+**Files to modify**:
+- `src/index.ts` - Add new tools
+
+**Step-by-step**:
+
+1. **Add tool definitions** in `ListToolsRequestSchema` handler:
+
+```typescript
+{
+  name: 'list_dataset_resources',
+  description: 'List all available resources (files) for a specific dataset. Shows formats and download URLs.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      dataset_id: {
+        type: 'string',
+        description: 'The dataset ID or name',
+      },
+    },
+    required: ['dataset_id'],
+  },
+},
+{
+  name: 'fetch_dataset_data',
+  description: 'Fetch actual data from a dataset resource. Returns smart sample with statistics. Supports CSV and JSON formats.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      dataset_id: {
+        type: 'string',
+        description: 'The dataset ID or name',
+      },
+      resource_id: {
+        type: 'string',
+        description: 'Optional: specific resource ID. If not provided, uses first available resource.',
+      },
+      sample_size: {
+        type: 'number',
+        description: 'Number of rows to return (default: 100, max: 1000)',
+        default: 100,
+      },
+      full_data: {
+        type: 'boolean',
+        description: 'If true, return all data without sampling (use with caution for large datasets)',
+        default: false,
+      },
+    },
+    required: ['dataset_id'],
+  },
+},
+```
+
+2. **Add tool handlers** in `CallToolRequestSchema` handler:
+
+```typescript
+case 'list_dataset_resources': {
+  const { dataset_id } = args as { dataset_id: string };
+  const resources = await this.api.listDatasetResources(dataset_id);
+
+  let responseText = `# Resources for Dataset\n\n`;
+
+  if (resources.length === 0) {
+    responseText += 'No downloadable resources found for this dataset.\n';
+  } else {
+    responseText += `Found ${resources.length} resource(s):\n\n`;
+
+    resources.forEach((resource, index) => {
+      responseText += `## ${index + 1}. ${resource.name}\n`;
+      responseText += `**ID**: ${resource.id}\n`;
+      responseText += `**Format**: ${resource.format}\n`;
+      if (resource.description) {
+        responseText += `**Description**: ${resource.description}\n`;
+      }
+      responseText += `**URL**: ${resource.url}\n\n`;
+    });
+
+    responseText += `💡 Use \`fetch_dataset_data\` with the dataset ID to download and analyze the data.\n`;
+  }
+
+  return {
+    content: [{ type: 'text', text: responseText }],
+  };
+}
+
+case 'fetch_dataset_data': {
+  const { dataset_id, resource_id, sample_size = 100, full_data = false } = args as {
+    dataset_id: string;
+    resource_id?: string;
+    sample_size?: number;
+    full_data?: boolean;
+  };
+
+  // Get dataset to find resources
+  const dataset = await this.api.getDataset(dataset_id);
+
+  if (!dataset.resources || dataset.resources.length === 0) {
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ No resources available for dataset "${dataset_id}". This dataset may not have downloadable files.`,
+      }],
+    };
+  }
+
+  // Select resource
+  let resource;
+  if (resource_id) {
+    resource = dataset.resources.find(r => r.id === resource_id);
+    if (!resource) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Resource "${resource_id}" not found. Use \`list_dataset_resources\` to see available resources.`,
+        }],
+      };
+    }
+  } else {
+    // Use first resource
+    resource = dataset.resources[0];
+  }
+
+  // Fetch the data
+  const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format);
+
+  if (fetchedData.error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ Error fetching data: ${fetchedData.error}\n\nYou can try:\n- Using a different resource\n- Downloading manually from: ${resource.url}`,
+      }],
+    };
+  }
+
+  // Generate sample or return full data
+  let responseText = `# Data from: ${dataset.title}\n\n`;
+  responseText += `**Resource**: ${resource.name} (${resource.format})\n\n`;
+
+  if (full_data || fetchedData.rows.length <= sample_size) {
+    // Return all data
+    responseText += `## Full Dataset\n\n`;
+    responseText += `Total rows: ${fetchedData.totalRows}\n`;
+    responseText += `Columns: ${fetchedData.columns.join(', ')}\n\n`;
+    responseText += `**Data:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+  } else {
+    // Return smart sample
+    const sample = this.dataSampler.generateSample(
+      fetchedData.rows,
+      fetchedData.columns,
+      sample_size
+    );
+
+    responseText += `## Data Sample\n\n`;
+    responseText += sample.summary + '\n';
+    responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
+    responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n`;
+
+    if (sample.isTruncated) {
+      responseText += `\n💡 Use \`full_data: true\` to fetch all ${sample.totalRows} rows (may use more tokens).\n`;
+    }
+  }
+
+  return {
+    content: [{ type: 'text', text: responseText }],
+  };
+}
+```
+
+**How to test**:
+```bash
+npm run build
+```
+
+Verify compilation succeeds.
+
+**Commit message**: `Add MCP tools for listing and fetching dataset resources`
+
+---
+
+### Task 2.6: Add Error Handling for Edge Cases
+
+**What to do**: Improve error handling for common failure scenarios.
+
+**Files to modify**:
+- `src/data-fetcher.ts` - Enhance error messages
+
+**Step-by-step**:
+
+1. **Update error handling** in `DataFetcher.fetchResource`:
+
+Replace the catch block (around line 30) with:
+```typescript
+catch (error) {
+  let errorMessage = 'Unknown error';
+
+  if (error instanceof Error) {
+    if (error.message.includes('timeout')) {
+      errorMessage = 'Download timeout - file may be too large or server is slow';
+    } else if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+      errorMessage = 'Could not connect to server - URL may be invalid';
+    } else if (error.message.includes('Too large')) {
+      errorMessage = error.message;
+    } else {
+      errorMessage = error.message;
+    }
+  }
+
+  return {
+    format,
+    rows: [],
+    totalRows: 0,
+    columns: [],
+    error: errorMessage,
+  };
+}
+```
+
+**How to test**:
+Test with an invalid URL:
+```bash
+npm run build
+node -e "
+const { DataFetcher } = require('./dist/data-fetcher.js');
+const fetcher = new DataFetcher();
+
+fetcher.fetchResource('https://invalid-url-12345.com/data.csv', 'CSV').then(result => {
+  console.log('Error message:', result.error);
+});
+"
+```
+
+**Expected output**: User-friendly error message about connection failure.
+
+**Commit message**: `Improve error handling in DataFetcher`
+
+---
+
+### Phase 2 Complete!
+
+**Final checkpoint**:
+1. Build: `npm run build`
+2. Test data fetcher with a real dataset URL
+3. Test data sampler with mock data
+4. Verify TypeScript compilation succeeds
+5. Count commits - should have 6-7 for Phase 2
+
+---
+
+## Phase 3: Testing & Refinement
+
+**Goal**: End-to-end integration testing with real usage scenarios and documentation.
+
+**IMPORTANT**: Focus on integration tests first. Manual testing with Claude Desktop is secondary and can be deferred.
+
+### Task 3.1: Create Integration Test Script
+
+**What to do**: Create a comprehensive test that exercises all tools.
+
+**Files to create**:
+- `test/integration-test.js` - New file
+
+**Step-by-step**:
+
+1. **Create test directory**:
+```bash
+mkdir -p test
+```
+
+2. **Create `test/integration-test.js`**:
+
+```javascript
+// Integration test for Berlin Open Data MCP Server
+// Tests all major workflows
+
+const { BerlinOpenDataAPI } = require('../dist/berlin-api.js');
+const { DataFetcher } = require('../dist/data-fetcher.js');
+const { DataSampler } = require('../dist/data-sampler.js');
+
+async function runTests() {
+  console.log('🧪 Starting Integration Tests\n');
+
+  const api = new BerlinOpenDataAPI();
+  const fetcher = new DataFetcher();
+  const sampler = new DataSampler();
+
+  let passed = 0;
+  let failed = 0;
+
+  // Test 1: Portal Stats
+  try {
+    console.log('Test 1: Get portal statistics...');
+    const stats = await api.getPortalStats();
+    console.assert(stats.total_datasets > 0, 'Should have datasets');
+    console.assert(stats.total_organizations > 0, 'Should have organizations');
+    console.log('✅ Portal stats:', stats);
+    passed++;
+  } catch (error) {
+    console.log('❌ Failed:', error.message);
+    failed++;
+  }
+
+  // Test 2: List datasets with pagination
+  try {
+    console.log('\nTest 2: List datasets with pagination...');
+    const result = await api.listAllDatasets(0, 10);
+    console.assert(result.datasets.length === 10, 'Should return 10 datasets');
+    console.assert(result.total > 10, 'Total should be greater than 10');
+    console.log('✅ Listed datasets:', result.datasets.length, 'of', result.total);
+    passed++;
+  } catch (error) {
+    console.log('❌ Failed:', error.message);
+    failed++;
+  }
+
+  // Test 3: Search datasets
+  try {
+    console.log('\nTest 3: Search datasets...');
+    const results = await api.searchDatasets({ query: 'verkehr', limit: 5 });
+    console.assert(results.results.length > 0, 'Should find results');
+    console.log('✅ Found', results.results.length, 'datasets about verkehr');
+
+    // Save first dataset for next tests
+    global.testDatasetId = results.results[0].name;
+    global.testDatasetTitle = results.results[0].title;
+  } catch (error) {
+    console.log('❌ Failed:', error.message);
+    failed++;
+  }
+
+  // Test 4: Get dataset details
+  try {
+    console.log('\nTest 4: Get dataset details...');
+    const dataset = await api.getDataset(global.testDatasetId);
+    console.assert(dataset.id, 'Dataset should have ID');
+    console.assert(dataset.resources, 'Dataset should have resources');
+    console.log('✅ Got details for:', dataset.title);
+    console.log('   Resources:', dataset.resources.length);
+    passed++;
+  } catch (error) {
+    console.log('❌ Failed:', error.message);
+    failed++;
+  }
+
+  // Test 5: List dataset resources
+  try {
+    console.log('\nTest 5: List dataset resources...');
+    const resources = await api.listDatasetResources(global.testDatasetId);
+    console.assert(Array.isArray(resources), 'Should return array');
+    console.log('✅ Found', resources.length, 'resources');
+
+    if (resources.length > 0) {
+      global.testResourceUrl = resources[0].url;
+      global.testResourceFormat = resources[0].format;
+    }
+    passed++;
+  } catch (error) {
+    console.log('❌ Failed:', error.message);
+    failed++;
+  }
+
+  // Test 6: Fetch and parse data (if we have a suitable resource)
+  if (global.testResourceUrl && ['CSV', 'JSON'].includes(global.testResourceFormat.toUpperCase())) {
+    try {
+      console.log('\nTest 6: Fetch and parse data...');
+      const data = await fetcher.fetchResource(global.testResourceUrl, global.testResourceFormat);
+
+      if (data.error) {
+        console.log('⚠️  Could not fetch data:', data.error);
+      } else {
+        console.assert(data.rows.length > 0, 'Should have rows');
+        console.assert(data.columns.length > 0, 'Should have columns');
+        console.log('✅ Fetched data:', data.rows.length, 'rows,', data.columns.length, 'columns');
+
+        // Test 7: Generate sample
+        console.log('\nTest 7: Generate sample and stats...');
+        const sample = sampler.generateSample(data.rows, data.columns, 10);
+        console.assert(sample.sampleRows.length <= 10, 'Sample should be limited');
+        console.assert(sample.columns.length > 0, 'Should have column stats');
+        console.log('✅ Generated sample with stats');
+        console.log('   Column types:', sample.columns.map(c => `${c.name}:${c.type}`).join(', '));
+        passed += 2;
+      }
+    } catch (error) {
+      console.log('❌ Failed:', error.message);
+      failed += 2;
+    }
+  } else {
+    console.log('\n⏭️  Skipping data fetch tests (no suitable resource)');
+  }
+
+  // Summary
+  console.log('\n' + '='.repeat(50));
+  console.log(`Tests completed: ${passed} passed, ${failed} failed`);
+
+  if (failed === 0) {
+    console.log('✅ All tests passed!');
+    process.exit(0);
+  } else {
+    console.log('❌ Some tests failed');
+    process.exit(1);
+  }
+}
+
+runTests();
+```
+
+**How to test**:
+```bash
+npm run build
+node test/integration-test.js
+```
+
+**Expected output**: Should see all tests pass with real data from the portal.
+
+**Commit message**: `Add integration test script for all features`
+
+---
+
+### Task 3.2: Update README with New Features
+
+**What to do**: Document the new capabilities in the README.
+
+**Files to modify**:
+- `README.md` - Update features and tools sections
+
+**Step-by-step**:
+
+1. **Update the Features section** (around line 5):
+
+Replace the existing features with:
+```markdown
+## Features
+
+- 🔍 **Natural Language Search**: Query datasets using plain English
+- 📊 **Dataset Discovery**: Browse datasets by category, organization, or explore all available data
+- 📈 **Portal Overview**: Get statistics and understand the data landscape
+- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON)
+- 🎯 **Smart Sampling**: Automatic data sampling with statistics to prevent context overflow
+- 🔗 **Direct API Integration**: Connects to Berlin's official CKAN-based data portal
+- 🤖 **Agentic Workflows**: Tools can be chained together for complex analysis tasks
+```
+
+2. **Update the Tools section** (around line 22):
+
+Replace with:
+```markdown
+### Tools
+
+**Portal Metadata & Navigation:**
+1. **get_portal_stats**: Get overview statistics (total datasets, organizations, categories)
+2. **list_all_datasets**: Browse all datasets with pagination
+
+**Dataset Discovery:**
+3. **search_berlin_datasets**: Search datasets using natural language
+4. **get_dataset_details**: Get detailed information about a specific dataset
+5. **discover_data_topics**: Explore available categories and tags
+6. **suggest_datasets**: Get intelligent suggestions based on research interests
+
+**Data Fetching & Analysis:**
+7. **list_dataset_resources**: Show all available files for a dataset
+8. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
+```
+
+3. **Add a new Examples section** after the Tools section:
+
+```markdown
+### Workflow Examples
+
+**Explore the portal:**
+```
+User: "What's available in the Berlin Open Data Portal?"
+→ Uses get_portal_stats
+→ Gets overview with counts and suggestions
+```
+
+**Find and analyze data:**
+```
+User: "Which Berlin district has the most green space per capita?"
+→ Uses search_berlin_datasets for green space data
+→ Uses fetch_dataset_data to get the actual data
+→ Performs calculation using fetched data
+→ Returns answer with methodology
+```
+
+**Multi-dataset analysis:**
+```
+User: "Is there correlation between air quality and traffic?"
+→ Searches for air quality datasets
+→ Searches for traffic datasets
+→ Fetches both datasets
+→ Analyzes correlation
+→ Returns findings
+```
+```
+
+**How to test**:
+Read through the updated README to ensure it's accurate and clear.
+
+**Commit message**: `Update README with Phase 1 and 2 features`
+
+---
+
+### Task 3.3: Add Usage Examples Document
+
+**What to do**: Create detailed usage examples for developers/users.
+
+**Files to create**:
+- `docs/USAGE_EXAMPLES.md` - New file
+
+**Step-by-step**:
+
+1. **Create `docs/USAGE_EXAMPLES.md`**:
+
+```markdown
+# Usage Examples
+
+This document shows real-world usage examples of the Berlin Open Data MCP Server.
+
+## Getting Started
+
+### Basic Portal Exploration
+
+**Question**: "What data is available in Berlin?"
+
+**Tools used**: `get_portal_stats`
+
+**Result**: Overview showing:
+- Total datasets: ~1500
+- Organizations: ~50
+- Categories: ~200
+
+---
+
+### Finding Specific Data
+
+**Question**: "Find datasets about bicycle infrastructure"
+
+**Tools used**: `search_berlin_datasets`
+
+**Result**: List of relevant datasets including:
+- Bicycle parking locations
+- Bike lane network data
+- Bike-sharing station information
+
+---
+
+---
+
+### Fetching Actual Data
+
+**Question**: "Get the bicycle parking data"
+
+**Tools used**:
+1. `search_berlin_datasets` to find the dataset
+2. `get_dataset_details` to see available resources
+3. `fetch_dataset_data` to download and parse the data
+
+**Result**: Smart sample of the data (first 100 rows) with:
+- Column names and types
+- Statistics (min/max for numbers, unique counts)
+- Sample values
+- Total row count
+
+---
+
+## Advanced Workflows
+
+### Multi-Dataset Analysis
+
+**Question**: "Which district has the most parks?"
+
+**Workflow**:
+1. Search for park/green space datasets
+2. Fetch the green space data
+3. Search for district boundary data
+4. Fetch district data
+5. Perform aggregation by district
+6. Return answer
+
+**Tools chain**:
+```
+search_berlin_datasets("parks green space")
+→ get_dataset_details(dataset_id)
+→ fetch_dataset_data(dataset_id)
+→ [Analysis performed by LLM using fetched data]
+→ Answer
+```
+
+---
+
+### Correlation Analysis
+
+**Question**: "Is there a relationship between air quality and green spaces?"
+
+**Workflow**:
+1. Find air quality measurement data
+2. Find green space area data
+3. Fetch both datasets
+4. Align by district/location
+5. Calculate correlation
+6. Interpret results
+
+**Tools chain**:
+```
+search_berlin_datasets("air quality luftqualität")
+→ fetch_dataset_data(air_quality_dataset_id)
+→ search_berlin_datasets("green space grünflächen")
+→ fetch_dataset_data(green_space_dataset_id)
+→ [LLM performs correlation analysis]
+→ Answer with statistical findings
+```
+
+---
+
+## Tips for Effective Usage
+
+### 1. Start Broad, Then Narrow
+
+```
+❌ Bad: Immediately fetching data without knowing what's available
+✅ Good: get_portal_stats → discover_data_topics → search → fetch
+```
+
+### 2. Check Resources Before Fetching
+
+```
+❌ Bad: fetch_dataset_data without knowing the format
+✅ Good: list_dataset_resources → choose appropriate resource → fetch
+```
+
+### 3. Use Smart Sampling for Large Datasets
+
+```
+❌ Bad: fetch_dataset_data with full_data=true on 100k row dataset
+✅ Good: fetch_dataset_data with default sampling (100 rows)
+```
+
+---
+
+## Common Patterns
+
+### Pattern 1: Data Discovery
+```
+get_portal_stats
+→ discover_data_topics (optional, for browsing)
+→ search_berlin_datasets
+→ get_dataset_details
+```
+
+### Pattern 2: Quick Analysis
+```
+search_berlin_datasets
+→ fetch_dataset_data
+→ [Analysis]
+```
+
+### Pattern 3: Comprehensive Study
+```
+get_portal_stats
+→ search_berlin_datasets (with category keywords)
+→ [Select multiple datasets]
+→ fetch_dataset_data (multiple times)
+→ [Cross-dataset analysis]
+```
+
+---
+
+## Troubleshooting
+
+### "No resources available"
+- Some datasets are metadata-only
+- Use `get_dataset_details` to check if resources exist
+- Try related datasets instead
+
+### "Error fetching data"
+- Resource URL may be invalid or server down
+- Try different resource from same dataset
+- Check format - only CSV and JSON are fully supported
+
+### "Dataset too large"
+- Use smart sampling (default behavior)
+- Consider filtering data at source if API supports it
+- Analyze sample and extrapolate if appropriate
+
+### "No results found"
+- Try German keywords (e.g., "Verkehr" vs "traffic")
+- Use broader search terms
+- Browse categories with `discover_data_topics`
+
+---
+
+## Performance Tips
+
+1. **Pagination**: Always specify reasonable `limit` values (10-100)
+2. **Sample first**: Don't use `full_data=true` unless necessary
+3. **Reuse dataset IDs**: If analyzing multiple resources from same dataset, store the ID
+
+---
+
+## API Limits
+
+- Maximum download size: 50MB per resource
+- Default sample size: 100 rows
+- Maximum sample size: 1000 rows
+- Request timeout: 30 seconds
+- No rate limiting (but be respectful)
+```
+
+**How to test**:
+Review the document for accuracy and completeness.
+
+**Commit message**: `Add comprehensive usage examples documentation`
+
+---
+
+### Task 3.4: Fix Any Bugs Found
+
+**What to do**: Address any issues discovered during testing.
+
+**Process**:
+
+1. For each bug:
+   - Document the issue in the test log
+   - Identify root cause
+   - Fix in appropriate file
+   - Test the fix
+   - Commit with descriptive message: `Fix: [description of bug]`
+
+2. Common potential issues to watch for:
+   - Empty dataset results (handle gracefully)
+   - Invalid dataset IDs (provide helpful error)
+   - Missing resources (suggest alternatives)
+   - Large file downloads (timeout handling)
+   - JSON parsing errors (malformed data)
+
+**Note**: CSV parsing edge cases (delimiters, encoding) are handled by papaparse library.
+
+---
+
+### Task 3.5: Update CHANGELOG
+
+**What to do**: Document all changes made in Phases 1-3.
+
+**Files to create**:
+- `CHANGELOG.md` - New file
+
+**Step-by-step**:
+
+1. **Create `CHANGELOG.md`**:
+
+```markdown
+# Changelog
+
+All notable changes to the Berlin Open Data MCP Server.
+
+## [2.0.0] - [Date]
+
+### Added - Phase 1: Portal Metadata & Navigation
+- `get_portal_stats` tool for portal overview
+- `list_all_datasets` tool with proper pagination
+- Portal statistics API methods
+- Enhanced pagination support
+
+### Added - Phase 2: Data Fetching & Sampling
+- `list_dataset_resources` tool to view available files
+- `fetch_dataset_data` tool to download and parse data
+- DataFetcher module for downloading CSV/JSON resources with papaparse
+- DataSampler module for smart sampling and statistics
+- Automatic format detection and conversion
+- Column type inference and statistics
+- Sample size limits to prevent context overflow
+- Support for CSV and JSON formats with robust parsing
+
+### Added - Phase 3: Documentation & Testing
+- Integration test suite (prioritized over manual testing)
+- Comprehensive usage examples
+- Updated README with new features
+
+### Improved
+- Error handling for network failures
+- Error messages with actionable suggestions
+- Type safety throughout codebase
+
+## [1.0.0] - [Original date]
+
+### Initial Release
+- Basic dataset search functionality
+- Dataset details retrieval
+- Category and organization listing
+- Natural language query processing
+- MCP protocol integration
+```
+
+**Commit message**: `Add CHANGELOG for version 2.0.0`
+
+---
+
+### Phase 3 Complete!
+
+**Final verification checklist**:
+
+- [ ] All code compiles without errors
+- [ ] Integration tests pass
+- [ ] Manual testing completed
+- [ ] Documentation updated (README, usage examples)
+- [ ] CHANGELOG created
+- [ ] All commits have clear messages
+- [ ] No TODOs or debug code left in source
+
+**Total commits**: Should have 10-12 commits across all phases (Phase 0: 2, Phase 1: 3, Phase 2: 6, Phase 3: 3-4)
+
+**Final commit**: `Release version 2.0.0 - Add portal metadata and data fetching`
+
+---
+
+## Post-Implementation
+
+### What's Next?
+
+**Future enhancements** (not part of current implementation):
+
+**Phase 4**: GeoJSON support
+- Parse GeoJSON format
+- Extract coordinates and geometries
+- Basic spatial operations
+
+**Phase 5**: Advanced filtering
+- Query-based data fetching
+- Server-side filtering by column values
+- Pagination within large datasets
+
+**Phase 6**: Visualization
+- Integration with Datawrapper or similar
+- Chart generation from fetched data
+- Return embed codes or image URLs
+
+**Phase 7**: Analysis tools
+- Aggregation functions (group by, sum, average)
+- Simple joins across datasets
+- Correlation calculations
+
+---
+
+## Appendix: Debugging Tips
+
+### Common Issues
+
+**"Module not found" errors**:
+- Run `npm install` to ensure dependencies are installed
+- Check that file extensions include `.js` in imports
+- Verify `tsconfig.json` has correct module settings
+
+**"Cannot read property of undefined"**:
+- Add null checks before accessing nested properties
+- Check API response structure with console.log
+- Verify dataset has resources before accessing them
+
+**CSV parsing produces garbage**:
+- Papaparse handles most edge cases automatically
+- Check if file is actually CSV format
+- Verify the resource URL is correct
+
+**Timeout errors**:
+- Increase timeout in DataFetcher
+- Check if URL is accessible in browser
+- File might be too large - verify size first
+
+### Testing Individual Components
+
+**Test API methods**:
+```bash
+node -e "
+const { BerlinOpenDataAPI } = require('./dist/berlin-api.js');
+new BerlinOpenDataAPI().getPortalStats().then(console.log);
+"
+```
+
+**Test data fetcher**:
+```bash
+node -e "
+const { DataFetcher } = require('./dist/data-fetcher.js');
+new DataFetcher().fetchResource('URL', 'CSV').then(console.log);
+"
+```
+
+**Test data sampler**:
+```bash
+node -e "
+const { DataSampler } = require('./dist/data-sampler.js');
+const sample = [{ a: 1, b: 'test' }, { a: 2, b: 'test2' }];
+console.log(new DataSampler().generateSample(sample, ['a', 'b']));
+"
+```
+
+---
+
+## Code Style Guidelines
+
+**TypeScript conventions**:
+- Use `async/await` over promises
+- Prefer `const` over `let`
+- Use descriptive variable names
+- Add type annotations for public methods
+- Keep functions focused and small
+
+**Error handling**:
+- Always catch and handle errors
+- Provide user-friendly error messages
+- Suggest actionable next steps
+- Log technical details for debugging
+
+**Comments**:
+- Start each file with ABOUTME comments (2 lines)
+- Document why, not what
+- Explain non-obvious logic
+- Don't state the obvious
+
+**Naming**:
+- Classes: PascalCase (BerlinOpenDataAPI)
+- Methods: camelCase (getDataset)
+- Constants: UPPER_SNAKE_CASE (MAX_DOWNLOAD_SIZE)
+- Interfaces: PascalCase (PortalStats)
+
+---
+
+## Success Criteria
+
+You'll know you're done when:
+
+✅ All TypeScript compiles without errors
+✅ Integration tests pass
+✅ You can ask Claude (via Desktop) complex questions and it chains tools correctly
+✅ Error messages are helpful and actionable
+✅ Documentation is complete and accurate
+✅ Code is clean, well-organized, and follows style guidelines
+✅ All commits are atomic and well-messaged
+
+**Estimated time**: 8-12 hours for experienced developer
+
+**Difficulty**: Intermediate - requires understanding of:
+- REST APIs and HTTP
+- Data parsing (CSV/JSON)
+- Async JavaScript/TypeScript
+- Error handling patterns
+- MCP protocol basics
+
+---
+
+## Getting Help
+
+If you get stuck:
+
+1. **Check the docs**: Read existing docs in `docs/` folder
+2. **Review existing code**: Look at how similar features are implemented
+3. **Test incrementally**: Don't write large chunks without testing
+4. **Read error messages carefully**: They usually tell you exactly what's wrong
+5. **Search the CKAN API docs**: https://docs.ckan.org/en/latest/api/
+6. **Ask for clarification**: If requirements are unclear, ask before implementing
+
+---
+
+## Final Notes
+
+**Remember**:
+- DRY: Don't duplicate code
+- YAGNI: Build only what's specified
+- TDD: Test as you go
+- Commit frequently with clear messages
+- Keep it simple and readable
+
+**This is a prototype**: Focus on getting it working correctly, not on performance optimization or handling every edge case. We'll iterate based on real usage.
+
+Good luck! 🚀
