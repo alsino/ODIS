@@ -383,7 +383,7 @@ class BerlinOpenDataMCPServer {
             responseText += '\n💡 **Next steps**:\n';
             responseText += '- Use `list_all_datasets` to browse all datasets\n';
             responseText += '- Use `discover_data_topics` to explore categories\n';
-            responseText += '- Use `list_datasets_by_category` to filter by topic\n';
+            responseText += '- Use `search_berlin_datasets` to find specific topics\n';
 
             return {
               content: [{ type: 'text', text: responseText }],
