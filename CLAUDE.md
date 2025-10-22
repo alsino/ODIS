@@ -99,7 +99,7 @@ When asked to do something, just do it - including obvious follow-up actions nee
 - YOU MUST commit frequently throughout the development process, even if your high-level tasks are not yet done. Commit your journal entries.
 - NEVER SKIP, EVADE OR DISABLE A PRE-COMMIT HOOK
 - NEVER use `git add -A` unless you've just done a `git status` - Don't add random test files to the repo.
-
+- NEVER mention Claude in commit messages, e.g. 🤖 Generated with [Claude Code](https://claude.com/claude-code), Co-Authored-By: Claude <noreply@anthropic.com>" or similar              
 
 ## Issue tracking
 
