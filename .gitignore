@@ -4,7 +4,8 @@ dist/
 *.log
 .DS_Store
 
-# Exclude all docs except plans folder
+# Exclude all docs except plans folder and documentation files
 docs/*
 !docs/plans/
 !docs/plans/**
+!docs/*.md
