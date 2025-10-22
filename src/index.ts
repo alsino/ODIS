@@ -10,11 +10,15 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { BerlinOpenDataAPI } from './berlin-api.js';
 import { QueryProcessor } from './query-processor.js';
+import { DataFetcher } from './data-fetcher.js';
+import { DataSampler } from './data-sampler.js';
 
 class BerlinOpenDataMCPServer {
   private server: Server;
   private api: BerlinOpenDataAPI;
   private queryProcessor: QueryProcessor;
+  private dataFetcher: DataFetcher;
+  private dataSampler: DataSampler;
 
   constructor() {
     this.server = new Server(
@@ -32,6 +36,8 @@ class BerlinOpenDataMCPServer {
 
     this.api = new BerlinOpenDataAPI();
     this.queryProcessor = new QueryProcessor();
+    this.dataFetcher = new DataFetcher();
+    this.dataSampler = new DataSampler();
 
     this.setupHandlers();
   }
