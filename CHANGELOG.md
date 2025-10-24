@@ -2,6 +2,37 @@
 
 All notable changes to the Berlin Open Data MCP Server.
 
+## [3.0.0] - 2025-10-24
+
+### Added - Phase 4 Part B: Excel Support
+- Excel (XLS/XLSX) file parsing with xlsx library
+- Binary download handling for Excel files
+- Automatic first-sheet extraction with header detection
+- Support for 545 datasets (20.6% of portal) with Excel files
+- 30 Excel-only datasets now accessible
+
+### Added - Phase 4 Part A: Browser Automation
+- Optional Puppeteer integration for JavaScript-rendered downloads
+- BrowserFetcher module for headless Chrome automation
+- Automatic detection of statistik-berlin-brandenburg.de URLs
+- Browser fallback when standard HTTP fetch fails
+- Configuration option to enable/disable browser automation
+- Support for 182 datasets (6.9% of portal) requiring JavaScript
+- Improved error messages suggesting Puppeteer installation
+
+### Added - Phase 4: Testing & Documentation
+- Integration tests for Excel library
+- Browser automation availability checks
+- Updated README with Phase 4 features
+- Installation instructions for optional Puppeteer
+- Usage examples for Excel and browser automation
+- Troubleshooting section for HTML-instead-of-CSV errors
+
+### Improved
+- DataFetcher now handles binary and text downloads appropriately
+- Error messages explain why files can't be fetched and suggest solutions
+- ABOUTME comments on all source files including new modules
+
 ## [2.0.0] - 2025-10-22
 
 ### Added - Phase 1: Portal Metadata & Navigation
