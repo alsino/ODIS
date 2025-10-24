@@ -129,6 +129,19 @@ export class DataFetcher {
 
   private parseCSV(text: string, format: string): FetchedData {
     try {
+      // Check if we got HTML instead of CSV
+      const trimmedText = text.trim();
+      if (trimmedText.toLowerCase().startsWith('<!doctype html') ||
+          trimmedText.toLowerCase().startsWith('<html')) {
+        return {
+          format,
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'Server returned HTML instead of CSV. The download URL may be incorrect or the file may have moved. Please verify the resource URL in the dataset details.',
+        };
+      }
+
       // Use papaparse for robust CSV parsing
       // Automatically detects delimiters, handles quotes, encoding issues, etc.
       const result = Papa.parse<any>(text, {
@@ -143,6 +156,17 @@ export class DataFetcher {
 
       const rows = result.data;
       const columns = result.meta?.fields || [];
+
+      // Additional sanity check: if we have very few rows and parsing seems wrong
+      if (rows.length === 0 || (columns.length === 0 && rows.length < 5)) {
+        return {
+          format,
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'CSV parsing produced no valid data. The file may be malformed or in an unexpected format.',
+        };
+      }
 
       return {
         format: 'CSV',
