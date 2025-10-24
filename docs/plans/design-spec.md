@@ -346,27 +346,39 @@ Each tool call returns information that helps Claude decide the next step. The t
 - Updated documentation
 - Bug fixes from testing
 
-### Future Phases (defer until usage patterns emerge)
+### Future Phases
 
-**Phase 4: GeoJSON Support for Spatial Data**
+**Phase 4: Browser Automation for SPA-Hosted Files** (PRIORITIZED - October 2025)
+- Problem: 182 datasets (6.9% of portal) from statistik-berlin-brandenburg.de cannot be fetched
+- Solution: Optional Puppeteer integration for JavaScript-rendered download URLs
+- Scope: Detect statistik-berlin-brandenburg.de URLs and use headless browser
+- Implementation approach:
+  - Add puppeteer as optional dependency
+  - Create BrowserFetcher class for JavaScript-dependent URLs
+  - Fall back to regular fetch for standard URLs
+  - Make browser automation opt-in via configuration
+- Trade-offs: ~300MB Chrome dependency, slower fetches, but unlocks 147 CSV files
+- Status: Planned based on user testing feedback
+
+**Phase 5: GeoJSON Support for Spatial Data**
 - Parse GeoJSON format
 - Extract geometries and coordinates
 - Basic spatial operations (within, intersects)
 - Return geographic data in LLM-friendly format
 
-**Phase 5: Data Filtering/Querying Tools**
+**Phase 6: Data Filtering/Querying Tools**
 - Accept filter parameters (e.g., "only rows where district='Mitte'")
 - Server-side data reduction
 - Column selection
 - Row pagination within datasets
 
-**Phase 6: Visualization Integration**
+**Phase 7: Visualization Integration**
 - Integration with Datawrapper API or similar
 - Generate chart specifications (Vega-Lite)
 - Return embed codes or image URLs
 - Support common chart types (bar, line, scatter)
 
-**Phase 7: Advanced Analysis Tools**
+**Phase 8: Advanced Analysis Tools**
 - Aggregation functions (group by, sum, average)
 - Simple joins across datasets
 - Correlation calculations server-side
@@ -585,6 +597,14 @@ Each tool call returns information that helps Claude decide the next step. The t
 **Q5**: Should we provide any privacy/anonymization features?
 - **Current answer**: No, assume all data is already public
 - **Reconsider when**: Users want to analyze sensitive data
+
+**Q6**: How to handle JavaScript-rendered download URLs (statistik-berlin-brandenburg.de)?
+- **Context**: 182 datasets (6.9% of portal) use statistik-berlin-brandenburg.de URLs that return HTML instead of data files. These URLs require JavaScript execution to download.
+- **Impact**: ~147 CSV files cannot be fetched programmatically, affecting 68.7% of Statistik datasets
+- **Current answer**: Implement optional Puppeteer support for headless browser rendering
+- **Implementation**: Phase 4 - Browser automation for SPA-hosted files
+- **Trade-offs**: Added complexity (~300MB Chrome dependency) vs 7% more portal coverage
+- **Decision date**: October 2025 - based on user testing revealing significant impact
 
 ### Future Considerations
 
