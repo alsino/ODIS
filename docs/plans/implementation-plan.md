@@ -1630,31 +1630,478 @@ All notable changes to the Berlin Open Data MCP Server.
 
 ---
 
-## Post-Implementation
+## Post-Implementation (Phases 1-3 Complete)
 
 ### What's Next?
 
-**Future enhancements** (not part of current implementation):
+**Phase 4**: Browser Automation for SPA-Hosted Files (PRIORITIZED - October 2025)
 
-**Phase 4**: GeoJSON support
+Based on user testing, 182 datasets (6.9% of portal, 147 CSV files) from statistik-berlin-brandenburg.de cannot be fetched due to JavaScript-rendered download URLs. This phase adds optional Puppeteer support.
+
+**Implementation approach**: See detailed plan below in Phase 4 section.
+
+**Estimated time**: 6-8 hours
+**Complexity**: Intermediate-Advanced
+
+---
+
+**Future enhancements** (defer until Phase 4 complete):
+
+**Phase 5**: GeoJSON support
 - Parse GeoJSON format
 - Extract coordinates and geometries
 - Basic spatial operations
 
-**Phase 5**: Advanced filtering
+**Phase 6**: Advanced filtering
 - Query-based data fetching
 - Server-side filtering by column values
 - Pagination within large datasets
 
-**Phase 6**: Visualization
+**Phase 7**: Visualization
 - Integration with Datawrapper or similar
 - Chart generation from fetched data
 - Return embed codes or image URLs
 
-**Phase 7**: Analysis tools
+**Phase 8**: Analysis tools
 - Aggregation functions (group by, sum, average)
 - Simple joins across datasets
 - Correlation calculations
+
+---
+
+## Phase 4: Browser Automation for SPA-Hosted Files
+
+**Goal**: Enable fetching of 147 CSV files from statistik-berlin-brandenburg.de that require JavaScript execution.
+
+**Background**: User testing revealed that 6.9% of portal datasets (182 datasets, 147 CSVs) use statistik-berlin-brandenburg.de URLs. This site is a Single Page Application that returns HTML for all URLs and requires JavaScript to download files. Standard HTTP fetching fails.
+
+**Solution**: Optional Puppeteer integration that detects problematic URLs and uses headless Chrome to download files.
+
+### Task 4.1: Install Puppeteer
+
+**What to do**: Add Puppeteer as an optional dependency.
+
+**Step-by-step**:
+
+1. **Install puppeteer**:
+```bash
+npm install puppeteer
+npm install --save-dev @types/puppeteer
+```
+
+2. **Update package.json** to mark as optional in documentation:
+```json
+{
+  "optionalDependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}
+```
+
+3. **Verify installation**:
+```bash
+npm run build
+```
+
+**Note**: Puppeteer downloads Chromium (~300MB) on first install.
+
+**Commit message**: `Add puppeteer for browser automation support`
+
+---
+
+### Task 4.2: Create BrowserFetcher Module
+
+**What to do**: Create a new module that uses Puppeteer to download files from JavaScript-rendered pages.
+
+**Files to create**:
+- `src/browser-fetcher.ts` - New file
+
+**Step-by-step**:
+
+1. **Create the file** `src/browser-fetcher.ts`:
+
+```typescript
+// ABOUTME: Downloads files from JavaScript-rendered pages using headless browser
+// ABOUTME: Handles Single Page Applications that don't support direct file downloads
+
+import puppeteer, { Browser, Page } from 'puppeteer';
+
+export interface BrowserFetchResult {
+  success: boolean;
+  data?: string;
+  error?: string;
+}
+
+export class BrowserFetcher {
+  private browser: Browser | null = null;
+  private readonly DOWNLOAD_TIMEOUT = 60000; // 60 seconds for browser operations
+
+  async initialize(): Promise<void> {
+    if (!this.browser) {
+      this.browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+    }
+  }
+
+  async fetchWithBrowser(url: string): Promise<BrowserFetchResult> {
+    try {
+      await this.initialize();
+
+      const page = await this.browser!.newPage();
+
+      // Set up download interception
+      const client = await page.target().createCDPSession();
+      const downloadPath = '/tmp/berlin-mcp-downloads';
+      await client.send('Browser.setDownloadBehavior', {
+        behavior: 'allow',
+        downloadPath: downloadPath,
+      });
+
+      // Navigate to the URL
+      await page.goto(url, {
+        waitUntil: 'networkidle0',
+        timeout: this.DOWNLOAD_TIMEOUT
+      });
+
+      // Wait a bit for any JavaScript to execute
+      await page.waitForTimeout(2000);
+
+      // Try to get the page content (might be the file content for CSV)
+      const content = await page.content();
+
+      await page.close();
+
+      // Check if we got actual data or HTML
+      if (content.trim().toLowerCase().startsWith('<!doctype') ||
+          content.trim().toLowerCase().startsWith('<html')) {
+        return {
+          success: false,
+          error: 'Page returned HTML - file may require manual download',
+        };
+      }
+
+      return {
+        success: true,
+        data: content,
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+    }
+  }
+
+  // Check if Puppeteer is available
+  static isAvailable(): boolean {
+    try {
+      require.resolve('puppeteer');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+```
+
+**How to test**:
+
+Create a test script `test-browser-fetcher.js`:
+```javascript
+const { BrowserFetcher } = require('./dist/browser-fetcher.js');
+
+async function test() {
+  const fetcher = new BrowserFetcher();
+
+  const result = await fetcher.fetchWithBrowser(
+    'https://www.statistik-berlin-brandenburg.de/opendata/EWR_L21_202412E_Matrix.csv'
+  );
+
+  console.log('Success:', result.success);
+  if (result.error) console.log('Error:', result.error);
+  if (result.data) console.log('Got data:', result.data.substring(0, 100));
+
+  await fetcher.close();
+}
+
+test();
+```
+
+```bash
+npm run build
+node test-browser-fetcher.js
+```
+
+**Expected output**: Should either get CSV data or a clear error.
+
+**Commit message**: `Add BrowserFetcher module for JavaScript-rendered downloads`
+
+---
+
+### Task 4.3: Integrate BrowserFetcher into DataFetcher
+
+**What to do**: Update DataFetcher to detect statistik-berlin-brandenburg.de URLs and use BrowserFetcher when available.
+
+**Files to modify**:
+- `src/data-fetcher.ts` - Add browser fallback logic
+
+**Step-by-step**:
+
+1. **Add import** at top of `src/data-fetcher.ts`:
+```typescript
+import { BrowserFetcher } from './browser-fetcher.js';
+```
+
+2. **Add method to detect problematic URLs**:
+```typescript
+private needsBrowserFetch(url: string): boolean {
+  // URLs that require JavaScript execution
+  return url.includes('statistik-berlin-brandenburg.de');
+}
+```
+
+3. **Update fetchResource method** to use browser when needed:
+
+Find the existing `fetchResource` method and update it:
+
+```typescript
+async fetchResource(url: string, format: string): Promise<FetchedData> {
+  // First try with browser if this URL needs it
+  if (this.needsBrowserFetch(url) && BrowserFetcher.isAvailable()) {
+    const browserResult = await this.fetchWithBrowser(url, format);
+    if (browserResult) return browserResult;
+    // If browser fetch failed, fall through to regular fetch
+  }
+
+  try {
+    // ... existing fetch logic ...
+  } catch (error) {
+    // ... existing error handling ...
+  }
+}
+
+private async fetchWithBrowser(url: string, format: string): Promise<FetchedData | null> {
+  try {
+    const fetcher = new BrowserFetcher();
+    const result = await fetcher.fetchWithBrowser(url);
+    await fetcher.close();
+
+    if (!result.success || !result.data) {
+      console.warn('Browser fetch failed:', result.error);
+      return null;
+    }
+
+    // Parse the data using existing methods
+    return this.parseData(result.data, format, 'text/csv');
+  } catch (error) {
+    console.error('Browser fetch error:', error);
+    return null;
+  }
+}
+```
+
+**How to test**:
+```bash
+npm run build
+node test-fetcher.js  # Should now work with statistik URLs
+```
+
+**Commit message**: `Integrate BrowserFetcher for statistik-berlin-brandenburg.de URLs`
+
+---
+
+### Task 4.4: Update Error Messages
+
+**What to do**: Improve error messages to explain browser automation option.
+
+**Files to modify**:
+- `src/data-fetcher.ts` - Update HTML detection error
+
+**Step-by-step**:
+
+1. **Update the HTML detection error message**:
+
+```typescript
+if (trimmedText.toLowerCase().startsWith('<!doctype html') ||
+    trimmedText.toLowerCase().startsWith('<html')) {
+
+  const hasP uppeteer = BrowserFetcher.isAvailable();
+  const errorMsg = hasP uppeteer
+    ? 'Server returned HTML instead of CSV. Browser automation failed to download the file. The resource may not be accessible programmatically.'
+    : 'Server returned HTML instead of CSV. This URL requires browser automation. Install puppeteer (npm install puppeteer) to enable automatic downloads for these files, or download manually from the Berlin Open Data Portal website.';
+
+  return {
+    format,
+    rows: [],
+    totalRows: 0,
+    columns: [],
+    error: errorMsg,
+  };
+}
+```
+
+**Commit message**: `Improve error messages for browser automation`
+
+---
+
+### Task 4.5: Add Configuration Option
+
+**What to do**: Allow users to disable browser automation if desired.
+
+**Files to modify**:
+- `src/data-fetcher.ts` - Add configuration option
+
+**Step-by-step**:
+
+1. **Add constructor parameter**:
+```typescript
+export class DataFetcher {
+  private readonly MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024;
+  private readonly REQUEST_TIMEOUT = 30000;
+  private readonly useBrowserAutomation: boolean;
+
+  constructor(options: { useBrowserAutomation?: boolean } = {}) {
+    this.useBrowserAutomation = options.useBrowserAutomation !== false; // Default true
+  }
+
+  // Update needsBrowserFetch check:
+  private shouldUseBrowser(url: string): boolean {
+    return this.useBrowserAutomation &&
+           this.needsBrowserFetch(url) &&
+           BrowserFetcher.isAvailable();
+  }
+}
+```
+
+2. **Update index.ts** to pass configuration:
+```typescript
+// In constructor
+this.dataFetcher = new DataFetcher({ useBrowserAutomation: true });
+```
+
+**Commit message**: `Add configuration option for browser automation`
+
+---
+
+### Task 4.6: Update Documentation
+
+**What to do**: Document the Puppeteer feature in README and USAGE_EXAMPLES.
+
+**Files to modify**:
+- `README.md`
+- `docs/USAGE_EXAMPLES.md`
+
+**Step-by-step**:
+
+1. **Update README.md** Installation section:
+```markdown
+## Installation
+
+```bash
+npm install
+npm run build
+```
+
+### Optional: Browser Automation Support
+
+To enable fetching of datasets from statistik-berlin-brandenburg.de (182 datasets, ~7% of portal), install Puppeteer:
+
+```bash
+npm install puppeteer
+```
+
+This adds ~300MB of dependencies (Chromium) but unlocks access to demographic and statistical datasets that require JavaScript to download.
+```
+
+2. **Update USAGE_EXAMPLES.md** Troubleshooting section:
+```markdown
+### "Server returned HTML instead of CSV"
+
+Some datasets (especially from statistik-berlin-brandenburg.de) require JavaScript to download.
+
+**Solution**:
+1. Install Puppeteer: `npm install puppeteer`
+2. Restart the MCP server
+3. The server will automatically use browser automation for these URLs
+
+**Alternative**: Download manually from the dataset page
+```
+
+**Commit message**: `Document browser automation feature`
+
+---
+
+### Task 4.7: Add Tests
+
+**What to do**: Test browser automation with real statistik URLs.
+
+**Files to modify**:
+- `test/integration-test.cjs` - Add browser automation tests
+
+**Step-by-step**:
+
+1. **Add test for statistik URL** (only if Puppeteer installed):
+
+```javascript
+// After existing tests, add:
+if (BrowserFetcher.isAvailable()) {
+  console.log('\n📱 Test 8: Browser automation for statistik URL...');
+  try {
+    const statistikUrl = 'https://www.statistik-berlin-brandenburg.de/opendata/EWR_L21_202412E_Matrix.csv';
+    const fetcher = new DataFetcher({ useBrowserAutomation: true });
+    const result = await fetcher.fetchResource(statistikUrl, 'CSV');
+
+    if (result.error) {
+      console.log('⚠️  Browser fetch returned error:', result.error);
+    } else {
+      console.assert(result.rows.length > 0, 'Should have rows');
+      console.log('✅ Browser automation works:', result.rows.length, 'rows');
+      passed++;
+    }
+  } catch (error) {
+    console.log('❌ Failed:', error.message);
+    failed++;
+  }
+} else {
+  console.log('\n⏭️  Skipping browser automation test (Puppeteer not installed)');
+}
+```
+
+**How to test**:
+```bash
+npm run build
+node test/integration-test.cjs
+```
+
+**Commit message**: `Add integration test for browser automation`
+
+---
+
+### Phase 4 Complete!
+
+**Final checklist**:
+- [ ] Puppeteer installed
+- [ ] BrowserFetcher module created with ABOUTME comments
+- [ ] DataFetcher integrated with browser fallback
+- [ ] Error messages updated
+- [ ] Configuration option added
+- [ ] Documentation updated
+- [ ] Tests added and passing
+- [ ] All code compiles without errors
+
+**Expected commits**: 7 commits for Phase 4
+
+**Final commit**: `Complete Phase 4 - Browser automation for SPA-hosted files`
 
 ---
 
