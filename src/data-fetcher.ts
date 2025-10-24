@@ -138,7 +138,7 @@ export class DataFetcher {
           rows: [],
           totalRows: 0,
           columns: [],
-          error: 'Server returned HTML instead of CSV. The download URL may be incorrect or the file may have moved. Please verify the resource URL in the dataset details.',
+          error: 'Server returned HTML instead of CSV data. This URL requires a web browser to download. The file cannot be fetched programmatically via this tool. Please download manually from the Berlin Open Data Portal website or report this broken URL to daten.berlin.de.',
         };
       }
 
