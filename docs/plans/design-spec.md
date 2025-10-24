@@ -348,17 +348,36 @@ Each tool call returns information that helps Claude decide the next step. The t
 
 ### Future Phases
 
-**Phase 4: Browser Automation for SPA-Hosted Files** (PRIORITIZED - October 2025)
+**Phase 4: Browser Automation & Excel Support** (PRIORITIZED - October 2025)
+
+This phase addresses two format-related limitations discovered during user testing:
+
+**Part A: Browser Automation for SPA-Hosted Files**
 - Problem: 182 datasets (6.9% of portal) from statistik-berlin-brandenburg.de cannot be fetched
+- Root cause: Single Page Application returns HTML, requires JavaScript to download files
 - Solution: Optional Puppeteer integration for JavaScript-rendered download URLs
-- Scope: Detect statistik-berlin-brandenburg.de URLs and use headless browser
 - Implementation approach:
   - Add puppeteer as optional dependency
   - Create BrowserFetcher class for JavaScript-dependent URLs
   - Fall back to regular fetch for standard URLs
   - Make browser automation opt-in via configuration
 - Trade-offs: ~300MB Chrome dependency, slower fetches, but unlocks 147 CSV files
-- Status: Planned based on user testing feedback
+- Impact: Unlocks 6.9% of portal datasets
+
+**Part B: Excel Format Support (XLS/XLSX)**
+- Problem: 545 datasets (20.6% of portal) have Excel files; 30 datasets (1.14%) are Excel-ONLY
+- Root cause: DataFetcher only supports CSV/JSON text formats
+- Solution: Add xlsx library for Excel parsing
+- Implementation approach:
+  - Add xlsx as dependency (~2MB)
+  - Parse Excel files to tabular JSON format (same as CSV)
+  - Extract first sheet by default
+  - Convert to standard row/column structure
+- Trade-offs: Minimal - small dependency, quick implementation
+- Impact: Unlocks 1.14% critical datasets, improves UX for 20.6% of portal
+
+**Combined Impact**: +8% portal coverage (182 + 30 unique datasets)
+**Status**: Planned based on user testing feedback
 
 **Phase 5: GeoJSON Support for Spatial Data**
 - Parse GeoJSON format
@@ -602,9 +621,18 @@ Each tool call returns information that helps Claude decide the next step. The t
 - **Context**: 182 datasets (6.9% of portal) use statistik-berlin-brandenburg.de URLs that return HTML instead of data files. These URLs require JavaScript execution to download.
 - **Impact**: ~147 CSV files cannot be fetched programmatically, affecting 68.7% of Statistik datasets
 - **Current answer**: Implement optional Puppeteer support for headless browser rendering
-- **Implementation**: Phase 4 - Browser automation for SPA-hosted files
+- **Implementation**: Phase 4 Part A - Browser automation for SPA-hosted files
 - **Trade-offs**: Added complexity (~300MB Chrome dependency) vs 7% more portal coverage
 - **Decision date**: October 2025 - based on user testing revealing significant impact
+
+**Q7**: Should we support Excel formats (XLS/XLSX)?
+- **Context**: 545 datasets (20.6% of portal) have Excel files; 30 datasets (1.14%) are Excel-ONLY with no CSV/JSON alternative
+- **Impact**: 30 datasets completely inaccessible without Excel support, 545 datasets with degraded UX
+- **Current answer**: Yes, implement xlsx library integration
+- **Implementation**: Phase 4 Part B - Excel format parsing
+- **Trade-offs**: Minimal - only 2MB dependency, quick to implement
+- **Why not defer**: Low implementation cost, significant UX improvement for 20% of portal
+- **Decision date**: October 2025 - discovered during format availability analysis
 
 ### Future Considerations
 

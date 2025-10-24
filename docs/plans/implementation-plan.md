@@ -1634,14 +1634,17 @@ All notable changes to the Berlin Open Data MCP Server.
 
 ### What's Next?
 
-**Phase 4**: Browser Automation for SPA-Hosted Files (PRIORITIZED - October 2025)
+**Phase 4**: Browser Automation & Excel Support (PRIORITIZED - October 2025)
 
-Based on user testing, 182 datasets (6.9% of portal, 147 CSV files) from statistik-berlin-brandenburg.de cannot be fetched due to JavaScript-rendered download URLs. This phase adds optional Puppeteer support.
+Based on user testing, two format-related issues prevent access to significant portions of the portal:
+- **Part A**: 182 datasets (6.9%, 147 CSVs) from statistik-berlin-brandenburg.de require JavaScript/browser automation
+- **Part B**: 545 datasets (20.6%) have Excel files; 30 datasets (1.14%) are Excel-ONLY
 
 **Implementation approach**: See detailed plan below in Phase 4 section.
 
-**Estimated time**: 6-8 hours
-**Complexity**: Intermediate-Advanced
+**Estimated time**: 8-11 hours (6-8h Puppeteer + 2-3h Excel)
+**Complexity**: Part A: Intermediate-Advanced, Part B: Low
+**Combined Impact**: +8% portal coverage
 
 ---
 
@@ -1669,13 +1672,19 @@ Based on user testing, 182 datasets (6.9% of portal, 147 CSV files) from statist
 
 ---
 
-## Phase 4: Browser Automation for SPA-Hosted Files
+## Phase 4: Browser Automation & Excel Support
+
+This phase addresses two format-related limitations discovered during user testing, unlocking an additional 8% of the portal.
+
+### Part A: Browser Automation for SPA-Hosted Files
 
 **Goal**: Enable fetching of 147 CSV files from statistik-berlin-brandenburg.de that require JavaScript execution.
 
 **Background**: User testing revealed that 6.9% of portal datasets (182 datasets, 147 CSVs) use statistik-berlin-brandenburg.de URLs. This site is a Single Page Application that returns HTML for all URLs and requires JavaScript to download files. Standard HTTP fetching fails.
 
 **Solution**: Optional Puppeteer integration that detects problematic URLs and uses headless Chrome to download files.
+
+**Estimated time**: 6-8 hours
 
 ### Task 4.1: Install Puppeteer
 
@@ -2087,21 +2096,294 @@ node test/integration-test.cjs
 
 ---
 
+### Part B: Excel Format Support (XLS/XLSX)
+
+**Goal**: Enable parsing of Excel files (545 datasets have Excel, 30 are Excel-ONLY).
+
+**Background**: 20.6% of portal datasets include Excel files. While 515 have CSV/JSON alternatives, 30 datasets (1.14% of portal) are only available as Excel. Additionally, supporting Excel improves UX for all 545 datasets.
+
+**Solution**: Add xlsx library to parse Excel files into the same tabular format as CSV.
+
+**Estimated time**: 2-3 hours
+
+---
+
+### Task 4.8: Install xlsx Library
+
+**What to do**: Add xlsx (SheetJS) library for Excel parsing.
+
+**Step-by-step**:
+
+1. **Install xlsx**:
+```bash
+npm install xlsx
+npm install --save-dev @types/xlsx
+```
+
+2. **Verify installation**:
+```bash
+npm run build
+```
+
+**Note**: xlsx is only ~2MB, much lighter than Puppeteer.
+
+**Commit message**: `Add xlsx library for Excel file support`
+
+---
+
+### Task 4.9: Add Excel Parsing to DataFetcher
+
+**What to do**: Update DataFetcher to handle Excel files (XLS/XLSX).
+
+**Files to modify**:
+- `src/data-fetcher.ts`
+
+**Step-by-step**:
+
+1. **Add import** at top of file:
+```typescript
+import * as XLSX from 'xlsx';
+```
+
+2. **Add parseExcel method** to DataFetcher class:
+```typescript
+private parseExcel(buffer: Buffer, format: string): FetchedData {
+  try {
+    // Read the Excel file from buffer
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    // Get first sheet
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: 'Excel file has no sheets',
+      };
+    }
+
+    const sheet = workbook.Sheets[sheetName];
+
+    // Convert to JSON (array of objects)
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    // Extract column names
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+    // Sanity check
+    if (rows.length === 0 || columns.length === 0) {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: 'Excel file appears to be empty or has no headers',
+      };
+    }
+
+    return {
+      format: format.toUpperCase(),
+      rows,
+      totalRows: rows.length,
+      columns,
+    };
+  } catch (error) {
+    return {
+      format,
+      rows: [],
+      totalRows: 0,
+      columns: [],
+      error: `Excel parse error: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+```
+
+3. **Update fetchResource method** to handle Excel binary data:
+
+Find the section where response data is fetched and add Excel handling:
+
+```typescript
+const contentType = response.headers.get('content-type') || '';
+
+// Handle Excel files - need binary data
+const formatLower = format.toLowerCase();
+if (formatLower === 'xls' || formatLower === 'xlsx' ||
+    contentType.includes('spreadsheet') ||
+    contentType.includes('excel') ||
+    contentType.includes('ms-excel')) {
+  const buffer = await response.arrayBuffer();
+  return this.parseExcel(Buffer.from(buffer), format);
+}
+
+// For text formats (CSV, JSON), get as text
+const text = await response.text();
+return this.parseData(text, format, contentType);
+```
+
+4. **Add safety check in parseData**:
+
+At the start of `parseData` method:
+
+```typescript
+private parseData(text: string, format: string, contentType: string): FetchedData {
+  const formatLower = format.toLowerCase();
+
+  // Excel files should not reach here (handled as binary above)
+  if (formatLower === 'xls' || formatLower === 'xlsx') {
+    return {
+      format,
+      rows: [],
+      totalRows: 0,
+      columns: [],
+      error: 'Excel files require binary download - internal error',
+    };
+  }
+
+  // ... rest of existing parseData logic ...
+}
+```
+
+**How to test**:
+
+Create a quick test:
+```bash
+npm run build
+node -e "
+import('./dist/data-fetcher.js').then(async module => {
+  const fetcher = new module.DataFetcher();
+  // Find an XLSX dataset
+  const result = await fetcher.fetchResource('SOME_XLSX_URL', 'XLSX');
+  console.log('Rows:', result.totalRows);
+  console.log('Columns:', result.columns);
+  console.log('Error:', result.error);
+});
+"
+```
+
+**Commit message**: `Add Excel (XLS/XLSX) parsing support to DataFetcher`
+
+---
+
+### Task 4.10: Add Excel Tests and Documentation
+
+**What to do**: Test Excel parsing and document the feature.
+
+**Files to modify**:
+- `test/integration-test.cjs`
+- `README.md`
+- `docs/USAGE_EXAMPLES.md`
+
+**Step-by-step**:
+
+1. **Add Excel test** to integration tests:
+
+In `test/integration-test.cjs`, after existing tests:
+
+```javascript
+// Test 8 (or appropriate number): Excel file parsing
+console.log('\n📊 Test 8: Parse Excel (XLSX) file...');
+try {
+  // Search for a dataset with XLSX format
+  const xlsxSearch = await api.searchDatasets({ query: 'res_format:XLSX', limit: 1 });
+
+  if (xlsxSearch.results.length > 0 && xlsxSearch.results[0].resources) {
+    const dataset = xlsxSearch.results[0];
+    const xlsxResource = dataset.resources.find(r => r.format === 'XLSX' || r.format === 'XLS');
+
+    if (xlsxResource) {
+      const data = await fetcher.fetchResource(xlsxResource.url, xlsxResource.format);
+
+      if (data.error) {
+        console.log('⚠️  Excel parsing issue:', data.error);
+        console.log('   (Some Excel files may have access issues)');
+      } else {
+        console.assert(data.rows.length > 0, 'Should have rows');
+        console.assert(data.columns.length > 0, 'Should have columns');
+        console.log('✅ Excel parsing works:', data.rows.length, 'rows,', data.columns.length, 'columns');
+        passed++;
+      }
+    } else {
+      console.log('⏭️  No Excel resource found in dataset');
+    }
+  } else {
+    console.log('⏭️  No XLSX datasets found');
+  }
+} catch (error) {
+  console.log('❌ Failed:', error.message);
+  failed++;
+}
+```
+
+2. **Update README.md** - add to Features section:
+```markdown
+- 📊 **Excel Support**: Automatically parses XLS and XLSX files (545 datasets, 20.6% of portal)
+```
+
+3. **Update docs/USAGE_EXAMPLES.md** - add section:
+```markdown
+## Excel File Support
+
+The server automatically handles Excel files (XLS and XLSX formats):
+
+```
+User: "Fetch data from dataset XYZ"
+→ Server detects XLSX format
+→ Parses first sheet automatically
+→ Returns same tabular structure as CSV
+```
+
+**Notes**:
+- First sheet is used by default
+- Headers are detected automatically
+- Returns data in same format as CSV (rows + columns)
+- Supports both legacy XLS and modern XLSX
+
+**Example**: 545 datasets (20.6% of portal) include Excel files. The server handles them transparently.
+```
+
+**How to test**:
+```bash
+npm run build
+node test/integration-test.cjs
+```
+
+**Expected output**: Test 8 should pass (or skip gracefully if no Excel files accessible).
+
+**Commit message**: `Add Excel support tests and documentation`
+
+---
+
 ### Phase 4 Complete!
 
 **Final checklist**:
+
+**Part A: Browser Automation**
 - [ ] Puppeteer installed
 - [ ] BrowserFetcher module created with ABOUTME comments
 - [ ] DataFetcher integrated with browser fallback
-- [ ] Error messages updated
+- [ ] Browser automation error messages updated
 - [ ] Configuration option added
-- [ ] Documentation updated
-- [ ] Tests added and passing
+- [ ] Browser automation tests added
+
+**Part B: Excel Support**
+- [ ] xlsx library installed
+- [ ] Excel parsing implemented in DataFetcher
+- [ ] Binary download handling for Excel files
+- [ ] Excel tests added
+- [ ] Excel feature documented
+
+**General**
 - [ ] All code compiles without errors
+- [ ] All integration tests pass
+- [ ] README updated with new features
+- [ ] USAGE_EXAMPLES updated
 
-**Expected commits**: 7 commits for Phase 4
+**Expected commits**: 10 commits for Phase 4 (7 for Part A + 3 for Part B)
 
-**Final commit**: `Complete Phase 4 - Browser automation for SPA-hosted files`
+**Final commit**: `Complete Phase 4 - Browser automation and Excel support`
 
 ---
 
