@@ -23,48 +23,102 @@ export class BrowserFetcher {
   }
 
   async fetchWithBrowser(url: string): Promise<BrowserFetchResult> {
+    let page: Page | null = null;
+
     try {
       await this.initialize();
 
-      const page = await this.browser!.newPage();
+      page = await this.browser!.newPage();
 
-      // Set up download interception
-      const client = await page.target().createCDPSession();
-      const downloadPath = '/tmp/berlin-mcp-downloads';
-      await client.send('Browser.setDownloadBehavior', {
-        behavior: 'allow',
-        downloadPath: downloadPath,
+      // Strategy: Capture the download URL from network traffic, then fetch it directly
+      let downloadUrl: string | null = null;
+      const downloadUrlPromise = new Promise<string | null>((resolve) => {
+        let resolved = false;
+
+        page!.on('response', async (response) => {
+          if (resolved) return;
+
+          const responseUrl = response.url();
+
+          // Look for the actual CSV download URL from the download subdomain
+          if (responseUrl.includes('download.statistik-berlin-brandenburg.de') &&
+              responseUrl.endsWith('.csv') &&
+              response.status() === 200) {
+            resolved = true;
+            resolve(responseUrl);
+          }
+        });
+
+        // Timeout after waiting period
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            resolve(null);
+          }
+        }, 20000);
       });
 
-      // Navigate to the URL
-      await page.goto(url, {
-        waitUntil: 'networkidle0',
-        timeout: this.DOWNLOAD_TIMEOUT
-      });
+      // Navigate to the URL to trigger the SPA
+      try {
+        await page.goto(url, {
+          waitUntil: 'networkidle2',
+          timeout: this.DOWNLOAD_TIMEOUT
+        });
+      } catch (navError) {
+        // Navigation might timeout, but we may have captured the download URL
+      }
 
-      // Wait a bit for any JavaScript to execute
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Try to get the page content (might be the file content for CSV)
-      const content = await page.content();
+      // Wait for download URL to be captured
+      downloadUrl = await downloadUrlPromise;
 
       await page.close();
+      page = null;
 
-      // Check if we got actual data or HTML
-      if (content.trim().toLowerCase().startsWith('<!doctype') ||
-          content.trim().toLowerCase().startsWith('<html')) {
-        return {
-          success: false,
-          error: 'Page returned HTML - file may require manual download',
-        };
+      // If we found the download URL, fetch it directly
+      if (downloadUrl) {
+        try {
+          const fetch = (await import('node-fetch')).default;
+          const response = await fetch(downloadUrl);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const text = await response.text();
+
+          // Verify it's CSV data
+          const trimmed = text.trim();
+          if (!trimmed.toLowerCase().startsWith('<!doctype') &&
+              !trimmed.toLowerCase().startsWith('<html') &&
+              trimmed.length > 0 &&
+              (trimmed.includes(',') || trimmed.includes(';'))) {
+            return {
+              success: true,
+              data: text,
+            };
+          }
+        } catch (fetchError) {
+          return {
+            success: false,
+            error: `Found download URL but could not fetch: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`,
+          };
+        }
       }
 
       return {
-        success: true,
-        data: content,
+        success: false,
+        error: 'Could not capture download URL from JavaScript-rendered page.',
       };
 
     } catch (error) {
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          // Ignore close errors
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
