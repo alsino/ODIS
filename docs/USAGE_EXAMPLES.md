@@ -185,6 +185,17 @@ get_portal_stats
 - Try different resource from same dataset
 - Check format - CSV, JSON, and Excel (XLS/XLSX) are fully supported
 
+### "Server returned HTML instead of CSV"
+
+Some datasets (especially from statistik-berlin-brandenburg.de) require JavaScript to download.
+
+**Solution**:
+1. Install Puppeteer: `npm install puppeteer`
+2. Restart the MCP server
+3. The server will automatically use browser automation for these URLs
+
+**Alternative**: Download manually from the dataset page
+
 ### "Dataset too large"
 - Use smart sampling (default behavior)
 - Consider filtering data at source if API supports it
