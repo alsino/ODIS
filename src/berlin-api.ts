@@ -1,3 +1,6 @@
+// ABOUTME: API client for Berlin Open Data Portal CKAN API
+// ABOUTME: Provides methods for searching, listing, and retrieving dataset metadata
+
 import fetch from 'node-fetch';
 import { BerlinDataset, SearchResult, DatasetSearchParams, PortalStats, DatasetListResult } from './types.js';
 

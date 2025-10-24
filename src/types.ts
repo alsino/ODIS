@@ -1,3 +1,6 @@
+// ABOUTME: TypeScript type definitions for Berlin Open Data Portal entities
+// ABOUTME: Defines interfaces for datasets, search results, and API responses
+
 export interface BerlinDataset {
   id: string;
   name: string;
