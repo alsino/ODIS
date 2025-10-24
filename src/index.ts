@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// ABOUTME: MCP server implementation for Berlin Open Data Portal
+// ABOUTME: Handles tool registration and request routing for dataset discovery and data fetching
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

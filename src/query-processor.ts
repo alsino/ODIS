@@ -1,3 +1,6 @@
+// ABOUTME: Processes natural language queries into structured search parameters
+// ABOUTME: Maps English and German keywords to relevant dataset tags and categories
+
 import { DatasetSearchParams } from './types.js';
 
 export class QueryProcessor {
