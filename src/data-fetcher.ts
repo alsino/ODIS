@@ -4,6 +4,7 @@
 import fetch from 'node-fetch';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { BrowserFetcher } from './browser-fetcher.js';
 
 export interface FetchedData {
   format: string;
@@ -16,8 +17,31 @@ export interface FetchedData {
 export class DataFetcher {
   private readonly MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50MB limit
   private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
+  private readonly useBrowserAutomation: boolean;
+
+  constructor(options: { useBrowserAutomation?: boolean } = {}) {
+    this.useBrowserAutomation = options.useBrowserAutomation !== false; // Default true
+  }
+
+  private needsBrowserFetch(url: string): boolean {
+    // URLs that require JavaScript execution
+    return url.includes('statistik-berlin-brandenburg.de');
+  }
+
+  private shouldUseBrowser(url: string): boolean {
+    return this.useBrowserAutomation &&
+           this.needsBrowserFetch(url) &&
+           BrowserFetcher.isAvailable();
+  }
 
   async fetchResource(url: string, format: string): Promise<FetchedData> {
+    // First try with browser if this URL needs it
+    if (this.shouldUseBrowser(url)) {
+      const browserResult = await this.fetchWithBrowser(url, format);
+      if (browserResult) return browserResult;
+      // If browser fetch failed, fall through to regular fetch
+    }
+
     try {
       // Download the resource with timeout
       const controller = new AbortController();
@@ -157,12 +181,17 @@ export class DataFetcher {
       const trimmedText = text.trim();
       if (trimmedText.toLowerCase().startsWith('<!doctype html') ||
           trimmedText.toLowerCase().startsWith('<html')) {
+        const hasPuppeteer = BrowserFetcher.isAvailable();
+        const errorMsg = hasPuppeteer
+          ? 'Server returned HTML instead of CSV. Browser automation failed to download the file. The resource may not be accessible programmatically.'
+          : 'Server returned HTML instead of CSV. This URL requires browser automation. Install puppeteer (npm install puppeteer) to enable automatic downloads for these files, or download manually from the Berlin Open Data Portal website.';
+
         return {
           format,
           rows: [],
           totalRows: 0,
           columns: [],
-          error: 'Server returned HTML instead of CSV data. This URL requires a web browser to download. The file cannot be fetched programmatically via this tool. Please download manually from the Berlin Open Data Portal website or report this broken URL to daten.berlin.de.',
+          error: errorMsg,
         };
       }
 
@@ -259,6 +288,25 @@ export class DataFetcher {
         columns: [],
         error: `Excel parse error: ${error instanceof Error ? error.message : String(error)}`,
       };
+    }
+  }
+
+  private async fetchWithBrowser(url: string, format: string): Promise<FetchedData | null> {
+    try {
+      const fetcher = new BrowserFetcher();
+      const result = await fetcher.fetchWithBrowser(url);
+      await fetcher.close();
+
+      if (!result.success || !result.data) {
+        console.warn('Browser fetch failed:', result.error);
+        return null;
+      }
+
+      // Parse the data using existing methods
+      return this.parseData(result.data, format, 'text/csv');
+    } catch (error) {
+      console.error('Browser fetch error:', error);
+      return null;
     }
   }
 }

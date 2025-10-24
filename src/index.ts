@@ -38,7 +38,7 @@ class BerlinOpenDataMCPServer {
 
     this.api = new BerlinOpenDataAPI();
     this.queryProcessor = new QueryProcessor();
-    this.dataFetcher = new DataFetcher();
+    this.dataFetcher = new DataFetcher({ useBrowserAutomation: true });
     this.dataSampler = new DataSampler();
 
     this.setupHandlers();
