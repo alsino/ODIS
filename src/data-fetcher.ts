@@ -1,8 +1,9 @@
 // ABOUTME: Downloads and parses dataset resources from URLs
-// ABOUTME: Handles CSV and JSON formats with robust error handling
+// ABOUTME: Handles CSV, JSON, and Excel (XLS/XLSX) formats with robust error handling
 
 import fetch from 'node-fetch';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 export interface FetchedData {
   format: string;
@@ -42,6 +43,18 @@ export class DataFetcher {
       }
 
       const contentType = response.headers.get('content-type') || '';
+
+      // Handle Excel files - need binary data
+      const formatLower = format.toLowerCase();
+      if (formatLower === 'xls' || formatLower === 'xlsx' ||
+          contentType.includes('spreadsheet') ||
+          contentType.includes('excel') ||
+          contentType.includes('ms-excel')) {
+        const arrayBuffer = await response.arrayBuffer();
+        return this.parseExcel(Buffer.from(arrayBuffer), format);
+      }
+
+      // For text formats (CSV, JSON), get as text
       const text = await response.text();
 
       // Parse based on format
@@ -73,6 +86,17 @@ export class DataFetcher {
 
   private parseData(text: string, format: string, contentType: string): FetchedData {
     const formatLower = format.toLowerCase();
+
+    // Excel files should not reach here (handled as binary above)
+    if (formatLower === 'xls' || formatLower === 'xlsx') {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: 'Excel files require binary download - internal error',
+      };
+    }
 
     // Try JSON first if format or content-type suggests it
     if (formatLower.includes('json') || contentType.includes('json')) {
@@ -181,6 +205,59 @@ export class DataFetcher {
         totalRows: 0,
         columns: [],
         error: `CSV parse error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  private parseExcel(buffer: Buffer, format: string): FetchedData {
+    try {
+      // Read the Excel file from buffer
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+      // Get first sheet
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return {
+          format,
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'Excel file has no sheets',
+        };
+      }
+
+      const sheet = workbook.Sheets[sheetName];
+
+      // Convert to JSON (array of objects)
+      const rows = XLSX.utils.sheet_to_json(sheet) as any[];
+
+      // Extract column names
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+      // Sanity check
+      if (rows.length === 0 || columns.length === 0) {
+        return {
+          format,
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'Excel file appears to be empty or has no headers',
+        };
+      }
+
+      return {
+        format: format.toUpperCase(),
+        rows,
+        totalRows: rows.length,
+        columns,
+      };
+    } catch (error) {
+      return {
+        format,
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: `Excel parse error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
