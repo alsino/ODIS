@@ -10,11 +10,15 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { BerlinOpenDataAPI } from './berlin-api.js';
 import { QueryProcessor } from './query-processor.js';
+import { DataFetcher } from './data-fetcher.js';
+import { DataSampler } from './data-sampler.js';
 
 class BerlinOpenDataMCPServer {
   private server: Server;
   private api: BerlinOpenDataAPI;
   private queryProcessor: QueryProcessor;
+  private dataFetcher: DataFetcher;
+  private dataSampler: DataSampler;
 
   constructor() {
     this.server = new Server(
@@ -32,6 +36,8 @@ class BerlinOpenDataMCPServer {
 
     this.api = new BerlinOpenDataAPI();
     this.queryProcessor = new QueryProcessor();
+    this.dataFetcher = new DataFetcher();
+    this.dataSampler = new DataSampler();
 
     this.setupHandlers();
   }
@@ -134,6 +140,48 @@ class BerlinOpenDataMCPServer {
                 default: 100,
               },
             },
+          },
+        },
+        {
+          name: 'list_dataset_resources',
+          description: 'List all available resources (files) for a specific dataset. Shows formats and download URLs.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              dataset_id: {
+                type: 'string',
+                description: 'The dataset ID or name',
+              },
+            },
+            required: ['dataset_id'],
+          },
+        },
+        {
+          name: 'fetch_dataset_data',
+          description: 'Fetch actual data from a dataset resource. Returns smart sample with statistics. Supports CSV and JSON formats.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              dataset_id: {
+                type: 'string',
+                description: 'The dataset ID or name',
+              },
+              resource_id: {
+                type: 'string',
+                description: 'Optional: specific resource ID. If not provided, uses first available resource.',
+              },
+              sample_size: {
+                type: 'number',
+                description: 'Number of rows to return (default: 100, max: 1000)',
+                default: 100,
+              },
+              full_data: {
+                type: 'boolean',
+                description: 'If true, return all data without sampling (use with caution for large datasets)',
+                default: false,
+              },
+            },
+            required: ['dataset_id'],
           },
         },
       ],
@@ -383,7 +431,7 @@ class BerlinOpenDataMCPServer {
             responseText += '\n💡 **Next steps**:\n';
             responseText += '- Use `list_all_datasets` to browse all datasets\n';
             responseText += '- Use `discover_data_topics` to explore categories\n';
-            responseText += '- Use `list_datasets_by_category` to filter by topic\n';
+            responseText += '- Use `search_berlin_datasets` to find specific topics\n';
 
             return {
               content: [{ type: 'text', text: responseText }],
@@ -406,6 +454,117 @@ class BerlinOpenDataMCPServer {
             }
 
             responseText += `\n💡 Use \`get_dataset_details\` with any ID to see full information\n`;
+
+            return {
+              content: [{ type: 'text', text: responseText }],
+            };
+          }
+
+          case 'list_dataset_resources': {
+            const { dataset_id } = args as { dataset_id: string };
+            const resources = await this.api.listDatasetResources(dataset_id);
+
+            let responseText = `# Resources for Dataset\n\n`;
+
+            if (resources.length === 0) {
+              responseText += 'No downloadable resources found for this dataset.\n';
+            } else {
+              responseText += `Found ${resources.length} resource(s):\n\n`;
+
+              resources.forEach((resource, index) => {
+                responseText += `## ${index + 1}. ${resource.name}\n`;
+                responseText += `**ID**: ${resource.id}\n`;
+                responseText += `**Format**: ${resource.format}\n`;
+                if (resource.description) {
+                  responseText += `**Description**: ${resource.description}\n`;
+                }
+                responseText += `**URL**: ${resource.url}\n\n`;
+              });
+
+              responseText += `💡 Use \`fetch_dataset_data\` with the dataset ID to download and analyze the data.\n`;
+            }
+
+            return {
+              content: [{ type: 'text', text: responseText }],
+            };
+          }
+
+          case 'fetch_dataset_data': {
+            const { dataset_id, resource_id, sample_size = 100, full_data = false } = args as {
+              dataset_id: string;
+              resource_id?: string;
+              sample_size?: number;
+              full_data?: boolean;
+            };
+
+            // Get dataset to find resources
+            const dataset = await this.api.getDataset(dataset_id);
+
+            if (!dataset.resources || dataset.resources.length === 0) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ No resources available for dataset "${dataset_id}". This dataset may not have downloadable files.`,
+                }],
+              };
+            }
+
+            // Select resource
+            let resource;
+            if (resource_id) {
+              resource = dataset.resources.find(r => r.id === resource_id);
+              if (!resource) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `❌ Resource "${resource_id}" not found. Use \`list_dataset_resources\` to see available resources.`,
+                  }],
+                };
+              }
+            } else {
+              // Use first resource
+              resource = dataset.resources[0];
+            }
+
+            // Fetch the data
+            const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format);
+
+            if (fetchedData.error) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ Error fetching data: ${fetchedData.error}\n\nYou can try:\n- Using a different resource\n- Downloading manually from: ${resource.url}`,
+                }],
+              };
+            }
+
+            // Generate sample or return full data
+            let responseText = `# Data from: ${dataset.title}\n\n`;
+            responseText += `**Resource**: ${resource.name} (${resource.format})\n\n`;
+
+            if (full_data || fetchedData.rows.length <= sample_size) {
+              // Return all data
+              responseText += `## Full Dataset\n\n`;
+              responseText += `Total rows: ${fetchedData.totalRows}\n`;
+              responseText += `Columns: ${fetchedData.columns.join(', ')}\n\n`;
+              responseText += `**Data:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+            } else {
+              // Return smart sample
+              const sample = this.dataSampler.generateSample(
+                fetchedData.rows,
+                fetchedData.columns,
+                sample_size
+              );
+
+              responseText += `## Data Sample\n\n`;
+              responseText += sample.summary + '\n';
+              responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
+              responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n`;
+
+              if (sample.isTruncated) {
+                responseText += `\n💡 Use \`full_data: true\` to fetch all ${sample.totalRows} rows (may use more tokens).\n`;
+              }
+            }
 
             return {
               content: [{ type: 'text', text: responseText }],

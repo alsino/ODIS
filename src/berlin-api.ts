@@ -111,4 +111,16 @@ export class BerlinOpenDataAPI {
     };
   }
 
+  async listDatasetResources(datasetId: string): Promise<Array<{ id: string; name: string; format: string; url: string; description: string }>> {
+    const dataset = await this.getDataset(datasetId);
+
+    return dataset.resources.map(r => ({
+      id: r.id,
+      name: r.name,
+      format: r.format,
+      url: r.url,
+      description: r.description,
+    }));
+  }
+
 }

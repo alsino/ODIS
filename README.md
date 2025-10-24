@@ -4,10 +4,13 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 
 ## Features
 
-- 🔍 **Natural Language Search**: Query datasets using plain English (e.g., "Find datasets about bicycle infrastructure")
-- 📊 **Dataset Discovery**: Browse available datasets, categories, and organizations
-- 🏷️ **Smart Categorization**: Automatically maps queries to relevant tags and categories
+- 🔍 **Natural Language Search**: Query datasets using plain English
+- 📊 **Dataset Discovery**: Browse datasets by category, organization, or explore all available data
+- 📈 **Portal Overview**: Get statistics and understand the data landscape
+- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON)
+- 🎯 **Smart Sampling**: Automatic data sampling with statistics to prevent context overflow
 - 🔗 **Direct API Integration**: Connects to Berlin's official CKAN-based data portal
+- 🤖 **Agentic Workflows**: Tools can be chained together for complex analysis tasks
 
 ## Installation
 
@@ -22,10 +25,19 @@ The server implements the MCP protocol and provides these tools:
 
 ### Tools
 
-1. **search_berlin_datasets**: Search datasets using natural language
-2. **get_dataset_details**: Get detailed information about a specific dataset
-3. **list_dataset_categories**: Browse available categories and organizations
-4. **autocomplete_datasets**: Get dataset suggestions for partial queries
+**Portal Metadata & Navigation:**
+1. **get_portal_stats**: Get overview statistics (total datasets, organizations, categories)
+2. **list_all_datasets**: Browse all datasets with pagination
+
+**Dataset Discovery:**
+3. **search_berlin_datasets**: Search datasets using natural language
+4. **get_dataset_details**: Get detailed information about a specific dataset
+5. **discover_data_topics**: Explore available categories and tags
+6. **suggest_datasets**: Get intelligent suggestions based on research interests
+
+**Data Fetching & Analysis:**
+7. **list_dataset_resources**: Show all available files for a dataset
+8. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
 
 ### Example Queries
 
@@ -33,6 +45,34 @@ The server implements the MCP protocol and provides these tools:
 - "Show me traffic data for Berlin districts"
 - "What datasets are available about air quality?"
 - "List all housing and rental data"
+
+### Workflow Examples
+
+**Explore the portal:**
+```
+User: "What's available in the Berlin Open Data Portal?"
+→ Uses get_portal_stats
+→ Gets overview with counts and suggestions
+```
+
+**Find and analyze data:**
+```
+User: "Which Berlin district has the most green space per capita?"
+→ Uses search_berlin_datasets for green space data
+→ Uses fetch_dataset_data to get the actual data
+→ Performs calculation using fetched data
+→ Returns answer with methodology
+```
+
+**Multi-dataset analysis:**
+```
+User: "Is there correlation between air quality and traffic?"
+→ Searches for air quality datasets
+→ Searches for traffic datasets
+→ Fetches both datasets
+→ Analyzes correlation
+→ Returns findings
+```
 
 ### Running the Server
 
