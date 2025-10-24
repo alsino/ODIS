@@ -7,7 +7,9 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 - 🔍 **Natural Language Search**: Query datasets using plain English
 - 📊 **Dataset Discovery**: Browse datasets by category, organization, or explore all available data
 - 📈 **Portal Overview**: Get statistics and understand the data landscape
-- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON)
+- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON, Excel)
+- 📑 **Excel Support**: Automatically parses XLS and XLSX files (545 datasets, 20.6% of portal)
+- 🌐 **Browser Automation**: Optional Puppeteer support for JavaScript-rendered downloads (182 datasets, 6.9% of portal)
 - 🎯 **Smart Sampling**: Automatic data sampling with statistics to prevent context overflow
 - 🔗 **Direct API Integration**: Connects to Berlin's official CKAN-based data portal
 - 🤖 **Agentic Workflows**: Tools can be chained together for complex analysis tasks
@@ -18,6 +20,16 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 npm install
 npm run build
 ```
+
+### Optional: Browser Automation Support
+
+To enable fetching of datasets from statistik-berlin-brandenburg.de (182 datasets, ~7% of portal), install Puppeteer:
+
+```bash
+npm install puppeteer
+```
+
+This adds ~300MB of dependencies (Chromium) but unlocks access to demographic and statistical datasets that require JavaScript to download.
 
 ## Usage
 

@@ -47,6 +47,30 @@ This document shows real-world usage examples of the Berlin Open Data MCP Server
 
 ---
 
+## Excel File Support
+
+**Question**: "Get data from an Excel file"
+
+The server automatically handles Excel files (XLS and XLSX formats):
+
+**Workflow**:
+```
+User: "Fetch data from dataset XYZ"
+→ Server detects XLSX format
+→ Parses first sheet automatically
+→ Returns same tabular structure as CSV
+```
+
+**Notes**:
+- First sheet is used by default
+- Headers are detected automatically
+- Returns data in same format as CSV (rows + columns)
+- Supports both legacy XLS and modern XLSX
+
+**Coverage**: 545 datasets (20.6% of portal) include Excel files. The server handles them transparently.
+
+---
+
 ## Advanced Workflows
 
 ### Multi-Dataset Analysis
@@ -159,7 +183,18 @@ get_portal_stats
 ### "Error fetching data"
 - Resource URL may be invalid or server down
 - Try different resource from same dataset
-- Check format - only CSV and JSON are fully supported
+- Check format - CSV, JSON, and Excel (XLS/XLSX) are fully supported
+
+### "Server returned HTML instead of CSV"
+
+Some datasets (especially from statistik-berlin-brandenburg.de) require JavaScript to download.
+
+**Solution**:
+1. Install Puppeteer: `npm install puppeteer`
+2. Restart the MCP server
+3. The server will automatically use browser automation for these URLs
+
+**Alternative**: Download manually from the dataset page
 
 ### "Dataset too large"
 - Use smart sampling (default behavior)
