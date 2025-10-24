@@ -160,7 +160,7 @@ class BerlinOpenDataMCPServer {
         },
         {
           name: 'fetch_dataset_data',
-          description: 'Fetch actual data from a dataset resource. Returns smart sample with statistics. Supports CSV and JSON formats.',
+          description: 'PREFERRED METHOD to download and parse Berlin Open Data datasets. Automatically handles CSV/JSON parsing with smart sampling and statistics. Use this instead of manual downloads for Berlin datasets.',
           inputSchema: {
             type: 'object',
             properties: {
