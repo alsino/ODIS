@@ -140,23 +140,21 @@ export class DataFetcher {
     try {
       const parsed = JSON.parse(text);
 
-      // Handle different JSON structures
-      let rows: any[];
-      if (Array.isArray(parsed)) {
-        rows = parsed;
-      } else if (parsed.data && Array.isArray(parsed.data)) {
-        rows = parsed.data;
-      } else if (parsed.results && Array.isArray(parsed.results)) {
-        rows = parsed.results;
-      } else if (typeof parsed === 'object') {
-        // Single object - wrap in array
-        rows = [parsed];
-      } else {
-        throw new Error('Unexpected JSON structure');
+      // Find the largest array in the JSON structure (recursively)
+      const rows = this.findLargestArray(parsed);
+
+      if (!rows || rows.length === 0) {
+        return {
+          format,
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'No data arrays found in JSON structure',
+        };
       }
 
       // Extract columns from first row
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      const columns = rows.length > 0 && typeof rows[0] === 'object' ? Object.keys(rows[0]) : [];
 
       return {
         format: 'JSON',
@@ -173,6 +171,38 @@ export class DataFetcher {
         error: `JSON parse error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+
+  private findLargestArray(obj: any): any[] | null {
+    // If this is an array of objects, return it
+    if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'object') {
+      return obj;
+    }
+
+    // If this is an object, recursively search for arrays
+    if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+      let largestArray: any[] | null = null;
+      let largestSize = 0;
+
+      for (const key in obj) {
+        const value = obj[key];
+        const foundArray = this.findLargestArray(value);
+
+        if (foundArray && foundArray.length > largestSize) {
+          largestArray = foundArray;
+          largestSize = foundArray.length;
+        }
+      }
+
+      return largestArray;
+    }
+
+    // If this is an array but not of objects, check if it's empty or just primitives
+    if (Array.isArray(obj)) {
+      return obj;
+    }
+
+    return null;
   }
 
   private parseCSV(text: string, format: string): FetchedData {
