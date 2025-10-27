@@ -576,17 +576,18 @@ class BerlinOpenDataMCPServer {
 
             // Prominent warning for large datasets at the top
             if (isLarge) {
-              responseText += `## ⚠️ Large Dataset Warning\n\n`;
-              responseText += `This dataset has **${totalRows} rows** and cannot be analyzed completely in-context.\n\n`;
-              responseText += `**Recommended: Download with Python**\n\`\`\`python\nimport requests\nimport tempfile\n\n`;
-              responseText += `url = "${resource.url}"\n`;
-              responseText += `response = requests.get(url, timeout=30)\n`;
-              responseText += `temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.${resource.format.toLowerCase()}')\n`;
-              responseText += `temp_file.write(response.content)\n`;
-              responseText += `temp_file.close()\n`;
-              responseText += `# Now analyze with pandas, etc.\n\`\`\`\n\n`;
-              responseText += `**Alternative:** Download manually from ${resource.url} and attach to Claude Desktop\n\n`;
-              responseText += `Below is a 10-row preview for reference only.\n\n`;
+              responseText += `## ⚠️ LARGE DATASET - MANUAL DOWNLOAD REQUIRED\n\n`;
+              responseText += `This dataset has **${totalRows} rows** and CANNOT be analyzed in-context.\n\n`;
+              responseText += `**CRITICAL: Do NOT attempt automated downloads or create sample/synthetic data.**\n\n`;
+              responseText += `**REQUIRED STEPS for analysis:**\n\n`;
+              responseText += `1. **Manual download ONLY:** Open ${resource.url} in your browser and save the file\n`;
+              responseText += `2. **Attach the downloaded file** to this conversation using the paperclip icon\n`;
+              responseText += `3. **Wait for confirmation** that the file is loaded before proceeding with analysis\n\n`;
+              responseText += `**DO NOT:**\n`;
+              responseText += `- ❌ Use wget, curl, or requests to download (proxy errors)\n`;
+              responseText += `- ❌ Create synthetic/sample data based on the preview\n`;
+              responseText += `- ❌ Extrapolate from the 10-row preview below\n\n`;
+              responseText += `The 10-row preview below is for REFERENCE ONLY and must NOT be used for analysis.\n\n`;
               responseText += `---\n\n`;
             }
 
