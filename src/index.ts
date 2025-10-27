@@ -578,9 +578,14 @@ class BerlinOpenDataMCPServer {
             if (isLarge) {
               responseText += `## ⚠️ Large Dataset Warning\n\n`;
               responseText += `This dataset has **${totalRows} rows** and cannot be analyzed completely in-context.\n\n`;
-              responseText += `**To analyze the full dataset:**\n`;
-              responseText += `1. Download from: ${resource.url}\n`;
-              responseText += `2. Attach the file to Claude Desktop for analysis\n\n`;
+              responseText += `**Recommended: Download with Python**\n\`\`\`python\nimport requests\nimport tempfile\n\n`;
+              responseText += `url = "${resource.url}"\n`;
+              responseText += `response = requests.get(url, timeout=30)\n`;
+              responseText += `temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.${resource.format.toLowerCase()}')\n`;
+              responseText += `temp_file.write(response.content)\n`;
+              responseText += `temp_file.close()\n`;
+              responseText += `# Now analyze with pandas, etc.\n\`\`\`\n\n`;
+              responseText += `**Alternative:** Download manually from ${resource.url} and attach to Claude Desktop\n\n`;
               responseText += `Below is a 10-row preview for reference only.\n\n`;
               responseText += `---\n\n`;
             }
