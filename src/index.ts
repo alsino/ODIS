@@ -520,8 +520,11 @@ class BerlinOpenDataMCPServer {
                 };
               }
             } else {
-              // Use first resource
-              resource = dataset.resources[0];
+              // Smart resource selection - prefer data formats over HTML/other
+              const dataFormats = ['CSV', 'JSON', 'XLSX', 'XLS', 'XML', 'WMS', 'WFS'];
+              resource = dataset.resources.find(r =>
+                dataFormats.includes(r.format?.toUpperCase())
+              ) || dataset.resources[0]; // Fallback to first if no data format found
             }
 
             // Fetch the data
