@@ -546,7 +546,7 @@ node test-fetcher.js
 
 ### Task 2.2: Create Data Sampler Module
 
-**What to do**: Create a module that generates smart samples and statistics from fetched data.
+**What to do**: Create a module that generates minimal previews from fetched data.
 
 **Files to create**:
 - `src/data-sampler.ts` - New file
@@ -556,17 +556,12 @@ node test-fetcher.js
 1. **Create the file** `src/data-sampler.ts`:
 
 ```typescript
-// ABOUTME: Generates smart samples and statistics from dataset rows
-// ABOUTME: Prevents context overflow by limiting data size
+// ABOUTME: Generates minimal data previews from dataset rows
+// ABOUTME: Returns 10-row samples with basic column type inference
 
 export interface ColumnStats {
   name: string;
   type: 'number' | 'string' | 'boolean' | 'date' | 'unknown';
-  uniqueCount: number;
-  nullCount: number;
-  sampleValues: any[];
-  min?: number;
-  max?: number;
 }
 
 export interface DataSample {
@@ -578,23 +573,21 @@ export interface DataSample {
 }
 
 export class DataSampler {
-  private readonly DEFAULT_SAMPLE_SIZE = 100;
+  private readonly DEFAULT_SAMPLE_SIZE = 10;
 
-  generateSample(rows: any[], columns: string[], sampleSize?: number): DataSample {
-    const size = sampleSize || this.DEFAULT_SAMPLE_SIZE;
-    const isTruncated = rows.length > size;
-    const sampleRows = rows.slice(0, size);
+  generateSample(rows: any[], columns: string[]): DataSample {
+    const sampleRows = rows.slice(0, this.DEFAULT_SAMPLE_SIZE);
 
-    // Generate column statistics
+    // Generate minimal column statistics (name and type only)
     const columnStats = columns.map(colName => this.analyzeColumn(colName, rows));
 
     // Generate summary text
-    const summary = this.generateSummary(rows.length, columns.length, isTruncated, columnStats);
+    const summary = this.generateSummary(rows.length, columns.length, columnStats);
 
     return {
       sampleRows,
       totalRows: rows.length,
-      isTruncated,
+      isTruncated: rows.length > this.DEFAULT_SAMPLE_SIZE,
       columns: columnStats,
       summary,
     };
@@ -607,30 +600,10 @@ export class DataSampler {
     // Infer type
     const type = this.inferType(nonNullValues);
 
-    // Count unique values (limit to first 1000 rows for performance)
-    const uniqueValues = new Set(nonNullValues.slice(0, 1000));
-
-    // Get sample values (first 5 unique)
-    const sampleValues = Array.from(uniqueValues).slice(0, 5);
-
-    const stats: ColumnStats = {
+    return {
       name: columnName,
       type,
-      uniqueCount: uniqueValues.size,
-      nullCount: values.length - nonNullValues.length,
-      sampleValues,
     };
-
-    // For numeric columns, calculate min/max
-    if (type === 'number') {
-      const numbers = nonNullValues.map(v => parseFloat(v)).filter(n => !isNaN(n));
-      if (numbers.length > 0) {
-        stats.min = Math.min(...numbers);
-        stats.max = Math.max(...numbers);
-      }
-    }
-
-    return stats;
   }
 
   private inferType(values: any[]): 'number' | 'string' | 'boolean' | 'date' | 'unknown' {
@@ -659,28 +632,10 @@ export class DataSampler {
     return 'string';
   }
 
-  private generateSummary(totalRows: number, totalColumns: number, isTruncated: boolean, columns: ColumnStats[]): string {
+  private generateSummary(totalRows: number, totalColumns: number, columns: ColumnStats[]): string {
     let summary = `Dataset contains ${totalRows} rows and ${totalColumns} columns.\n\n`;
-
-    if (isTruncated) {
-      summary += `⚠️ Sample limited to first ${this.DEFAULT_SAMPLE_SIZE} rows to prevent context overflow.\n\n`;
-    }
-
     summary += '**Columns:**\n';
-    columns.forEach(col => {
-      summary += `- **${col.name}** (${col.type})`;
-      if (col.type === 'number' && col.min !== undefined && col.max !== undefined) {
-        summary += ` - Range: ${col.min} to ${col.max}`;
-      }
-      if (col.uniqueCount > 0) {
-        summary += ` - ${col.uniqueCount} unique values`;
-      }
-      if (col.nullCount > 0) {
-        summary += ` - ${col.nullCount} nulls`;
-      }
-      summary += '\n';
-    });
-
+    summary += columns.map(col => `- ${col.name} (${col.type})`).join('\n');
     return summary;
   }
 }
@@ -840,7 +795,7 @@ Should compile without errors.
 },
 {
   name: 'fetch_dataset_data',
-  description: 'Fetch actual data from a dataset resource. Returns smart sample with statistics. Supports CSV and JSON formats.',
+  description: 'Download and parse Berlin Open Data datasets. Returns 10 sample rows initially. For small datasets (≤500 rows), use full_data: true to get all data. Large datasets must be downloaded manually.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -852,14 +807,9 @@ Should compile without errors.
         type: 'string',
         description: 'Optional: specific resource ID. If not provided, uses first available resource.',
       },
-      sample_size: {
-        type: 'number',
-        description: 'Number of rows to return (default: 100, max: 1000)',
-        default: 100,
-      },
       full_data: {
         type: 'boolean',
-        description: 'If true, return all data without sampling (use with caution for large datasets)',
+        description: 'If true, return all data for small datasets (≤500 rows). Refused for large datasets.',
         default: false,
       },
     },
@@ -901,12 +851,13 @@ case 'list_dataset_resources': {
 }
 
 case 'fetch_dataset_data': {
-  const { dataset_id, resource_id, sample_size = 100, full_data = false } = args as {
+  const { dataset_id, resource_id, full_data = false } = args as {
     dataset_id: string;
     resource_id?: string;
-    sample_size?: number;
     full_data?: boolean;
   };
+
+  const LARGE_DATASET_THRESHOLD = 500;
 
   // Get dataset to find resources
   const dataset = await this.api.getDataset(dataset_id);
@@ -949,32 +900,49 @@ case 'fetch_dataset_data': {
     };
   }
 
-  // Generate sample or return full data
+  const totalRows = fetchedData.rows.length;
+  const isLarge = totalRows > LARGE_DATASET_THRESHOLD;
+  const sizeLabel = isLarge ? 'large' : 'small';
+
   let responseText = `# Data from: ${dataset.title}\n\n`;
   responseText += `**Resource**: ${resource.name} (${resource.format})\n\n`;
 
-  if (full_data || fetchedData.rows.length <= sample_size) {
-    // Return all data
+  // Handle full_data request for large datasets
+  if (full_data && isLarge) {
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ Dataset has ${totalRows} rows and is too large for direct analysis. Returning all data would risk context overflow.\n\n📥 **Download manually**: ${resource.url}\n\nOnce downloaded, attach the file to Claude Desktop for analysis.`,
+      }],
+    };
+  }
+
+  // Return full data for small datasets when requested
+  if (full_data) {
+    responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
     responseText += `## Full Dataset\n\n`;
-    responseText += `Total rows: ${fetchedData.totalRows}\n`;
-    responseText += `Columns: ${fetchedData.columns.join(', ')}\n\n`;
     responseText += `**Data:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+    return {
+      content: [{ type: 'text', text: responseText }],
+    };
+  }
+
+  // Always return 10-row sample initially
+  const sample = this.dataSampler.generateSample(
+    fetchedData.rows,
+    fetchedData.columns
+  );
+
+  responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
+  responseText += `## Data Sample\n\n`;
+  responseText += sample.summary + '\n';
+  responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
+  responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n\n`;
+
+  if (isLarge) {
+    responseText += `⚠️ **For complete analysis**: Download from ${resource.url} and attach to Claude Desktop.\n`;
   } else {
-    // Return smart sample
-    const sample = this.dataSampler.generateSample(
-      fetchedData.rows,
-      fetchedData.columns,
-      sample_size
-    );
-
-    responseText += `## Data Sample\n\n`;
-    responseText += sample.summary + '\n';
-    responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
-    responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n`;
-
-    if (sample.isTruncated) {
-      responseText += `\n💡 Use \`full_data: true\` to fetch all ${sample.totalRows} rows (may use more tokens).\n`;
-    }
+    responseText += `💡 Use \`full_data: true\` to analyze all ${totalRows} rows.\n`;
   }
 
   return {

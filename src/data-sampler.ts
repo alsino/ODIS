@@ -4,11 +4,6 @@
 export interface ColumnStats {
   name: string;
   type: 'number' | 'string' | 'boolean' | 'date' | 'unknown';
-  uniqueCount: number;
-  nullCount: number;
-  sampleValues: any[];
-  min?: number;
-  max?: number;
 }
 
 export interface DataSample {
@@ -20,23 +15,21 @@ export interface DataSample {
 }
 
 export class DataSampler {
-  private readonly DEFAULT_SAMPLE_SIZE = 100;
+  private readonly DEFAULT_SAMPLE_SIZE = 10;
 
-  generateSample(rows: any[], columns: string[], sampleSize?: number): DataSample {
-    const size = sampleSize || this.DEFAULT_SAMPLE_SIZE;
-    const isTruncated = rows.length > size;
-    const sampleRows = rows.slice(0, size);
+  generateSample(rows: any[], columns: string[]): DataSample {
+    const sampleRows = rows.slice(0, this.DEFAULT_SAMPLE_SIZE);
 
-    // Generate column statistics
+    // Generate minimal column statistics (name and type only)
     const columnStats = columns.map(colName => this.analyzeColumn(colName, rows));
 
     // Generate summary text
-    const summary = this.generateSummary(rows.length, columns.length, isTruncated, columnStats);
+    const summary = this.generateSummary(rows.length, columns.length, columnStats);
 
     return {
       sampleRows,
       totalRows: rows.length,
-      isTruncated,
+      isTruncated: rows.length > this.DEFAULT_SAMPLE_SIZE,
       columns: columnStats,
       summary,
     };
@@ -49,30 +42,10 @@ export class DataSampler {
     // Infer type
     const type = this.inferType(nonNullValues);
 
-    // Count unique values (limit to first 1000 rows for performance)
-    const uniqueValues = new Set(nonNullValues.slice(0, 1000));
-
-    // Get sample values (first 5 unique)
-    const sampleValues = Array.from(uniqueValues).slice(0, 5);
-
-    const stats: ColumnStats = {
+    return {
       name: columnName,
       type,
-      uniqueCount: uniqueValues.size,
-      nullCount: values.length - nonNullValues.length,
-      sampleValues,
     };
-
-    // For numeric columns, calculate min/max
-    if (type === 'number') {
-      const numbers = nonNullValues.map(v => parseFloat(v)).filter(n => !isNaN(n));
-      if (numbers.length > 0) {
-        stats.min = Math.min(...numbers);
-        stats.max = Math.max(...numbers);
-      }
-    }
-
-    return stats;
   }
 
   private inferType(values: any[]): 'number' | 'string' | 'boolean' | 'date' | 'unknown' {
@@ -101,28 +74,10 @@ export class DataSampler {
     return 'string';
   }
 
-  private generateSummary(totalRows: number, totalColumns: number, isTruncated: boolean, columns: ColumnStats[]): string {
+  private generateSummary(totalRows: number, totalColumns: number, columns: ColumnStats[]): string {
     let summary = `Dataset contains ${totalRows} rows and ${totalColumns} columns.\n\n`;
-
-    if (isTruncated) {
-      summary += `⚠️ Sample limited to first ${this.DEFAULT_SAMPLE_SIZE} rows to prevent context overflow.\n\n`;
-    }
-
     summary += '**Columns:**\n';
-    columns.forEach(col => {
-      summary += `- **${col.name}** (${col.type})`;
-      if (col.type === 'number' && col.min !== undefined && col.max !== undefined) {
-        summary += ` - Range: ${col.min} to ${col.max}`;
-      }
-      if (col.uniqueCount > 0) {
-        summary += ` - ${col.uniqueCount} unique values`;
-      }
-      if (col.nullCount > 0) {
-        summary += ` - ${col.nullCount} nulls`;
-      }
-      summary += '\n';
-    });
-
+    summary += columns.map(col => `- ${col.name} (${col.type})`).join('\n');
     return summary;
   }
 }

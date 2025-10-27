@@ -160,7 +160,7 @@ class BerlinOpenDataMCPServer {
         },
         {
           name: 'fetch_dataset_data',
-          description: 'PREFERRED METHOD to download and parse Berlin Open Data datasets. Automatically handles CSV/JSON parsing with smart sampling and statistics. Use this instead of manual downloads for Berlin datasets.',
+          description: 'Download and parse Berlin Open Data datasets. Returns 10 sample rows initially. For small datasets (≤500 rows), use full_data: true to get all data. Large datasets must be downloaded manually.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -172,14 +172,9 @@ class BerlinOpenDataMCPServer {
                 type: 'string',
                 description: 'Optional: specific resource ID. If not provided, uses first available resource.',
               },
-              sample_size: {
-                type: 'number',
-                description: 'Number of rows to return (default: 100, max: 1000)',
-                default: 100,
-              },
               full_data: {
                 type: 'boolean',
-                description: 'If true, return all data without sampling (use with caution for large datasets)',
+                description: 'If true, return all data for small datasets (≤500 rows). Refused for large datasets.',
                 default: false,
               },
             },
@@ -492,12 +487,13 @@ class BerlinOpenDataMCPServer {
           }
 
           case 'fetch_dataset_data': {
-            const { dataset_id, resource_id, sample_size = 100, full_data = false } = args as {
+            const { dataset_id, resource_id, full_data = false } = args as {
               dataset_id: string;
               resource_id?: string;
-              sample_size?: number;
               full_data?: boolean;
             };
+
+            const LARGE_DATASET_THRESHOLD = 500;
 
             // Get dataset to find resources
             const dataset = await this.api.getDataset(dataset_id);
@@ -540,32 +536,49 @@ class BerlinOpenDataMCPServer {
               };
             }
 
-            // Generate sample or return full data
+            const totalRows = fetchedData.rows.length;
+            const isLarge = totalRows > LARGE_DATASET_THRESHOLD;
+            const sizeLabel = isLarge ? 'large' : 'small';
+
             let responseText = `# Data from: ${dataset.title}\n\n`;
             responseText += `**Resource**: ${resource.name} (${resource.format})\n\n`;
 
-            if (full_data || fetchedData.rows.length <= sample_size) {
-              // Return all data
+            // Handle full_data request for large datasets
+            if (full_data && isLarge) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ Dataset has ${totalRows} rows and is too large for direct analysis. Returning all data would risk context overflow.\n\n📥 **Download manually**: ${resource.url}\n\nOnce downloaded, attach the file to Claude Desktop for analysis.`,
+                }],
+              };
+            }
+
+            // Return full data for small datasets when requested
+            if (full_data) {
+              responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
               responseText += `## Full Dataset\n\n`;
-              responseText += `Total rows: ${fetchedData.totalRows}\n`;
-              responseText += `Columns: ${fetchedData.columns.join(', ')}\n\n`;
               responseText += `**Data:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+              return {
+                content: [{ type: 'text', text: responseText }],
+              };
+            }
+
+            // Always return sample initially
+            const sample = this.dataSampler.generateSample(
+              fetchedData.rows,
+              fetchedData.columns
+            );
+
+            responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
+            responseText += `## Data Sample\n\n`;
+            responseText += sample.summary + '\n';
+            responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
+            responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n\n`;
+
+            if (isLarge) {
+              responseText += `⚠️ **For complete analysis**: Download from ${resource.url} and attach to Claude Desktop.\n`;
             } else {
-              // Return smart sample
-              const sample = this.dataSampler.generateSample(
-                fetchedData.rows,
-                fetchedData.columns,
-                sample_size
-              );
-
-              responseText += `## Data Sample\n\n`;
-              responseText += sample.summary + '\n';
-              responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
-              responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n`;
-
-              if (sample.isTruncated) {
-                responseText += `\n💡 Use \`full_data: true\` to fetch all ${sample.totalRows} rows (may use more tokens).\n`;
-              }
+              responseText += `💡 Use \`full_data: true\` to analyze all ${totalRows} rows.\n`;
             }
 
             return {

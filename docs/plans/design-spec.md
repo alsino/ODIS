@@ -93,12 +93,11 @@ The system should handle both exploratory ("What data exists about traffic?") an
 
 **`fetch_dataset_data`**
 - Fetch actual data from a dataset resource with automatic format handling (CSV/JSON → tabular)
-- Returns: Smart sample (first 100 rows by default) + summary statistics (total rows, columns, data types)
+- Returns: Minimal preview (first 10 rows) + basic column info (names and types only)
 - Parameters:
   - dataset_id (required)
   - resource_id (optional - picks first if not specified)
-  - sample_size (default: 100, max: 1000)
-  - full_data flag (default: false)
+  - full_data flag (default: false) - returns all data for small datasets (≤500 rows), refuses for large datasets
 - Use case: "Get me the bicycle parking data"
 
 **`list_dataset_resources`**
@@ -124,18 +123,18 @@ All tools return markdown-formatted text optimized for LLM consumption, includin
 
 ## Section 3: Data Fetching & Processing Strategy
 
-### Smart Sampling Approach
+### Minimal Preview Approach
 
 When `fetch_dataset_data` is called, the server will:
 
 1. Download the resource (CSV, JSON, or other tabular format)
 2. Parse and normalize to tabular structure
-3. Generate summary metadata:
+3. Generate minimal metadata:
    - Total row count
-   - Column names and inferred data types
-   - Basic statistics (min/max for numeric, unique count for categorical)
-4. Return first N rows (default: 100) as sample data
-5. Include flag indicating if data was truncated
+   - Column names and inferred data types (number, string, boolean, date, unknown)
+4. Return first 10 rows as preview
+5. For small datasets (≤500 rows), allow full_data flag to return everything
+6. For large datasets (>500 rows), refuse full_data and suggest manual download
 
 ### Format Handling
 
@@ -151,10 +150,11 @@ When `fetch_dataset_data` is called, the server will:
 
 ### Why This Approach
 
-- Prevents context window overflow with large datasets
-- Gives LLM enough information to understand structure and decide next steps
-- User can request `full_data=true` if they explicitly need everything
-- Summary stats help LLM make informed decisions about analysis approach
+- Minimal token usage for initial preview (10 rows vs. 100)
+- Clear threshold (500 rows) separates "analyzable in context" from "download required"
+- Forces explicit decision: analyze small data in-context or download large data for file attachment
+- Prevents accidental context overflow from datasets with thousands of rows
+- Guides users toward Claude Desktop's file attachment feature for large datasets
 
 ### Automatic Format Conversion
 
@@ -558,9 +558,9 @@ This phase addresses two format-related limitations discovered during user testi
 - Rationale: Prevent hanging on slow/unavailable resources
 - Workaround: Can retry or use different resource
 
-**Sample Size Limits**: Default 100 rows, max 1000
-- Rationale: Prevent context window overflow
-- Workaround: Use full_data flag for small datasets
+**Sample Size Limits**: Fixed 10 rows for previews
+- Rationale: Minimal token usage for initial exploration
+- Workaround: Use full_data flag for small datasets (≤500 rows only)
 
 **No Rate Limiting**: Assume Berlin API has no rate limits
 - Rationale: CKAN APIs typically don't rate limit
