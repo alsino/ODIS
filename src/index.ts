@@ -573,14 +573,24 @@ class BerlinOpenDataMCPServer {
             );
 
             responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
-            responseText += `## Data Sample\n\n`;
-            responseText += sample.summary + '\n';
-            responseText += `\n**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
+
+            // Prominent warning for large datasets at the top
+            if (isLarge) {
+              responseText += `## ⚠️ Large Dataset Warning\n\n`;
+              responseText += `This dataset has **${totalRows} rows** and cannot be analyzed completely in-context.\n\n`;
+              responseText += `**To analyze the full dataset:**\n`;
+              responseText += `1. Download from: ${resource.url}\n`;
+              responseText += `2. Attach the file to Claude Desktop for analysis\n\n`;
+              responseText += `Below is a 10-row preview for reference only.\n\n`;
+              responseText += `---\n\n`;
+            }
+
+            responseText += `## Data Preview\n\n`;
+            responseText += `**Columns (${fetchedData.columns.length}):** ${fetchedData.columns.join(', ')}\n\n`;
+            responseText += `**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
             responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n\n`;
 
-            if (isLarge) {
-              responseText += `⚠️ **For complete analysis**: Download from ${resource.url} and attach to Claude Desktop.\n`;
-            } else {
+            if (!isLarge) {
               responseText += `💡 Use \`full_data: true\` to analyze all ${totalRows} rows.\n`;
             }
 
