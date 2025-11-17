@@ -12,7 +12,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.12.2",
-    "natural": "^8.1.0",
     "node-fetch": "^3.3.2",
     "papaparse": "^5.5.3",
     "puppeteer": "^24.26.1",

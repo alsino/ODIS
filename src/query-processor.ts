@@ -2,9 +2,6 @@
 // ABOUTME: Maps English and German keywords to relevant dataset tags and categories
 
 import { DatasetSearchParams } from './types.js';
-import natural from 'natural';
-
-const { PorterStemmerDe } = natural;
 
 export class QueryProcessor {
   private readonly KEYWORDS_MAP = {
@@ -64,23 +61,24 @@ export class QueryProcessor {
     // Split into significant words (3+ characters to avoid noise)
     const words = cleanQuery.split(/\s+/).filter(w => w.length >= 3);
 
-    // Use German stemmer to get word stems, then add wildcards
-    // This handles German inflections properly:
-    // "Miete" → stem: "Miet" → search: "Miet*" → matches: Miete, Mieten, Mietspiegel, Mietpreis
-    // "Wohnung" → stem: "Wohnung" → search: "Wohnung*" → matches: Wohnung, Wohnungen
-    // "Wohnen" → stem: "Wohn" → search: "Wohn*" → matches: Wohnen, Wohnung, Wohnraum, Wohnlage
-    const stemmedTerms = words.map(word => {
-      const stem = PorterStemmerDe.stem(word);
-      return `${stem}*`;
-    });
-
-    // If no significant words found, use original query with wildcard
-    if (stemmedTerms.length === 0) {
-      const stem = PorterStemmerDe.stem(naturalLanguageQuery);
-      return [`${stem}*`];
-    }
-
-    return stemmedTerms;
+    // CRITICAL DISCOVERY: Berlin's CKAN instance does NOT support:
+    // - Wildcards (Miet* → 0 results)
+    // - Stemming (Miet → 0 results)
+    // - Fuzzy matching
+    //
+    // It ONLY matches exact words that appear in dataset metadata.
+    // CKAN does its own partial word matching internally.
+    //
+    // Testing results:
+    // "Wohnen" → 1347 results ✓ (word exists in datasets)
+    // "Mietspiegel" → 39 results ✓ (word exists in datasets)
+    // "Wohnung" → 0 results ❌ (datasets use "Wohnungen" or compounds)
+    // "Miete" → 0 results ❌ (datasets use "Mietspiegel", "Mietpreis", etc.)
+    // "Wohn*" → 9 results (wildcards unreliable)
+    // "Miet*" → 0 results (wildcards don't work)
+    //
+    // SOLUTION: Use original user terms directly, let CKAN's internal matching work
+    return words.length > 0 ? words : [cleanQuery || naturalLanguageQuery];
   }
 
   extractIntent(query: string): 'search' | 'list' | 'specific' {

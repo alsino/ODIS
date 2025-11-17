@@ -204,78 +204,81 @@ const wildcardTerms = words.map(word => `${word}*`);
 - "Miet*" → 0 results ❌ (despite "Mietspiegel" returning 39!)
 - Wildcard support is inconsistent and unreliable
 
-**Professional solution: Snowball German Stemmer**
+**Attempted solution: Snowball German Stemmer (FAILED)**
 
-Implemented Porter stemmer for German (from `natural` library):
+Implemented Porter stemmer for German, but discovered CKAN wildcards **completely broken**:
 
-```typescript
-import { PorterStemmerDe } from 'natural';
+```bash
+# Testing wildcard support:
+curl '.../package_search?q=Miet*'  → 0 results ❌
+curl '.../package_search?q=Wohn*'  → 9 results (inconsistent)
+curl '.../package_search?q=Wohnung*' → 0 results ❌
 
-// Extract word stem, THEN add wildcard
-const stem = PorterStemmerDe.stem(word);
-const searchTerm = `${stem}*`;
+# Testing exact matches:
+curl '.../package_search?q=Mietspiegel' → 39 results ✓
+curl '.../package_search?q=Wohnen'      → 1347 results ✓
 
-// Examples:
-// "Miete" → stem: "Miet" → search: "Miet*"
-//   → matches: Miete, Mieten, Mietspiegel, Mietpreis ✓
-// "Wohnung" → stem: "Wohnung" → search: "Wohnung*"
-//   → matches: Wohnung, Wohnungen ✓
-// "Wohnen" → stem: "Wohn" → search: "Wohn*"
-//   → matches: Wohnen, Wohnung, Wohnraum, Wohnlage ✓
+# Testing stems without wildcards:
+curl '.../package_search?q=Miet'  → 0 results ❌
+curl '.../package_search?q=Wohn'  → 9 results ❌
 ```
 
-**Why Snowball stemmer:**
-1. **Industry standard:** Used by Elasticsearch, Solr, Lucene
-2. **Tested on millions of German words:** Handles irregular forms, umlauts, exceptions
-3. **Conservative approach:** Doesn't over-stem, preserves compound words when appropriate
-4. **Proven reliability:** 40+ years of development, linguistic research-backed
+**CRITICAL DISCOVERY:** Berlin's CKAN instance does NOT support:
+- ❌ Wildcards (Miet* → 0 results, despite Mietspiegel existing)
+- ❌ Stemming (Miet → 0 results)
+- ❌ Fuzzy matching
 
-**Dependency cost:**
-- Library: `natural` (~400KB, tree-shakeable)
-- Worth it for search quality in German language portal
+**What DOES work:**
+- ✓ Exact word matching: Terms must appear verbatim in dataset metadata
+- ✓ CKAN's internal partial matching: "Wohnen" finds datasets with "Wohnungsmarkt", "Wohnlagen", etc.
+- ✓ Multi-word searches: Each term searched separately, results merged
 
-**Expected improvements:**
+**Why wildcards failed:**
+Berlin's CKAN Solr configuration is either:
+1. Missing wildcard query parser
+2. Has wildcards disabled for security/performance
+3. Uses different wildcard syntax than standard Solr
 
-| Query | Before (naive wildcard) | After (stemmed wildcard) |
-|-------|-------------------------|--------------------------|
-| "Wohnung Miete" | 0 results | All housing + rent datasets |
-| "Wohnen" | 40 results | Same + Wohnraum, Wohnlage, etc. |
-| "Miete" | 0 results | Mietspiegel, Mietpreis, etc. |
-| "Verkehr Transport" | 1 result | Hundreds of traffic datasets |
+**Final implementation (SIMPLIFIED):**
 
-**Limitations still remaining:**
-
-1. **No semantic understanding:** "housing" still won't match "Wohnung" (different languages)
-2. **English searches limited:** Portal is primarily German, stemmer optimized for German
-3. **Compound word behavior:** Some compounds stay intact (e.g., "Mietspiegel" → "Mietspiegel"), but stem + wildcard still works
-
-**Final implementation:**
-
-Multi-term search with German stemming + wildcards:
+Multi-term search WITHOUT stemming or wildcards:
 1. Extract significant words (3+ chars) from query
-2. Stem each word using Porter German stemmer
-3. Add wildcard to stem: "Wohnen" → "Wohn*"
-4. Search each term separately in parallel
-5. Merge and deduplicate results
-6. Rank by relevance (datasets matching multiple terms rank higher)
+2. Use original user terms directly (no modification!)
+3. Search each term separately in parallel
+4. Merge and deduplicate results
+5. Rank by relevance (datasets matching multiple terms rank higher)
 
-This ensures **maximum recall with linguistic accuracy** - we truly never miss datasets.
+**Relies on:**
+- CKAN's built-in partial word matching
+- Users knowing common German compound words used in datasets
+- Multi-term search providing OR logic
 
-**Testing checklist:**
+**Actual results:**
 
-After deployment, verify with Claude Desktop:
-- [ ] "Wohnung Miete" finds housing + rent datasets (not 0!)
-- [ ] "Miete" alone finds "Mietspiegel" datasets (stem "Miet*" working)
-- [ ] "Wohnen" finds "Wohnraum", "Wohnlage" (stem "Wohn*" working)
-- [ ] "Verkehr" finds hundreds of traffic datasets
-- [ ] Multi-word queries combine results properly
-- [ ] Response shows stemmed terms: e.g., "(searched: Wohn*, Miet*)"
-- [ ] English terms don't break search (graceful degradation)
+| Query | Original Approach | Stemming Approach | Current Approach |
+|-------|-------------------|-------------------|------------------|
+| "Wohnen" | 40 results | 0 (Wohn* failed) | **1347 results** ✓ |
+| "Mietspiegel" | 39 results | 0 (Miet* failed) | **39 results** ✓ |
+| "Wohnung" | 0 results | 0 (Wohnung* failed) | **0 results** ❌ |
+| "Miete" | 0 results | 0 (Miet* failed) | **0 results** ❌ |
 
-**Verification queries:**
-1. "Search for Wohnung and Miete" → Should find combined housing+rent results
-2. "Find Verkehr datasets" → Should find comprehensive traffic data
-3. "Search for Wohnen" → Should find various Wohn* related datasets
+**Limitations:**
+
+1. **Word form dependency:** Search terms must match forms used in datasets
+   - "Wohnung" (singular) → 0 results (datasets use "Wohnungen" or compounds)
+   - "Wohnen" (verb/noun) → 1347 results (commonly used in dataset titles)
+   - "Miete" (noun) → 0 results (datasets use "Mietspiegel" compound)
+
+2. **No cross-language support:** English terms don't match German datasets
+
+3. **Users need domain knowledge:** Must know which German terms are actually used
+
+**Recommendation:**
+
+For best results, users should search with:
+- Common compound words: "Mietspiegel", "Wohnungsmarkt", "Verkehrsunfälle"
+- Plural forms when uncertain: "Wohnungen" might work better than "Wohnung"
+- Multiple related terms: "Wohnen Immobilien Sozialwohnungen" casts wider net
 
 **Prevalence:**
 
