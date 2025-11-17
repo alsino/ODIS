@@ -30,10 +30,11 @@ export class QueryProcessor {
   ];
 
   processQuery(naturalLanguageQuery: string): DatasetSearchParams {
-    // Clean up noise words
+    // Clean up noise words using word boundaries to avoid partial matches
     const cleanQuery = naturalLanguageQuery
-      .replace(/find|search|show me|list|all|datasets?|about|in|for|the/gi, '')
-      .trim();
+      .replace(/\b(find|search|show|me|list|all|datasets?|about|in|for|the|and)\b/gi, '')
+      .trim()
+      .replace(/\s+/g, ' '); // Normalize whitespace
 
     // Use cleaned query directly
     const searchQuery = cleanQuery || naturalLanguageQuery;
@@ -48,16 +49,25 @@ export class QueryProcessor {
   }
 
   extractSearchTerms(naturalLanguageQuery: string): string[] {
-    // Clean up noise words
+    // Clean up noise words using word boundaries to avoid partial matches
+    // CRITICAL: Use \b to match whole words only, not substrings
+    // Without \b: "housing" → "housg" (because "in" matches inside "housing")
+    // With \b: "housing" → "housing" ✓
     const cleanQuery = naturalLanguageQuery
-      .replace(/find|search|show me|list|all|datasets?|about|in|for|the|and/gi, '')
-      .trim();
+      .replace(/\b(find|search|show|me|list|all|datasets?|about|in|for|the|and)\b/gi, '')
+      .trim()
+      .replace(/\s+/g, ' '); // Normalize whitespace
 
     // Split into significant words (3+ characters to avoid noise)
     const words = cleanQuery.split(/\s+/).filter(w => w.length >= 3);
 
-    // If no significant words found, use original query
-    return words.length > 0 ? words : [naturalLanguageQuery];
+    // Add wildcard suffix to each word for partial matching
+    // CKAN doesn't do stemming, so "Wohnung" won't match "Wohnungen"
+    // Wildcards solve this: "Wohn*" matches Wohnung, Wohnungen, Wohnraum, etc.
+    const wildcardTerms = words.map(word => `${word}*`);
+
+    // If no significant words found, use original query with wildcard
+    return wildcardTerms.length > 0 ? wildcardTerms : [`${naturalLanguageQuery}*`];
   }
 
   extractIntent(query: string): 'search' | 'list' | 'specific' {

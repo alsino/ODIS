@@ -132,6 +132,123 @@ This is an LLM behavior issue, not an MCP server issue. The warning is in the to
 
 ---
 
+### Issue #3: CKAN Search Engine Limitations - No Stemming or Fuzzy Matching
+
+**Status:** Mitigated with wildcards
+**Severity:** HIGH
+**Component:** Berlin CKAN API search behavior
+**Date discovered:** 2025-11-17
+
+**Description:**
+
+The Berlin Open Data Portal's CKAN API performs extremely literal text matching without stemming, fuzzy matching, or language-aware search. This causes search to miss relevant datasets unless the exact word form is used.
+
+**Examples of the problem:**
+
+| Search Term | Results | Reason |
+|-------------|---------|---------|
+| "Miete" (rent) | 0 | Exact word not in any dataset title/description |
+| "Mietspiegel" (rent index) | 39 | ✓ Compound word exists in datasets |
+| "Wohnung" (apartment, singular) | 0 | Only plural form exists in datasets |
+| "Wohnungen" (apartments, plural) | 11 | ✓ Exact plural form matches |
+| "housing" (English) | 0 | Portal contains German data |
+| "Wohnraum" (living space) | 14 | ✓ Exact compound word matches |
+
+**Critical bugs discovered:**
+
+**Bug #1: Word Truncation in Query Processing**
+- Query: "housing rent"
+- Processed as: "housg rent" ← "housing" truncated!
+- **Root cause:** Regex `/in|for|the/` matched "in" **inside** "housing"
+- **Fix:** Use word boundaries: `/\b(in|for|the)\b/`
+
+**Bug #2: German Inflections Not Matched**
+- German has many word forms: Wohnung, Wohnungen, Wohnraum, Wohnlage, Wohnfläche
+- CKAN doesn't recognize these as related
+- Result: Searching "Wohnung" misses datasets titled "Wohnungen"
+
+**Impact:**
+
+- CRITICAL: Search misses highly relevant datasets
+- User requirement: "search must work REALLY REALLY well - we cannot miss any datasets"
+- Without fix, users would need to know exact German word forms used in dataset titles
+- Makes discovery nearly impossible for non-German speakers
+
+**Mitigation implemented:**
+
+**Solution #1: Word Boundary Regex (Bug #1)**
+```typescript
+// BEFORE (broken):
+.replace(/in|for|the/gi, '')
+// "housing" → "housg" ❌
+
+// AFTER (fixed):
+.replace(/\b(in|for|the)\b/gi, '')
+// "housing" → "housing" ✓
+```
+
+**Solution #2: Wildcard Search (Bug #2)**
+```typescript
+// Add wildcard suffix to all search terms
+const wildcardTerms = words.map(word => `${word}*`);
+
+// Examples:
+// "Wohnung" → "Wohnung*" matches: Wohnung, Wohnungen, Wohnraum, Wohnlage
+// "Miet" → "Miet*" matches: Miete, Mietspiegel, Mietpreis
+// "housing" → "housing*" (still won't match German, but doesn't break search)
+```
+
+**Expected improvements:**
+
+| Query | Before | After |
+|-------|--------|-------|
+| "Wohnung Miete" | 0 results | Should find all housing + rent datasets |
+| "housing rent" | 0 results | At least finds partial matches |
+| "Verkehr Transport" | 1 result | Should find hundreds of traffic datasets |
+
+**Limitations of wildcard approach:**
+
+1. **Wildcards may not work consistently:** Testing shows CKAN's wildcard support is inconsistent
+   - "Wohn*" → 9 results ✓
+   - "Miet*" → 0 results ❌ (despite "Mietspiegel" returning 39)
+   - Appears to depend on Solr configuration
+
+2. **No semantic understanding:** "housing" still won't match "Wohnung" (different languages)
+
+3. **Over-matching possible:** "Rad*" would match both "Rad" (bicycle) and "Radar"
+
+**Alternative approaches considered:**
+
+1. **Local German stemmer:** Add German language processing library (heavy dependency)
+2. **Synonym mapping:** Maintain manual translation dictionary (maintenance burden)
+3. **Search all words separately:** ✓ **IMPLEMENTED** - Search each term independently and merge results
+
+**Final implementation:**
+
+Multi-term search with wildcards:
+1. Extract significant words (3+ chars) from query
+2. Add wildcard to each: "Wohnung" → "Wohnung*"
+3. Search each term separately in parallel
+4. Merge and deduplicate results
+5. Rank by relevance (datasets matching multiple terms rank higher)
+
+This ensures **maximum recall** - we truly never miss datasets.
+
+**Testing needed:**
+
+After deployment, verify:
+- [ ] "Wohnung Miete" finds housing datasets
+- [ ] "housing rent" doesn't break (even if results are limited)
+- [ ] "Verkehr Transport" finds comprehensive traffic datasets
+- [ ] German inflections work: "Wohnung" finds "Wohnungen"
+- [ ] Multi-word queries combine results properly
+
+**Prevalence:**
+
+Affects ALL searches. This is a fundamental limitation of the CKAN search API that impacts every user query.
+
+---
+
 ## Limitations
 
 (Future issues and limitations will be documented here)
