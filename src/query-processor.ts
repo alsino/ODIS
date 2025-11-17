@@ -2,7 +2,9 @@
 // ABOUTME: Maps English and German keywords to relevant dataset tags and categories
 
 import { DatasetSearchParams } from './types.js';
-import { PorterStemmerDe } from 'natural';
+import natural from 'natural';
+
+const { PorterStemmerDe } = natural;
 
 export class QueryProcessor {
   private readonly KEYWORDS_MAP = {
