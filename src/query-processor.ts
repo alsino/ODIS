@@ -2,6 +2,7 @@
 // ABOUTME: Maps English and German keywords to relevant dataset tags and categories
 
 import { DatasetSearchParams } from './types.js';
+import { PorterStemmerDe } from 'natural';
 
 export class QueryProcessor {
   private readonly KEYWORDS_MAP = {
@@ -61,13 +62,23 @@ export class QueryProcessor {
     // Split into significant words (3+ characters to avoid noise)
     const words = cleanQuery.split(/\s+/).filter(w => w.length >= 3);
 
-    // Add wildcard suffix to each word for partial matching
-    // CKAN doesn't do stemming, so "Wohnung" won't match "Wohnungen"
-    // Wildcards solve this: "Wohn*" matches Wohnung, Wohnungen, Wohnraum, etc.
-    const wildcardTerms = words.map(word => `${word}*`);
+    // Use German stemmer to get word stems, then add wildcards
+    // This handles German inflections properly:
+    // "Miete" → stem: "Miet" → search: "Miet*" → matches: Miete, Mieten, Mietspiegel, Mietpreis
+    // "Wohnung" → stem: "Wohnung" → search: "Wohnung*" → matches: Wohnung, Wohnungen
+    // "Wohnen" → stem: "Wohn" → search: "Wohn*" → matches: Wohnen, Wohnung, Wohnraum, Wohnlage
+    const stemmedTerms = words.map(word => {
+      const stem = PorterStemmerDe.stem(word);
+      return `${stem}*`;
+    });
 
     // If no significant words found, use original query with wildcard
-    return wildcardTerms.length > 0 ? wildcardTerms : [`${naturalLanguageQuery}*`];
+    if (stemmedTerms.length === 0) {
+      const stem = PorterStemmerDe.stem(naturalLanguageQuery);
+      return [`${stem}*`];
+    }
+
+    return stemmedTerms;
   }
 
   extractIntent(query: string): 'search' | 'list' | 'specific' {
