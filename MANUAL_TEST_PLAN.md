@@ -543,5 +543,45 @@ npm list puppeteer
 
 ---
 
-**Testing Status**: Not Started
-**Last Updated**: 2025-11-17
+## Testing Session 1 - 2025-11-17
+
+### Bugs Found and Fixed
+
+**Bug #1: discover_data_topics returning "undefined"**
+- **Cause**: CKAN API returns string arrays, code expected objects
+- **Fix**: Convert tag strings to objects, use `all_fields=true` for orgs
+- **Status**: ✅ FIXED
+- **Commit**: 8433bce
+
+**Bug #2: search_berlin_datasets finding no results**
+- **Cause**: Complex OR queries not handled well by CKAN Solr
+- **Fix**: Simplified to use first significant word only
+- **Status**: ✅ FIXED
+- **Commit**: 8433bce, 2c0249b
+
+### Test Results After Fixes
+
+✅ **Portal Stats** - Working perfectly
+✅ **Discover Topics** - Shows actual tag and org names
+✅ **Search (single words)** - Working great:
+  - "Fahrrad" → 17 results
+  - "Umwelt" → 42 results
+  - "Bevölkerung" → 4 results
+  - "Wohnungen" → 11 results
+
+⚠️ **Multi-word queries** - Improved in commit 2c0249b
+  - Now uses first word only to avoid overly restrictive AND queries
+  - "Verkehr Transport" should now find "Verkehr" datasets (hundreds)
+
+### Next Testing Round
+
+After restart, test:
+1. "Verkehr" (should find hundreds of traffic datasets)
+2. "Wohnen" (should find housing datasets)
+3. Try fetching data from a small dataset
+4. Try multi-step workflow
+
+---
+
+**Testing Status**: In Progress - Round 1 Complete
+**Last Updated**: 2025-11-17 (2 bugs fixed)

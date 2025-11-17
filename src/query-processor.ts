@@ -35,10 +35,8 @@ export class QueryProcessor {
       .replace(/find|search|show me|list|all|datasets?|about|in|for|the/gi, '')
       .trim();
 
-    // If query has multiple words, use first significant word only
-    // CKAN's default AND behavior is too restrictive for multi-word queries
-    const words = cleanQuery.split(/\s+/).filter(w => w.length > 2);
-    const searchQuery = words.length > 0 ? words[0] : (cleanQuery || naturalLanguageQuery);
+    // Use cleaned query directly
+    const searchQuery = cleanQuery || naturalLanguageQuery;
 
     // Build search parameters
     const searchParams: DatasetSearchParams = {
@@ -47,6 +45,19 @@ export class QueryProcessor {
     };
 
     return searchParams;
+  }
+
+  extractSearchTerms(naturalLanguageQuery: string): string[] {
+    // Clean up noise words
+    const cleanQuery = naturalLanguageQuery
+      .replace(/find|search|show me|list|all|datasets?|about|in|for|the|and/gi, '')
+      .trim();
+
+    // Split into significant words (3+ characters to avoid noise)
+    const words = cleanQuery.split(/\s+/).filter(w => w.length >= 3);
+
+    // If no significant words found, use original query
+    return words.length > 0 ? words : [naturalLanguageQuery];
   }
 
   extractIntent(query: string): 'search' | 'list' | 'specific' {

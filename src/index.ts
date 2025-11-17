@@ -192,27 +192,58 @@ class BerlinOpenDataMCPServer {
           case 'search_berlin_datasets': {
             const { query, limit = 20 } = args as { query: string; limit?: number };
 
-            const searchParams = this.queryProcessor.processQuery(query);
-            searchParams.limit = limit;
+            // Extract search terms for multi-term search
+            const searchTerms = this.queryProcessor.extractSearchTerms(query);
 
-            const results = await this.api.searchDatasets(searchParams);
+            // Search for each term separately and combine results
+            const searchPromises = searchTerms.map(term =>
+              this.api.searchDatasets({ query: term, limit: limit * 2 })
+            );
+
+            const allResults = await Promise.all(searchPromises);
+
+            // Merge and deduplicate results by dataset ID
+            const datasetMap = new Map<string, { dataset: any; matchCount: number }>();
+
+            allResults.forEach(result => {
+              result.results.forEach(dataset => {
+                if (datasetMap.has(dataset.id)) {
+                  // Dataset already found - increment match count
+                  datasetMap.get(dataset.id)!.matchCount++;
+                } else {
+                  // New dataset - add it
+                  datasetMap.set(dataset.id, { dataset, matchCount: 1 });
+                }
+              });
+            });
+
+            // Sort by match count (relevance) descending, then limit
+            const combinedResults = Array.from(datasetMap.values())
+              .sort((a, b) => b.matchCount - a.matchCount)
+              .slice(0, limit)
+              .map(item => item.dataset);
+
+            const totalUnique = datasetMap.size;
 
             // Create a conversational, structured response
             let responseText = `# Search Results for "${query}"\n\n`;
 
-            if (results.results.length === 0) {
+            if (combinedResults.length === 0) {
               responseText += "I couldn't find any datasets matching your query. Try:\n";
               responseText += "- Using different keywords\n";
               responseText += "- Searching in German (e.g., 'Verkehr' instead of 'traffic')\n";
               responseText += "- Using discover_data_topics to explore available categories\n";
             } else {
-              responseText += `Found ${results.count} relevant dataset(s)`;
-              if (results.count > results.results.length) {
-                responseText += ` (showing first ${results.results.length})`;
+              responseText += `Found ${totalUnique} relevant dataset(s)`;
+              if (searchTerms.length > 1) {
+                responseText += ` (searched: ${searchTerms.join(', ')})`;
+              }
+              if (totalUnique > combinedResults.length) {
+                responseText += ` (showing top ${combinedResults.length})`;
               }
               responseText += `:\n\n`;
 
-              results.results.forEach((dataset, index) => {
+              combinedResults.forEach((dataset, index) => {
                 responseText += `## ${index + 1}. ${dataset.title}\n`;
                 responseText += `**ID**: ${dataset.name}\n`;
                 responseText += `**Organization**: ${dataset.organization?.title || 'Unknown'}\n`;
@@ -226,7 +257,7 @@ class BerlinOpenDataMCPServer {
 
                 if (dataset.resources && dataset.resources.length > 0) {
                   responseText += `**Resources**: ${dataset.resources.length} files available`;
-                  const formats = [...new Set(dataset.resources.map(r => r.format).filter(Boolean))];
+                  const formats = [...new Set(dataset.resources.map((r: any) => r.format).filter(Boolean))];
                   if (formats.length > 0) {
                     responseText += ` (${formats.join(', ')})`;
                   }
@@ -234,7 +265,7 @@ class BerlinOpenDataMCPServer {
                 }
 
                 if (dataset.tags && dataset.tags.length > 0) {
-                  responseText += `**Tags**: ${dataset.tags.slice(0, 5).map(t => t.name).join(', ')}`;
+                  responseText += `**Tags**: ${dataset.tags.slice(0, 5).map((t: any) => t.name).join(', ')}`;
                   if (dataset.tags.length > 5) {
                     responseText += ` +${dataset.tags.length - 5} more`;
                   }
