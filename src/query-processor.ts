@@ -30,13 +30,15 @@ export class QueryProcessor {
   ];
 
   processQuery(naturalLanguageQuery: string): DatasetSearchParams {
-    // Simplification: just clean up the original query and use it directly
-    // CKAN's Solr search handles German and English terms well on its own
+    // Clean up noise words
     const cleanQuery = naturalLanguageQuery
       .replace(/find|search|show me|list|all|datasets?|about|in|for|the/gi, '')
       .trim();
 
-    const searchQuery = cleanQuery || naturalLanguageQuery;
+    // If query has multiple words, use first significant word only
+    // CKAN's default AND behavior is too restrictive for multi-word queries
+    const words = cleanQuery.split(/\s+/).filter(w => w.length > 2);
+    const searchQuery = words.length > 0 ? words[0] : (cleanQuery || naturalLanguageQuery);
 
     // Build search parameters
     const searchParams: DatasetSearchParams = {
