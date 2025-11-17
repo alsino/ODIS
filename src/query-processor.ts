@@ -30,43 +30,13 @@ export class QueryProcessor {
   ];
 
   processQuery(naturalLanguageQuery: string): DatasetSearchParams {
-    const query = naturalLanguageQuery.toLowerCase();
+    // Simplification: just clean up the original query and use it directly
+    // CKAN's Solr search handles German and English terms well on its own
+    const cleanQuery = naturalLanguageQuery
+      .replace(/find|search|show me|list|all|datasets?|about|in|for|the/gi, '')
+      .trim();
 
-    // Extract main search terms based on keywords found
-    const foundKeywords: string[] = [];
-    const tags: string[] = [];
-
-    // Find category matches
-    for (const [category, keywords] of Object.entries(this.KEYWORDS_MAP)) {
-      for (const keyword of keywords) {
-        if (query.includes(keyword.toLowerCase())) {
-          // Add ALL keywords from this category for comprehensive search
-          foundKeywords.push(...keywords);
-          tags.push(category);
-          break; // Only process category once
-        }
-      }
-    }
-
-    // Extract location information
-    for (const location of this.LOCATION_KEYWORDS) {
-      if (query.includes(location.toLowerCase())) {
-        foundKeywords.push(location);
-      }
-    }
-
-    // Build search query
-    let searchQuery: string;
-    if (foundKeywords.length > 0) {
-      // Use found keywords for better matching
-      searchQuery = foundKeywords.join(' OR ');
-    } else {
-      // Use original query but clean it up
-      const cleanQuery = naturalLanguageQuery
-        .replace(/find|search|show me|list|all|datasets?|about|in|for|the/gi, '')
-        .trim();
-      searchQuery = cleanQuery || naturalLanguageQuery;
-    }
+    const searchQuery = cleanQuery || naturalLanguageQuery;
 
     // Build search parameters
     const searchParams: DatasetSearchParams = {

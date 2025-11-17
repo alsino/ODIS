@@ -93,11 +93,16 @@ export class BerlinOpenDataAPI {
   }
 
   async listTags(limit: number = 100): Promise<Array<{ name: string }>> {
-    return await this.makeRequest('tag_list', { limit });
+    const tags = await this.makeRequest('tag_list', { limit });
+    // tag_list returns array of strings, convert to objects
+    return tags.map((tag: string) => ({ name: tag }));
   }
 
   async listOrganizations(): Promise<Array<{ name: string; title: string }>> {
-    return await this.makeRequest('organization_list');
+    // organization_list returns array of org IDs by default
+    // Use all_fields=true to get full organization objects with title
+    const orgs = await this.makeRequest('organization_list', { all_fields: true });
+    return orgs;
   }
 
   async getPortalStats(): Promise<PortalStats> {
