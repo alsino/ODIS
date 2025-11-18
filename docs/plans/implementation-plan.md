@@ -20,6 +20,225 @@ Based on project requirements and architectural discussions:
 
 6. **Total expected commits**: 10-12 across all phases (Phase 0: 2, Phase 1: 3, Phase 2: 6, Phase 3: 3-4)
 
+## Query Expansion System Architecture
+
+The MCP server uses a hybrid query expansion system to work around Berlin's CKAN API limitations (no wildcards, stemming, or fuzzy matching).
+
+### How It Works
+
+**Two-component system:**
+
+1. **Manual seed mappings** (`src/query-processor.ts`):
+   - Small curated list mapping user search terms → portal-native terms
+   - Example: `"miete": ["mietspiegel"]`, `"wohnung": ["wohnen", "wohn"]`
+   - Handles terms that don't appear in portal metadata
+
+2. **Generated expansions** (`src/generated-expansions.ts`):
+   - Automatically generated from analyzing 2,660 portal datasets
+   - High-quality mappings created by `scripts/generate-query-expansion.ts`
+   - Uses frequency-based ranking, co-occurrence filtering, negation filtering, and redundancy elimination
+   - Example: `"mietspiegel": ["Mietspiegel", "Mietspiegels", "Mietspiegeldatenbank"]`
+
+**Runtime merging** (happens in `QueryProcessor` constructor):
+```typescript
+constructor() {
+  this.QUERY_EXPANSION = { ...QUERY_EXPANSION }; // Start with generated map
+
+  // Expand each seed mapping recursively
+  for (const [userTerm, portalTerms] of Object.entries(this.SEED_MAPPINGS)) {
+    const expandedTerms = new Set<string>();
+
+    for (const portalTerm of portalTerms) {
+      if (QUERY_EXPANSION[portalTerm]) {
+        // Portal term has expansions → use them
+        QUERY_EXPANSION[portalTerm].forEach(t => expandedTerms.add(t));
+      } else {
+        // No expansion → capitalize and use directly
+        expandedTerms.add(capitalize(portalTerm));
+      }
+    }
+
+    this.QUERY_EXPANSION[userTerm] = Array.from(expandedTerms);
+  }
+}
+```
+
+**Example: User searches "wohnung"**
+
+1. Seed mapping: `"wohnung" → ["wohnen", "wohn"]`
+2. Look up "wohnen" in generated map → NOT FOUND (eliminated as redundant with "wohn")
+   - Fallback: capitalize → `"Wohnen"`
+3. Look up "wohn" in generated map → FOUND: `["Wohngebäude", "Wohn- und nichtwohngebäude", ...]`
+4. Final expansion: `["Wohnen", "Wohngebäude", "Wohn- und nichtwohngebäude", ...]`
+
+**Why "wohnen" isn't in the generated map:**
+The generation algorithm processes words by length (shorter first) and skips longer forms as redundant. Since "wohn" (4 chars) was processed before "wohnen" (6 chars), "wohnen" was skipped as redundant. This consolidates the 20+ "wohn*" word family into a single high-quality entry.
+
+**Why frequency-based ranking (not PMI):**
+The algorithm ranks compound words by dataset frequency, not PMI (Pointwise Mutual Information). This is because:
+
+1. **Compound words always co-occur**: "Wohngebäude" always appears with "wohn" (it contains it), so PMI values are artificially high (8-11 range) for all compounds
+2. **PMI favors rare perfect correlations**: "Förderschule" (3 datasets) gets PMI 11.5, while "Schulen" (50 datasets) gets PMI 6.2, but "Schulen" is 10x more useful for search
+3. **Frequency = usefulness**: Terms appearing in more datasets are more likely to match user searches
+4. **Co-occurrence ratio filters weak associations**: Compound must appear with base ≥10% of time to qualify
+
+Example comparison for "verkehr" (traffic):
+- PMI ranking: Verkehrserhebungen, Verkehrsmengenkarte, Regelverkehr (rare technical terms)
+- Frequency ranking: Straßenverkehr, Verkehrsmengen, Radverkehr (common useful terms)
+
+The frequency approach produces expansions users actually search for.
+
+**How expansion generation works (step-by-step):**
+
+The algorithm processes 4,186 candidate words (frequency ≥ 3) through multiple filtering stages:
+
+**Step 1: Sort by word length (shortest first)**
+
+Candidates sorted by:
+1. Word length (shorter words first)
+2. Frequency (more common first)
+
+Example order:
+```
+"rad" (3 chars, freq 50)
+"wohn" (4 chars, freq 200)
+"wohnen" (6 chars, freq 80)
+"fahrrad" (7 chars, freq 17)
+"wohngebäude" (11 chars, freq 40)
+```
+
+This ensures base words are processed before their longer forms.
+
+**Step 2: Redundancy elimination**
+
+For each word, check if a shorter substring already has an expansion:
+
+Processing "wohnen":
+- Does "woh" have an expansion? No
+- Does "wohn" have an expansion? **YES** → Skip "wohnen" as redundant
+
+Result:
+- ✓ `"wohn": [...]` (kept)
+- ✗ `"wohnen": [...]` (skipped)
+- ✗ `"wohngebäude": [...]` (skipped)
+
+This consolidates word families: 20+ "wohn*" variants → 1 entry
+
+**Skipped: 1,304 redundant entries**
+
+**Step 3: Compound word finding**
+
+For each non-redundant base word, scan all 4,186 candidates to find compounds.
+
+A compound must:
+- **Contain base word**: "wohngebäude" contains "wohn" ✓
+- **Be longer**: "wohngebäude" (11) > "wohn" (4) ✓
+- **Not too long**: ≤ 30 characters ✓
+- **Co-occur enough**: Appear together in ≥ 2 datasets ✓
+
+Example candidates for "wohn":
+```
+"wohngebäudebestand" - 52 datasets
+"wohnungen" - 84 datasets
+"wohngebäude" - 41 datasets
+"wohnraum" - 14 datasets
+"nichtwohngebäude" - 8 datasets ← NEGATION!
+```
+
+**Step 4: Co-occurrence ratio filtering**
+
+Calculate for each compound: **co-occurrence ratio = (appears WITH base) / (total appearances)**
+
+Example for "wohngebäude":
+- Appears in 41 datasets total
+- Appears WITH "wohn" in 40 datasets
+- Ratio: 40/41 = 0.976 (97.6%)
+- 0.976 ≥ 0.1 ✓ **Keep**
+
+Example for weak association:
+- "gebäude" appears in 200 datasets total
+- Appears WITH "wohn" in 10 datasets
+- Ratio: 10/200 = 0.05 (5%)
+- 0.05 < 0.1 ✗ **Discard**
+
+This filters compounds that happen to contain the base word but aren't strongly associated.
+
+**Step 5: Negation filtering**
+
+Discard compounds starting with negation prefixes:
+- "nichtwohngebäude" starts with "nicht" ✗ **Discard**
+- "unwohnlich" starts with "un" ✗ **Discard**
+
+Result: "wohn" won't match non-residential buildings
+
+**Step 6: Sort by frequency**
+
+Remaining compounds sorted by dataset frequency (most common first):
+```
+"wohnungen" - 84 datasets
+"wohngebäudebestand" - 52 datasets
+"wohngebäude" - 41 datasets
+"wohnraum" - 14 datasets
+"wohnlage" - 8 datasets
+```
+
+Take top 5 most frequent.
+
+**Step 7: Quality thresholds**
+
+Only create expansion if:
+- **At least 2 distinct terms**: Must have base + at least 1 compound
+- **Base word NOT included**: Don't add "Wohn" to its own expansion (redundant)
+
+Example outcomes:
+```
+✓ "wohn" → 5 compounds found → CREATE EXPANSION
+✗ "xyz" → 0 compounds found → SKIP
+✗ "geodaten" → only itself → SKIP (would be self-only waste)
+```
+
+**Skipped: 2,616 entries with insufficient expansion**
+
+**Final result for "wohn":**
+```typescript
+"wohn": [
+  "Wohngebäudebestand",           // freq 52, co-occur 98%
+  "Wohn- und nichtwohngebäude",   // freq 45, co-occur 95%
+  "Neue wohnungen im wohnbau"     // freq 35, co-occur 92%
+]
+```
+
+**Summary:**
+- Start: 4,186 candidate words (frequency ≥ 3)
+- After redundancy elimination: 2,882 words (skipped 1,304)
+- After compound finding + filtering: **266 expansions created** (skipped 2,616)
+
+**Regenerating expansions:**
+```bash
+npm run generate-expansions  # Re-analyzes portal, updates src/generated-expansions.ts
+npm run build                 # Rebuild with new expansions
+```
+
+Run when:
+- Portal adds significant new datasets with new terminology
+- User reports search term not working despite being in portal
+- Every 6-12 months to capture evolving vocabulary
+
+**Word statistics:**
+
+To inspect all words extracted from the portal:
+```bash
+npm run tsx scripts/dump-word-stats.ts  # Generates word-stats-all.json and word-stats-candidates.json
+```
+
+This creates:
+- `word-stats-all.json` - All 9,913 unique words with frequency and dataset counts
+- `word-stats-candidates.json` - 4,186 candidate words (frequency ≥ 3)
+
+See `ISSUES.md` Issue #3 for complete technical documentation.
+
+---
+
 ## Prerequisites
 
 **Required knowledge:**

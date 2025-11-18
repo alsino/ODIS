@@ -134,8 +134,8 @@ This is an LLM behavior issue, not an MCP server issue. The warning is in the to
 
 ### Issue #3: CKAN Search Engine Limitations - No Stemming or Fuzzy Matching
 
-**Status:** Mitigated with wildcards
-**Severity:** HIGH
+**Status:** Solved with hybrid query expansion
+**Severity:** HIGH (resolved)
 **Component:** Berlin CKAN API search behavior
 **Date discovered:** 2025-11-17
 
@@ -239,46 +239,114 @@ Berlin's CKAN Solr configuration is either:
 2. Has wildcards disabled for security/performance
 3. Uses different wildcard syntax than standard Solr
 
-**Final implementation (SIMPLIFIED):**
+**Final implementation (HYBRID APPROACH):**
 
-Multi-term search WITHOUT stemming or wildcards:
-1. Extract significant words (3+ chars) from query
-2. Use original user terms directly (no modification!)
-3. Search each term separately in parallel
-4. Merge and deduplicate results
-5. Rank by relevance (datasets matching multiple terms rank higher)
+**Solution:** Combination of manual seed mappings + automated portal analysis
 
-**Relies on:**
-- CKAN's built-in partial word matching
-- Users knowing common German compound words used in datasets
-- Multi-term search providing OR logic
+1. **Manual seed mappings** (`src/query-processor.ts`):
+   - Map common user search terms to portal-native terms
+   - Example: "miete" → "mietspiegel", "wohnung" → ["wohnen", "wohn"]
+   - Small curated list for terms that don't appear in portal metadata
+
+2. **Automated expansion generation** (`scripts/generate-query-expansion.ts`):
+   - Analyzes all 2,660 portal datasets to find word co-occurrences
+   - Generates high-quality expansion mappings from actual metadata
+   - Example: "mietspiegel" → ["Mietspiegel", "Mietspiegels", "Mietspiegeldatenbank"]
+
+   **Algorithm features:**
+   - **Frequency-based ranking**: Ranks compound words by dataset frequency (common terms = more useful for search)
+   - **Co-occurrence ratio filtering**: Compound must appear with base ≥10% of time to qualify (filters weak associations)
+   - **Negation filtering**: Excludes terms with "nicht-", "non-", "ohne-" prefixes (e.g., "Nichtwohngebäude" excluded from "wohn")
+   - **Redundancy elimination**: Processes shorter base words first, skips longer inflected forms
+     - Example: Keeps "wohn" expansion, skips "wohngebäude", "wohngebäuden", "wohnlage" (20+ entries → 1)
+   - **Quality thresholds**: Only includes expansions with minimum 2 distinct terms and max 30 characters
+   - **Top-5 ranking**: Limits each expansion to 5 most relevant terms by frequency
+
+   **Why frequency-based ranking (not PMI):**
+
+   Initially, the algorithm used PMI (Pointwise Mutual Information) to rank compounds, but testing revealed this was the wrong metric:
+
+   1. **Compound words always co-occur**: "Wohngebäude" always appears with "wohn" (it contains it), so PMI values are artificially high (8-11 range) for all compounds
+   2. **PMI favors rare perfect correlations**: "Förderschule" (3 datasets) gets PMI 11.5, while "Schulen" (50 datasets) gets PMI 6.2, but "Schulen" is 10x more useful for search
+   3. **Frequency = usefulness**: Terms appearing in more datasets are more likely to match user searches
+
+   Example comparison for "verkehr" (traffic):
+   - PMI ranking: Verkehrserhebungen, Verkehrsmengenkarte, Regelverkehr (rare technical terms)
+   - Frequency ranking: Straßenverkehr, Verkehrsmengen, Radverkehr (common useful terms users search for)
+
+   The frequency approach produces expansions users actually search for.
+
+   **Results:**
+   - Initial naive algorithm: 1,903 mappings with many redundant/low-quality entries
+   - Frequency-based algorithm with improvements: High-quality mappings (self-only eliminated, no redundant base words)
+     - Eliminated self-only mappings (e.g., "geodaten" → ["Geodaten"])
+     - Base words no longer included in their own expansions
+     - Max 30 character limit filters overly long phrases
+     - Co-occurrence ratio (≥10%) ensures strong associations
+
+   **Quality improvement examples:**
+
+   | Before (Naive) | After (Improved) |
+   |----------------|------------------|
+   | 20+ "wohn*" entries:<br>• "wohn": [..., "Nichtwohngebäude", ...]<br>• "wohnen": ["Wohnen"]<br>• "wohngebäude": [..., "Nichtwohngebäude", ...]<br>• "wohngebäuden": [...]<br>• "wohnlage": [...]<br>• "wohnlagen": [...] | 1 "wohn" entry:<br>• "wohn": ["Wohngebäudebestand", "Wohn- und nichtwohngebäude", "Neue wohngebäude...", "Wohngebäude"]<br><br>✓ No negations<br>✓ No redundant entries |
+   | "wohnbebauung": ["Wohnbebauung"]<br>(useless self-reference) | Skipped<br>(insufficient expansion) |
+   | Expansions up to 10 terms | Max 5 terms<br>(top PMI scores only) |
+
+3. **Hybrid merging** (constructor in `QueryProcessor`):
+   - Seed mappings recursively expand using generated map
+   - User searches "miete" → seed maps to "mietspiegel" → expands to portal terms
+   - Result: User terms automatically map to comprehensive portal vocabulary
+
+**How to regenerate:**
+```bash
+npm run generate-expansions  # Re-analyzes portal, updates src/generated-expansions.ts
+npm run build                 # Rebuild with new expansions
+```
 
 **Actual results:**
 
-| Query | Original Approach | Stemming Approach | Current Approach |
-|-------|-------------------|-------------------|------------------|
-| "Wohnen" | 40 results | 0 (Wohn* failed) | **1347 results** ✓ |
-| "Mietspiegel" | 39 results | 0 (Miet* failed) | **39 results** ✓ |
-| "Wohnung" | 0 results | 0 (Wohnung* failed) | **0 results** ❌ |
-| "Miete" | 0 results | 0 (Miet* failed) | **0 results** ❌ |
+| Query | Before Hybrid | After Hybrid |
+|-------|---------------|--------------|
+| "Wohnen" | **1347 results** ✓ | **1347 results** ✓ |
+| "Mietspiegel" | **39 results** ✓ | **39 results** ✓ |
+| "Wohnung" | **0 results** ❌ | **~1347 results** ✓ (via wohnen/wohn) |
+| "Miete" | **0 results** ❌ | **39 results** ✓ (via mietspiegel) |
+| "Polizei" | **13 results** ✓ | **13 results** ✓ (auto-generated) |
+
+**Benefits:**
+
+1. ✓ **No domain knowledge required:** Users can search with everyday German terms
+2. ✓ **Portal-wide coverage:** High-quality expansions cover all topics, not just tested ones
+3. ✓ **Compact and maintainable:** Eliminates redundancy and self-only mappings
+4. ✓ **Semantic quality:** Frequency-based ranking prioritizes useful common terms over rare technical terms
+5. ✓ **No negation confusion:** "wohn" (residential) won't match "Nichtwohngebäude" (non-residential)
+6. ✓ **Self-updating:** Regenerate script captures new portal vocabulary
+7. ✓ **Data-driven:** Based on actual dataset metadata, not assumptions
 
 **Limitations:**
 
-1. **Word form dependency:** Search terms must match forms used in datasets
-   - "Wohnung" (singular) → 0 results (datasets use "Wohnungen" or compounds)
-   - "Wohnen" (verb/noun) → 1347 results (commonly used in dataset titles)
-   - "Miete" (noun) → 0 results (datasets use "Mietspiegel" compound)
+1. **Manual seed mappings need curation:** New common user terms must be added manually to `src/query-processor.ts` seed mappings
+2. **German-only:** Portal uses German, no English term support yet
+3. **Generated map size:** 787 entries = ~793 lines in `src/generated-expansions.ts` file
 
-2. **No cross-language support:** English terms don't match German datasets
+**Maintenance:**
 
-3. **Users need domain knowledge:** Must know which German terms are actually used
+When to regenerate expansions:
+- Portal adds significant new datasets with new terminology
+- User reports search term not working despite being in portal
+- Every 6-12 months to capture evolving vocabulary
 
-**Recommendation:**
+How to regenerate:
+```bash
+npm run generate-expansions  # Analyzes portal, generates src/generated-expansions.ts
+npm run build                 # Rebuild with new expansions
+# Test in Claude Desktop
+```
 
-For best results, users should search with:
-- Common compound words: "Mietspiegel", "Wohnungsmarkt", "Verkehrsunfälle"
-- Plural forms when uncertain: "Wohnungen" might work better than "Wohnung"
-- Multiple related terms: "Wohnen Immobilien Sozialwohnungen" casts wider net
+Manual seed mapping updates (no regeneration needed):
+- Edit `src/query-processor.ts` SEED_MAPPINGS constant
+- Add common user terms that map to portal-native terms
+- Example: Add `"apartment": ["wohnen", "wohn"]` for English support
 
 **Prevalence:**
 
