@@ -8,8 +8,8 @@
 
 - [x] Project built successfully (`npm run build`)
 - [x] Claude Desktop configured at: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- [ ] Claude Desktop restarted after latest build
-- [ ] Claude Desktop shows MCP server is connected (check status indicator)
+- [x] Claude Desktop restarted after latest build
+- [x] Claude Desktop shows MCP server is connected (check status indicator)
 
 ---
 
@@ -30,10 +30,10 @@ What's in the Berlin Open Data Portal? Give me an overview.
 - Suggests next steps
 
 **Success Criteria**:
-- [ ] Tool is called automatically
-- [ ] Numbers seem reasonable
-- [ ] Response is well-formatted
-- [ ] No errors
+- [x] Tool is called automatically
+- [x] Numbers seem reasonable (2,660 datasets, 24 organizations, 4,525 tags)
+- [x] Response is well-formatted
+- [x] No errors
 
 ---
 
@@ -56,10 +56,10 @@ Show me the next 10 datasets (offset 10)
 ```
 
 **Success Criteria**:
-- [ ] Pagination works correctly
-- [ ] Different datasets returned for offset
-- [ ] Formatting is clear
-- [ ] No duplicates between pages
+- [x] Pagination works correctly
+- [x] Different datasets returned for offset (1-10 vs 11-20)
+- [x] Formatting is clear
+- [x] No duplicates between pages
 
 ---
 
@@ -85,10 +85,16 @@ Suche Datensätze über Verkehr und öffentliche Verkehrsmittel
 - Results are ranked by relevance
 
 **Success Criteria**:
-- [ ] Finds relevant datasets
-- [ ] Both languages work
-- [ ] Results include metadata
-- [ ] No errors
+- [x] Finds relevant datasets (11 bicycle datasets, 132 traffic/transport datasets)
+- [x] Both languages work
+- [x] Results include metadata (descriptions, formats, tags)
+- [x] No errors
+
+**Additional Test - English/German Equivalence**:
+- English "traffic and public transport" → 135 results
+- German "Verkehr und öffentliche Verkehrsmittel" → 132 results
+- [x] Nearly identical counts (2% difference)
+- [x] Query expansion working for both languages
 
 ---
 
@@ -539,5 +545,45 @@ After restart, test:
 
 ---
 
-**Testing Status**: In Progress - Round 1 Complete
-**Last Updated**: 2025-11-17 (2 bugs fixed)
+## Testing Session 2 - 2025-11-18
+
+### Changes Made Before Testing
+- **Removed 2 tools**: `suggest_datasets` and `discover_data_topics`
+  - Reason: Pure duplication (suggest_datasets) and low value (discover_data_topics returned 4,525 technical tags)
+  - Commit: f86d0d7
+  - Result: 6 focused tools instead of 8
+
+### Tests Completed
+
+✅ **Pre-Testing Setup** - All checks passed
+
+✅ **Test 1.1: Portal Statistics**
+- Tool called automatically
+- Returned: 2,660 datasets, 24 organizations, 4,525 tags
+- Claude showed excellent agentic behavior (auto-explored with multiple searches)
+
+✅ **Test 1.2: Pagination**
+- Both queries worked perfectly
+- Offset parameter functioning correctly
+- No duplicates between pages
+
+✅ **Test 2.1: Natural Language Search**
+- English: "bicycle infrastructure" → 11 highly relevant datasets
+- German: "Verkehr und öffentliche Verkehrsmittel" → 132 relevant datasets
+- Query expansion visible in results
+- Metadata complete (descriptions, formats, tags)
+
+✅ **Additional Test: English/German Equivalence**
+- Tested same concept in both languages
+- English "traffic and public transport" → 135 results
+- German "Verkehr und öffentliche Verkehrsmittel" → 132 results
+- **Conclusion**: Query expansion working excellently (only 2% difference)
+
+### Next Steps
+- Continue with Test 2.2: Get Dataset Details
+- Complete remaining test suites
+
+---
+
+**Testing Status**: In Progress - Session 2
+**Last Updated**: 2025-11-18 (6 tools, streamlined interface)
