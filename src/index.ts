@@ -141,7 +141,7 @@ class BerlinOpenDataMCPServer {
           case 'search_berlin_datasets': {
             const { query, limit = 20 } = args as { query: string; limit?: number };
 
-            // Extract search terms for multi-term search
+            // STEP 1: Run expansion search (existing logic)
             const searchTerms = this.queryProcessor.extractSearchTerms(query);
 
             // Search for each term separately and combine results
@@ -152,7 +152,7 @@ class BerlinOpenDataMCPServer {
             const allResults = await Promise.all(searchPromises);
 
             // Merge and deduplicate results by dataset ID
-            const datasetMap = new Map<string, { dataset: any; matchCount: number }>();
+            const datasetMap = new Map<string, { dataset: any; matchCount: number; isLiteral: boolean }>();
 
             allResults.forEach(result => {
               result.results.forEach(dataset => {
@@ -161,12 +161,49 @@ class BerlinOpenDataMCPServer {
                   datasetMap.get(dataset.id)!.matchCount++;
                 } else {
                   // New dataset - add it
-                  datasetMap.set(dataset.id, { dataset, matchCount: 1 });
+                  datasetMap.set(dataset.id, { dataset, matchCount: 1, isLiteral: false });
                 }
               });
             });
 
-            // Sort by match count (relevance) descending, then limit
+            // STEP 2: Check if top results contain user's exact key terms
+            // Extract key terms from original query (years, significant words)
+            const cleanedQuery = query.replace(/\b(find|search|show|me|list|all|datasets?|about|in|for|the|and)\b/gi, '').trim();
+            const keyTerms = cleanedQuery.split(/\s+/).filter(term =>
+              term.length >= 3 || /^\d{4}$/.test(term) // Include 4-digit years
+            );
+
+            // Get top 5 results from expansion search
+            const topExpansionResults = Array.from(datasetMap.values())
+              .sort((a, b) => b.matchCount - a.matchCount)
+              .slice(0, 5)
+              .map(item => item.dataset);
+
+            // Check if any top result contains all key terms
+            const hasExactMatch = topExpansionResults.some(dataset => {
+              const searchableText = `${dataset.title} ${dataset.name} ${dataset.notes || ''}`.toLowerCase();
+              return keyTerms.every(term => searchableText.includes(term.toLowerCase()));
+            });
+
+            // STEP 3: If no exact match found, run literal search and prepend
+            if (!hasExactMatch && cleanedQuery.length > 0) {
+              const literalResult = await this.api.searchDatasets({ query: cleanedQuery, limit: limit });
+
+              // Add literal results with high priority (mark as literal)
+              literalResult.results.forEach(dataset => {
+                if (datasetMap.has(dataset.id)) {
+                  // Boost existing dataset by marking as literal match
+                  const item = datasetMap.get(dataset.id)!;
+                  item.isLiteral = true;
+                  item.matchCount += 100; // High boost for literal matches
+                } else {
+                  // New dataset from literal search - add with high priority
+                  datasetMap.set(dataset.id, { dataset, matchCount: 100, isLiteral: true });
+                }
+              });
+            }
+
+            // Sort by match count (literal matches boosted to top)
             const combinedResults = Array.from(datasetMap.values())
               .sort((a, b) => b.matchCount - a.matchCount)
               .slice(0, limit)
