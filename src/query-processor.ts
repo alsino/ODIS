@@ -2,32 +2,52 @@
 // ABOUTME: Maps English and German keywords to relevant dataset tags and categories
 
 import { DatasetSearchParams } from './types.js';
+import { QUERY_EXPANSION } from './generated-expansions.js';
 
 export class QueryProcessor {
-  private readonly KEYWORDS_MAP = {
-    bicycle: ['fahrrad', 'bike', 'bicycle', 'cycling', 'radweg', 'bikesharing', 'rad', 'radverkehr', 'radfahrer'],
-    traffic: ['verkehr', 'traffic', 'transport', 'mobility', 'straße', 'autobahn'],
-    environment: ['umwelt', 'environment', 'luftqualität', 'air quality', 'pollution', 'klima', 'climate'],
-    housing: ['wohnung', 'housing', 'miete', 'rent', 'immobilien', 'real estate'],
-    demographics: ['bevölkerung', 'population', 'demographics', 'einwohner', 'residents'],
-    education: ['bildung', 'education', 'schule', 'school', 'university', 'universität'],
-    health: ['gesundheit', 'health', 'krankenhaus', 'hospital', 'medical'],
-    crime: ['kriminalität', 'crime', 'safety', 'sicherheit', 'polizei', 'police'],
-    economy: ['wirtschaft', 'economy', 'business', 'employment', 'arbeitsplatz', 'jobs'],
-    culture: ['kultur', 'culture', 'museum', 'theater', 'art', 'kunst'],
-    energy: ['energie', 'energy', 'strom', 'electricity', 'gas', 'renewable'],
-    waste: ['müll', 'waste', 'recycling', 'abfall', 'garbage'],
-    water: ['wasser', 'water', 'sewage', 'abwasser', 'drinking water'],
-    parks: ['park', 'grün', 'green', 'forest', 'wald', 'recreation']
+  // Manual seed mappings: common user search terms → portal-native terms
+  // These handle terms users search for that don't appear in portal metadata
+  private readonly SEED_MAPPINGS: Record<string, string[]> = {
+    // User searches "miete" but portal uses "Mietspiegel"
+    "miete": ["mietspiegel"],
+
+    // User searches "wohnung" but portal uses "wohnen", "wohnraum", etc.
+    "wohnung": ["wohnen", "wohn"],
+
+    // Additional common user terms
+    "immobilie": ["wohnen", "wohn"],
+    "rad": ["fahrrad"],
+    "auto": ["kfz"],
   };
 
-  private readonly LOCATION_KEYWORDS = [
-    'berlin', 'bezirk', 'district', 'neighborhood', 'kiez',
-    'mitte', 'charlottenburg', 'friedrichshain', 'kreuzberg', 'neukölln',
-    'tempelhof', 'schöneberg', 'steglitz', 'zehlendorf', 'wilmersdorf',
-    'spandau', 'reinickendorf', 'pankow', 'lichtenberg', 'marzahn',
-    'hellersdorf', 'treptow', 'köpenick'
-  ];
+  // Combined expansion map: merges seed mappings with generated expansions
+  private readonly QUERY_EXPANSION: Record<string, string[]>;
+
+  constructor() {
+    // Merge seed mappings with generated expansions
+    this.QUERY_EXPANSION = { ...QUERY_EXPANSION };
+
+    // Expand seed mappings recursively
+    for (const [userTerm, portalTerms] of Object.entries(this.SEED_MAPPINGS)) {
+      const expandedTerms = new Set<string>();
+
+      for (const portalTerm of portalTerms) {
+        const lowerPortalTerm = portalTerm.toLowerCase();
+
+        // Check if portal term has expansions in generated map
+        if (QUERY_EXPANSION[lowerPortalTerm]) {
+          // Add all expanded terms
+          QUERY_EXPANSION[lowerPortalTerm].forEach(t => expandedTerms.add(t));
+        } else {
+          // No expansion available, use portal term directly (capitalized)
+          expandedTerms.add(portalTerm.charAt(0).toUpperCase() + portalTerm.slice(1));
+        }
+      }
+
+      // Store the combined expansion for the user term
+      this.QUERY_EXPANSION[userTerm] = Array.from(expandedTerms);
+    }
+  }
 
   processQuery(naturalLanguageQuery: string): DatasetSearchParams {
     // Clean up noise words using word boundaries to avoid partial matches
@@ -61,24 +81,35 @@ export class QueryProcessor {
     // Split into significant words (3+ characters to avoid noise)
     const words = cleanQuery.split(/\s+/).filter(w => w.length >= 3);
 
-    // CRITICAL DISCOVERY: Berlin's CKAN instance does NOT support:
-    // - Wildcards (Miet* → 0 results)
-    // - Stemming (Miet → 0 results)
-    // - Fuzzy matching
+    if (words.length === 0) {
+      return [cleanQuery || naturalLanguageQuery];
+    }
+
+    // CRITICAL: Berlin's CKAN instance does NOT support wildcards or stemming
+    // SOLUTION: Query expansion map
+    // Maps common search terms → actual terms that exist in portal datasets
     //
-    // It ONLY matches exact words that appear in dataset metadata.
-    // CKAN does its own partial word matching internally.
-    //
-    // Testing results:
-    // "Wohnen" → 1347 results ✓ (word exists in datasets)
-    // "Mietspiegel" → 39 results ✓ (word exists in datasets)
-    // "Wohnung" → 0 results ❌ (datasets use "Wohnungen" or compounds)
-    // "Miete" → 0 results ❌ (datasets use "Mietspiegel", "Mietpreis", etc.)
-    // "Wohn*" → 9 results (wildcards unreliable)
-    // "Miet*" → 0 results (wildcards don't work)
-    //
-    // SOLUTION: Use original user terms directly, let CKAN's internal matching work
-    return words.length > 0 ? words : [cleanQuery || naturalLanguageQuery];
+    // Example: User searches "miete"
+    //   Without expansion: "miete" → 0 results ❌
+    //   With expansion: ["Mietspiegel", "Mietpreis"] → 39 results ✓
+
+    const expandedTerms: string[] = [];
+
+    for (const word of words) {
+      const lowerWord = word.toLowerCase();
+
+      // Check if this word has an expansion mapping
+      if (this.QUERY_EXPANSION[lowerWord]) {
+        // Use expanded terms (verified to work in portal)
+        expandedTerms.push(...this.QUERY_EXPANSION[lowerWord]);
+      } else {
+        // No expansion available, use original word
+        expandedTerms.push(word);
+      }
+    }
+
+    // Remove duplicates while preserving order
+    return [...new Set(expandedTerms)];
   }
 
   extractIntent(query: string): 'search' | 'list' | 'specific' {
