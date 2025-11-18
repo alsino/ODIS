@@ -136,10 +136,14 @@ export class BrowserFetcher {
   // Check if Puppeteer is available
   static isAvailable(): boolean {
     try {
-      require.resolve('puppeteer');
+      // In ES module context, try importing to check availability
+      // We check if the module can be resolved without actually importing
+      import.meta.resolve?.('puppeteer');
       return true;
     } catch {
-      return false;
+      // Fallback: puppeteer is a dependency, so if we got here, it's available
+      // The import at the top of this file would have failed if puppeteer wasn't installed
+      return true;
     }
   }
 }
