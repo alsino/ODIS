@@ -173,34 +173,55 @@ class BerlinOpenDataMCPServer {
               term.length >= 3 || /^\d{4}$/.test(term) // Include 4-digit years
             );
 
+            console.error('[Search] Key terms extracted:', keyTerms);
+
             // Get top 5 results from expansion search
             const topExpansionResults = Array.from(datasetMap.values())
               .sort((a, b) => b.matchCount - a.matchCount)
               .slice(0, 5)
               .map(item => item.dataset);
 
+            console.error('[Search] Top 5 expansion results:', topExpansionResults.map(d => d.name));
+
             // Check if any top result contains all key terms
             const hasExactMatch = topExpansionResults.some(dataset => {
               const searchableText = `${dataset.title} ${dataset.name} ${dataset.notes || ''}`.toLowerCase();
-              return keyTerms.every(term => searchableText.includes(term.toLowerCase()));
+              const matches = keyTerms.every(term => searchableText.includes(term.toLowerCase()));
+              if (matches) {
+                console.error('[Search] Found exact match in top 5:', dataset.name);
+              }
+              return matches;
             });
+
+            console.error('[Search] Has exact match in top 5?', hasExactMatch);
 
             // STEP 3: If no exact match found, run literal search and prepend
             if (!hasExactMatch && cleanedQuery.length > 0) {
+              console.error('[Search] Running literal fallback search for:', cleanedQuery);
               const literalResult = await this.api.searchDatasets({ query: cleanedQuery, limit: limit });
 
-              // Add literal results with high priority (mark as literal)
-              literalResult.results.forEach(dataset => {
+              console.error('[Search] Literal search returned', literalResult.results.length, 'results');
+
+              // Add literal results with position-based priority
+              // CKAN returns most relevant first, so position matters
+              literalResult.results.forEach((dataset, index) => {
+                // Position-based boost: 1st result gets highest (1000), 2nd gets 999, etc.
+                const positionBoost = 1000 - index;
+
                 if (datasetMap.has(dataset.id)) {
-                  // Boost existing dataset by marking as literal match
+                  // Override matchCount with position-based boost for literal matches
                   const item = datasetMap.get(dataset.id)!;
                   item.isLiteral = true;
-                  item.matchCount += 100; // High boost for literal matches
+                  item.matchCount = positionBoost; // Use position boost, ignore expansion matches
+                  console.error('[Search] Boosted existing dataset:', dataset.name, 'position:', index + 1, 'new count:', item.matchCount);
                 } else {
-                  // New dataset from literal search - add with high priority
-                  datasetMap.set(dataset.id, { dataset, matchCount: 100, isLiteral: true });
+                  // New dataset from literal search - add with position-based priority
+                  datasetMap.set(dataset.id, { dataset, matchCount: positionBoost, isLiteral: true });
+                  console.error('[Search] Added new literal match:', dataset.name, 'position:', index + 1, 'count:', positionBoost);
                 }
               });
+            } else {
+              console.error('[Search] Skipping literal search - exact match found in top 5');
             }
 
             // Sort by match count (literal matches boosted to top)
