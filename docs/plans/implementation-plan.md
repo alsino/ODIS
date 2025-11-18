@@ -994,23 +994,9 @@ Should compile without errors.
 
 **Step-by-step**:
 
-1. **Add tool definitions** in `ListToolsRequestSchema` handler:
+1. **Add tool definition** in `ListToolsRequestSchema` handler:
 
 ```typescript
-{
-  name: 'list_dataset_resources',
-  description: 'List all available resources (files) for a specific dataset. Shows formats and download URLs.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      dataset_id: {
-        type: 'string',
-        description: 'The dataset ID or name',
-      },
-    },
-    required: ['dataset_id'],
-  },
-},
 {
   name: 'fetch_dataset_data',
   description: 'Download and parse Berlin Open Data datasets. Returns 10 sample rows initially. For small datasets (≤500 rows), use full_data: true to get all data. Large datasets must be downloaded manually.',
@@ -1023,7 +1009,7 @@ Should compile without errors.
       },
       resource_id: {
         type: 'string',
-        description: 'Optional: specific resource ID. If not provided, uses first available resource.',
+        description: 'Optional: specific resource ID from get_dataset_details. If not provided, uses first available resource.',
       },
       full_data: {
         type: 'boolean',
@@ -1036,38 +1022,21 @@ Should compile without errors.
 },
 ```
 
-2. **Add tool handlers** in `CallToolRequestSchema` handler:
+2. **Enhance get_dataset_details** to include resource IDs in output:
 
 ```typescript
-case 'list_dataset_resources': {
-  const { dataset_id } = args as { dataset_id: string };
-  const resources = await this.api.listDatasetResources(dataset_id);
-
-  let responseText = `# Resources for Dataset\n\n`;
-
-  if (resources.length === 0) {
-    responseText += 'No downloadable resources found for this dataset.\n';
-  } else {
-    responseText += `Found ${resources.length} resource(s):\n\n`;
-
-    resources.forEach((resource, index) => {
-      responseText += `## ${index + 1}. ${resource.name}\n`;
-      responseText += `**ID**: ${resource.id}\n`;
-      responseText += `**Format**: ${resource.format}\n`;
-      if (resource.description) {
-        responseText += `**Description**: ${resource.description}\n`;
-      }
-      responseText += `**URL**: ${resource.url}\n\n`;
-    });
-
-    responseText += `💡 Use \`fetch_dataset_data\` with the dataset ID to download and analyze the data.\n`;
+dataset.resources.forEach((resource, index) => {
+  details += `### ${index + 1}. ${resource.name || 'Unnamed Resource'}\n`;
+  if (resource.id) {
+    details += `**Resource ID**: ${resource.id}\n`;  // ADD THIS
   }
+  // ... rest of resource info
+});
+```
 
-  return {
-    content: [{ type: 'text', text: responseText }],
-  };
-}
+3. **Add tool handler** in `CallToolRequestSchema` handler:
 
+```typescript
 case 'fetch_dataset_data': {
   const { dataset_id, resource_id, full_data = false } = args as {
     dataset_id: string;
@@ -1097,7 +1066,7 @@ case 'fetch_dataset_data': {
       return {
         content: [{
           type: 'text',
-          text: `❌ Resource "${resource_id}" not found. Use \`list_dataset_resources\` to see available resources.`,
+          text: `❌ Resource "${resource_id}" not found. Use \`get_dataset_details\` to see available resources and their IDs.`,
         }],
       };
     }
@@ -1458,8 +1427,7 @@ Replace with:
 4. **get_dataset_details**: Get detailed information about a specific dataset
 
 **Data Fetching & Analysis:**
-5. **list_dataset_resources**: Show all available files for a dataset
-6. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
+5. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
 ```
 
 3. **Add a new Examples section** after the Tools section:
@@ -1626,7 +1594,7 @@ search_berlin_datasets("air quality luftqualität")
 
 ```
 ❌ Bad: fetch_dataset_data without knowing the format
-✅ Good: list_dataset_resources → choose appropriate resource → fetch
+✅ Good: get_dataset_details → choose appropriate resource → fetch
 ```
 
 ### 3. Use Smart Sampling for Large Datasets
@@ -1762,7 +1730,7 @@ All notable changes to the Berlin Open Data MCP Server.
 - Enhanced pagination support
 
 ### Added - Phase 2: Data Fetching & Sampling
-- `list_dataset_resources` tool to view available files
+- Enhanced `get_dataset_details` to include resource IDs
 - `fetch_dataset_data` tool to download and parse data
 - DataFetcher module for downloading CSV/JSON resources with papaparse
 - DataSampler module for smart sampling and statistics

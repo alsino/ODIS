@@ -122,29 +122,9 @@ Get details for the first bicycle dataset you found
 
 ## Test Suite 3: Data Fetching & Analysis
 
-### Test 3.1: List Dataset Resources
-**Tool**: `list_dataset_resources`
+**Note**: Resource IDs are now included in `get_dataset_details` output (see Test 2.2).
 
-**Test Query**:
-```
-What files are available for [dataset ID from previous search]?
-```
-
-**Expected Behavior**:
-- Lists all resources for the dataset
-- Shows format for each (CSV, JSON, XLSX, etc.)
-- Displays file sizes if available
-- Provides download URLs
-
-**Success Criteria**:
-- [ ] All resources listed
-- [ ] Formats clearly shown
-- [ ] URLs present
-- [ ] No errors
-
----
-
-### Test 3.2: Fetch Small Dataset (CSV)
+### Test 3.1: Fetch Small Dataset (CSV)
 **Tool**: `fetch_dataset_data`
 
 **Test Query**:
@@ -173,7 +153,7 @@ Fetch the full data from that dataset
 
 ---
 
-### Test 3.3: Fetch Large Dataset (CSV)
+### Test 3.2: Fetch Large Dataset (CSV)
 **Tool**: `fetch_dataset_data`
 
 **Test Query**:
@@ -204,7 +184,7 @@ Fetch the full data from that large dataset
 
 ---
 
-### Test 3.4: Fetch Excel File
+### Test 3.3: Fetch Excel File
 **Tool**: `fetch_dataset_data`
 
 **Test Query**:
@@ -226,7 +206,7 @@ Find a dataset with XLSX format and fetch it
 
 ---
 
-### Test 3.5: Browser Automation (statistik-berlin-brandenburg.de)
+### Test 3.4: Browser Automation (statistik-berlin-brandenburg.de)
 **Tool**: `fetch_dataset_data` (with browser fallback)
 
 **Test Query**:
@@ -548,10 +528,17 @@ After restart, test:
 ## Testing Session 2 - 2025-11-18
 
 ### Changes Made Before Testing
+
+**Tool Removal #1** (Commit: f86d0d7):
 - **Removed 2 tools**: `suggest_datasets` and `discover_data_topics`
   - Reason: Pure duplication (suggest_datasets) and low value (discover_data_topics returned 4,525 technical tags)
-  - Commit: f86d0d7
   - Result: 6 focused tools instead of 8
+
+**Tool Removal #2** (In Progress):
+- **Removed 1 tool**: `list_dataset_resources`
+  - Reason: Redundant with `get_dataset_details` after adding resource IDs
+  - **Enhanced**: `get_dataset_details` now includes resource IDs in output
+  - Result: 5 focused tools instead of 6
 
 ### Tests Completed
 
@@ -579,11 +566,24 @@ After restart, test:
 - German "Verkehr und öffentliche Verkehrsmittel" → 132 results
 - **Conclusion**: Query expansion working excellently (only 2% difference)
 
+✅ **Test 2.2: Get Dataset Details**
+- Returned complete metadata (ID, org, last updated, description, tags)
+- All 3 resources listed with formats (WFS, PDF)
+- URLs present and well-structured
+- License, author, maintainer information included
+
+### Tool Streamlining During Testing
+- Identified `list_dataset_resources` as redundant with `get_dataset_details`
+- Added resource IDs to `get_dataset_details` output
+- Removed `list_dataset_resources` tool
+- Updated all documentation
+
 ### Next Steps
-- Continue with Test 2.2: Get Dataset Details
+- Rebuild and test with 5 tools
+- Continue with Test 3.1: Fetch Small Dataset
 - Complete remaining test suites
 
 ---
 
 **Testing Status**: In Progress - Session 2
-**Last Updated**: 2025-11-18 (6 tools, streamlined interface)
+**Last Updated**: 2025-11-18 (5 tools after streamlining, resource IDs added to get_dataset_details)

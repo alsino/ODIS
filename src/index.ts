@@ -108,20 +108,6 @@ class BerlinOpenDataMCPServer {
           },
         },
         {
-          name: 'list_dataset_resources',
-          description: 'List all available resources (files) for a specific dataset. Shows formats and download URLs.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              dataset_id: {
-                type: 'string',
-                description: 'The dataset ID or name',
-              },
-            },
-            required: ['dataset_id'],
-          },
-        },
-        {
           name: 'fetch_dataset_data',
           description: 'Download and parse Berlin Open Data datasets. Returns 10 sample rows initially. For small datasets (≤500 rows), use full_data: true to get all data. Large datasets must be downloaded manually.',
           inputSchema: {
@@ -287,6 +273,9 @@ class BerlinOpenDataMCPServer {
 
               dataset.resources.forEach((resource, index) => {
                 details += `### ${index + 1}. ${resource.name || 'Unnamed Resource'}\n`;
+                if (resource.id) {
+                  details += `**Resource ID**: ${resource.id}\n`;
+                }
                 if (resource.format) {
                   details += `**Format**: ${resource.format}\n`;
                 }
@@ -299,7 +288,7 @@ class BerlinOpenDataMCPServer {
                 details += '\n';
               });
 
-              details += `💡 **How to use**: You can download these resources directly from the URLs above.\n`;
+              details += `💡 **How to use**: You can download these resources directly from the URLs above, or use \`fetch_dataset_data\` with the Resource ID to download and analyze the data.\n`;
             } else {
               details += 'No downloadable resources are available for this dataset.\n';
             }
@@ -367,35 +356,6 @@ class BerlinOpenDataMCPServer {
             };
           }
 
-          case 'list_dataset_resources': {
-            const { dataset_id } = args as { dataset_id: string };
-            const resources = await this.api.listDatasetResources(dataset_id);
-
-            let responseText = `# Resources for Dataset\n\n`;
-
-            if (resources.length === 0) {
-              responseText += 'No downloadable resources found for this dataset.\n';
-            } else {
-              responseText += `Found ${resources.length} resource(s):\n\n`;
-
-              resources.forEach((resource, index) => {
-                responseText += `## ${index + 1}. ${resource.name}\n`;
-                responseText += `**ID**: ${resource.id}\n`;
-                responseText += `**Format**: ${resource.format}\n`;
-                if (resource.description) {
-                  responseText += `**Description**: ${resource.description}\n`;
-                }
-                responseText += `**URL**: ${resource.url}\n\n`;
-              });
-
-              responseText += `💡 Use \`fetch_dataset_data\` with the dataset ID to download and analyze the data.\n`;
-            }
-
-            return {
-              content: [{ type: 'text', text: responseText }],
-            };
-          }
-
           case 'fetch_dataset_data': {
             const { dataset_id, resource_id, full_data = false } = args as {
               dataset_id: string;
@@ -425,7 +385,7 @@ class BerlinOpenDataMCPServer {
                 return {
                   content: [{
                     type: 'text',
-                    text: `❌ Resource "${resource_id}" not found. Use \`list_dataset_resources\` to see available resources.`,
+                    text: `❌ Resource "${resource_id}" not found. Use \`get_dataset_details\` to see available resources and their IDs.`,
                   }],
                 };
               }

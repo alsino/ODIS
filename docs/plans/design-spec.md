@@ -75,8 +75,9 @@ The system should handle both exploratory ("What data exists about traffic?") an
 - Use case: "Find datasets about bicycles"
 
 **`get_dataset_details`**
-- Full metadata for specific dataset
+- Full metadata for specific dataset including resource IDs for downloading
 - Parameters: dataset_id (required)
+- Returns: Description, tags, license, author, maintainer, and all resources with IDs
 - Use case: "Tell me more about dataset xyz"
 
 #### Category 3: Data Fetching & Processing (new)
@@ -86,14 +87,9 @@ The system should handle both exploratory ("What data exists about traffic?") an
 - Returns: Minimal preview (first 10 rows) + basic column info (names and types only)
 - Parameters:
   - dataset_id (required)
-  - resource_id (optional - picks first if not specified)
+  - resource_id (optional - picks first if not specified, get from get_dataset_details)
   - full_data flag (default: false) - returns all data for small datasets (≤500 rows), refuses for large datasets
 - Use case: "Get me the bicycle parking data"
-
-**`list_dataset_resources`**
-- Show all available files/resources for a dataset with format info
-- Parameters: dataset_id (required)
-- Use case: "What files are available for this dataset?"
 
 #### Category 4: Analysis Support (future - add as patterns emerge)
 
@@ -311,13 +307,14 @@ Each tool call returns information that helps Claude decide the next step. The t
    - Sample first N rows
    - Generate column statistics
    - Return formatted summary
-3. Add `fetch_dataset_data` and `list_dataset_resources` tools
+3. Add `fetch_dataset_data` tool and enhance `get_dataset_details` with resource IDs
 4. Test with various dataset formats from the portal
 
 **Deliverables**:
 - DataFetcher module with CSV/JSON support
 - DataSampler module with statistics generation
-- 2 new MCP tools
+- 1 new MCP tool (`fetch_dataset_data`)
+- Enhanced `get_dataset_details` to include resource IDs
 - Tests with real datasets
 
 ### Phase 3: Testing & Refinement
