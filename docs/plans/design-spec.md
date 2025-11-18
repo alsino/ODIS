@@ -79,16 +79,6 @@ The system should handle both exploratory ("What data exists about traffic?") an
 - Parameters: dataset_id (required)
 - Use case: "Tell me more about dataset xyz"
 
-**`suggest_datasets`**
-- Intelligent suggestions based on research interest
-- Parameters: interest (required), limit (default: 10)
-- Use case: "I'm researching urban mobility, what datasets would help?"
-
-**`discover_data_topics`**
-- Explore available categories and tags (existing)
-- Parameters: focus (optional), limit (default: 50)
-- Use case: "What topics are available?"
-
 #### Category 3: Data Fetching & Processing (new)
 
 **`fetch_dataset_data`**

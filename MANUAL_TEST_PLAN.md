@@ -114,50 +114,6 @@ Get details for the first bicycle dataset you found
 
 ---
 
-### Test 2.3: Discover Topics
-**Tool**: `discover_data_topics`
-
-**Test Query**:
-```
-What topics and categories are available in the portal?
-```
-
-**Expected Behavior**:
-- Shows popular categories
-- Lists relevant tags
-- Groups by themes
-- Suggests how to explore further
-
-**Success Criteria**:
-- [ ] Categories displayed
-- [ ] Reasonable grouping
-- [ ] Actionable information
-- [ ] No errors
-
----
-
-### Test 2.4: Get Suggestions
-**Tool**: `suggest_datasets`
-
-**Test Query**:
-```
-I'm researching urban mobility and sustainability. What datasets would be most relevant?
-```
-
-**Expected Behavior**:
-- Provides curated dataset suggestions
-- Explains why each is relevant
-- Prioritizes by usefulness
-- Suggests follow-up actions
-
-**Success Criteria**:
-- [ ] Relevant suggestions provided
-- [ ] Good reasoning shown
-- [ ] Datasets match research interest
-- [ ] Multiple suggestions given
-
----
-
 ## Test Suite 3: Data Fetching & Analysis
 
 ### Test 3.1: List Dataset Resources

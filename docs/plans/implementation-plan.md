@@ -513,7 +513,6 @@ case 'get_portal_stats': {
 
   responseText += '\n💡 **Next steps**:\n';
   responseText += '- Use `list_all_datasets` to browse all datasets\n';
-  responseText += '- Use `discover_data_topics` to explore categories\n';
   responseText += '- Use `search_berlin_datasets` to find specific topics\n';
 
   return {
@@ -1457,12 +1456,10 @@ Replace with:
 **Dataset Discovery:**
 3. **search_berlin_datasets**: Search datasets using natural language
 4. **get_dataset_details**: Get detailed information about a specific dataset
-5. **discover_data_topics**: Explore available categories and tags
-6. **suggest_datasets**: Get intelligent suggestions based on research interests
 
 **Data Fetching & Analysis:**
-7. **list_dataset_resources**: Show all available files for a dataset
-8. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
+5. **list_dataset_resources**: Show all available files for a dataset
+6. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
 ```
 
 3. **Add a new Examples section** after the Tools section:
@@ -1622,7 +1619,7 @@ search_berlin_datasets("air quality luftqualität")
 
 ```
 ❌ Bad: Immediately fetching data without knowing what's available
-✅ Good: get_portal_stats → discover_data_topics → search → fetch
+✅ Good: get_portal_stats → search → fetch
 ```
 
 ### 2. Check Resources Before Fetching
@@ -1646,7 +1643,6 @@ search_berlin_datasets("air quality luftqualität")
 ### Pattern 1: Data Discovery
 ```
 get_portal_stats
-→ discover_data_topics (optional, for browsing)
 → search_berlin_datasets
 → get_dataset_details
 ```
@@ -1689,7 +1685,7 @@ get_portal_stats
 ### "No results found"
 - Try German keywords (e.g., "Verkehr" vs "traffic")
 - Use broader search terms
-- Browse categories with `discover_data_topics`
+- Try `list_all_datasets` to browse the catalog
 
 ---
 

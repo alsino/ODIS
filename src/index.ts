@@ -81,43 +81,6 @@ class BerlinOpenDataMCPServer {
           },
         },
         {
-          name: 'discover_data_topics',
-          description: 'Explore what types of data are available in Berlin. Shows popular categories, tags, and data themes.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              focus: {
-                type: 'string',
-                description: 'Optional focus area (e.g., "transportation", "environment", "demographics")',
-              },
-              limit: {
-                type: 'number',
-                description: 'Maximum number of items to return (default: 50)',
-                default: 50,
-              },
-            },
-          },
-        },
-        {
-          name: 'suggest_datasets',
-          description: 'Get intelligent dataset suggestions based on your interests or research needs',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              interest: {
-                type: 'string',
-                description: 'What you are interested in or researching (e.g., "sustainable transport", "urban planning")',
-              },
-              limit: {
-                type: 'number',
-                description: 'Maximum number of suggestions (default: 10)',
-                default: 10,
-              },
-            },
-            required: ['interest'],
-          },
-        },
-        {
           name: 'get_portal_stats',
           description: 'Get overview statistics about the Berlin Open Data Portal (total datasets, organizations, categories)',
           inputSchema: {
@@ -232,7 +195,6 @@ class BerlinOpenDataMCPServer {
               responseText += "I couldn't find any datasets matching your query. Try:\n";
               responseText += "- Using different keywords\n";
               responseText += "- Searching in German (e.g., 'Verkehr' instead of 'traffic')\n";
-              responseText += "- Using discover_data_topics to explore available categories\n";
             } else {
               responseText += `Found ${totalUnique} relevant dataset(s)`;
               if (searchTerms.length > 1) {
@@ -277,7 +239,6 @@ class BerlinOpenDataMCPServer {
 
               responseText += `\n💡 **Next steps**:\n`;
               responseText += `- Use \`get_dataset_details\` with any dataset ID to get full details\n`;
-              responseText += `- Use \`suggest_datasets\` to find related datasets\n`;
             }
 
             return {
@@ -367,87 +328,6 @@ class BerlinOpenDataMCPServer {
             };
           }
 
-          case 'discover_data_topics': {
-            const { focus, limit = 50 } = args as { focus?: string; limit?: number };
-            const [tags, organizations] = await Promise.all([
-              this.api.listTags(limit),
-              this.api.listOrganizations(),
-            ]);
-
-            let topicsText = '# Berlin Open Data: Available Topics\n\n';
-
-            if (focus) {
-              const focusKeywords = focus.toLowerCase().split(' ');
-              const relevantTags = tags.filter(t =>
-                focusKeywords.some(keyword => t.name.toLowerCase().includes(keyword))
-              );
-
-              if (relevantTags.length > 0) {
-                topicsText += `**${focus.charAt(0).toUpperCase() + focus.slice(1)}-related topics:**\n`;
-                topicsText += relevantTags.map(t => `- ${t.name}`).join('\n');
-                topicsText += '\n\n';
-              }
-            }
-
-            topicsText += `**Popular data categories (${Math.min(tags.length, 20)} of ${tags.length}):**\n`;
-            topicsText += tags.slice(0, 20).map(t => `- ${t.name}`).join('\n');
-            topicsText += `\n\n**Data providers (${organizations.length} organizations):**\n`;
-            topicsText += organizations.slice(0, 10).map(o => `- ${o.title}`).join('\n');
-
-            if (organizations.length > 10) {
-              topicsText += `\n... and ${organizations.length - 10} more organizations`;
-            }
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: topicsText,
-                },
-              ],
-            };
-          }
-
-          case 'suggest_datasets': {
-            const { interest, limit = 10 } = args as { interest: string; limit?: number };
-
-            // Use the interest as a search query to find relevant datasets
-            const searchParams = this.queryProcessor.processQuery(interest);
-            searchParams.limit = limit;
-            const results = await this.api.searchDatasets(searchParams);
-
-            let suggestionsText = `# Dataset Suggestions for "${interest}"\n\n`;
-
-            if (results.results.length > 0) {
-              suggestionsText += `Found ${results.results.length} relevant datasets:\n\n`;
-              results.results.forEach((dataset, index) => {
-                suggestionsText += `**${index + 1}. ${dataset.title}**\n`;
-                suggestionsText += `   - ID: ${dataset.name}\n`;
-                suggestionsText += `   - Organization: ${dataset.organization?.title || 'Unknown'}\n`;
-                if (dataset.notes && dataset.notes.length > 0) {
-                  const shortDesc = dataset.notes.length > 150
-                    ? dataset.notes.substring(0, 150) + '...'
-                    : dataset.notes;
-                  suggestionsText += `   - Description: ${shortDesc}\n`;
-                }
-                suggestionsText += `\n`;
-              });
-
-              suggestionsText += `\n*Tip: Use get_dataset_details with the dataset ID to learn more about any of these datasets.*`;
-            } else {
-              suggestionsText += 'No datasets found for this interest. Try different keywords or explore available topics with discover_data_topics.';
-            }
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: suggestionsText,
-                },
-              ],
-            };
-          }
-
           case 'get_portal_stats': {
             const stats = await this.api.getPortalStats();
 
@@ -458,7 +338,6 @@ class BerlinOpenDataMCPServer {
 
             responseText += '\n💡 **Next steps**:\n';
             responseText += '- Use `list_all_datasets` to browse all datasets\n';
-            responseText += '- Use `discover_data_topics` to explore categories\n';
             responseText += '- Use `search_berlin_datasets` to find specific topics\n';
 
             return {

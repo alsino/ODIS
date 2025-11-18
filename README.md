@@ -44,12 +44,10 @@ The server implements the MCP protocol and provides these tools:
 **Dataset Discovery:**
 3. **search_berlin_datasets**: Search datasets using natural language
 4. **get_dataset_details**: Get detailed information about a specific dataset
-5. **discover_data_topics**: Explore available categories and tags
-6. **suggest_datasets**: Get intelligent suggestions based on research interests
 
 **Data Fetching & Analysis:**
-7. **list_dataset_resources**: Show all available files for a dataset
-8. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
+5. **list_dataset_resources**: Show all available files for a dataset
+6. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
 
 ### Example Queries
 
