@@ -333,7 +333,10 @@ export class DataFetcher {
       }
 
       // Parse the data using existing methods
-      return this.parseData(result.data, format, 'text/csv');
+      console.error('[DataFetcher] Parsing downloaded CSV data...');
+      const parsed = this.parseData(result.data, format, 'text/csv');
+      console.error('[DataFetcher] CSV parsing complete');
+      return parsed;
     } catch (error) {
       console.error('Browser fetch error:', error);
       return null;

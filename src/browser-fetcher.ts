@@ -11,10 +11,11 @@ export interface BrowserFetchResult {
 
 export class BrowserFetcher {
   private browser: Browser | null = null;
-  private readonly DOWNLOAD_TIMEOUT = 60000; // 60 seconds for browser operations
+  private readonly DOWNLOAD_TIMEOUT = 30000; // 30 seconds for browser operations (reduced from 60)
 
   async initialize(): Promise<void> {
     if (!this.browser) {
+      console.error('[Browser] Launching headless browser...');
       this.browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -26,6 +27,7 @@ export class BrowserFetcher {
     let page: Page | null = null;
 
     try {
+      console.error('[Browser] Starting browser automation for:', url);
       await this.initialize();
 
       page = await this.browser!.newPage();
@@ -44,21 +46,24 @@ export class BrowserFetcher {
           if (responseUrl.includes('download.statistik-berlin-brandenburg.de') &&
               responseUrl.endsWith('.csv') &&
               response.status() === 200) {
+            console.error('[Browser] Found download URL:', responseUrl);
             resolved = true;
             resolve(responseUrl);
           }
         });
 
-        // Timeout after waiting period
+        // Timeout after waiting period (reduced from 20s to 15s)
         setTimeout(() => {
           if (!resolved) {
+            console.error('[Browser] Timeout waiting for download URL');
             resolved = true;
             resolve(null);
           }
-        }, 20000);
+        }, 15000);
       });
 
       // Navigate to the URL to trigger the SPA
+      console.error('[Browser] Navigating to page...');
       try {
         await page.goto(url, {
           waitUntil: 'networkidle2',
@@ -66,17 +71,20 @@ export class BrowserFetcher {
         });
       } catch (navError) {
         // Navigation might timeout, but we may have captured the download URL
+        console.error('[Browser] Navigation timeout (expected for SPAs)');
       }
 
       // Wait for download URL to be captured
       downloadUrl = await downloadUrlPromise;
 
+      console.error('[Browser] Closing page...');
       await page.close();
       page = null;
 
       // If we found the download URL, fetch it directly
       if (downloadUrl) {
         try {
+          console.error('[Browser] Downloading CSV from captured URL...');
           const fetch = (await import('node-fetch')).default;
           const response = await fetch(downloadUrl);
 
@@ -85,6 +93,7 @@ export class BrowserFetcher {
           }
 
           const text = await response.text();
+          console.error(`[Browser] Downloaded ${text.length} characters`);
 
           // Verify it's CSV data
           const trimmed = text.trim();
@@ -92,12 +101,14 @@ export class BrowserFetcher {
               !trimmed.toLowerCase().startsWith('<html') &&
               trimmed.length > 0 &&
               (trimmed.includes(',') || trimmed.includes(';'))) {
+            console.error('[Browser] CSV download successful');
             return {
               success: true,
               data: text,
             };
           }
         } catch (fetchError) {
+          console.error('[Browser] Download failed:', fetchError);
           return {
             success: false,
             error: `Found download URL but could not fetch: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`,
@@ -105,6 +116,7 @@ export class BrowserFetcher {
         }
       }
 
+      console.error('[Browser] Failed to capture download URL');
       return {
         success: false,
         error: 'Could not capture download URL from JavaScript-rendered page.',
