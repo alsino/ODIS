@@ -38,14 +38,17 @@ The server implements the MCP protocol and provides these tools:
 ### Tools
 
 **Portal Metadata & Navigation:**
+
 1. **get_portal_stats**: Get overview statistics (total datasets, organizations, categories)
 2. **list_all_datasets**: Browse all datasets with pagination
 
 **Dataset Discovery:**
+
 3. **search_berlin_datasets**: Search datasets using natural language
 4. **get_dataset_details**: Get detailed information about a specific dataset (includes resource IDs for downloading)
 
 **Data Fetching & Analysis:**
+
 5. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
 
 ### Example Queries
