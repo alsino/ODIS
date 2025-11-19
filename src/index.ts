@@ -202,11 +202,25 @@ class BerlinOpenDataMCPServer {
 
               console.error('[Search] Literal search returned', literalResult.results.length, 'results');
 
+              // Detect if query contains a year (4 digits)
+              const yearMatch = cleanedQuery.match(/\b(\d{4})\b/);
+              const queryYear = yearMatch ? yearMatch[1] : null;
+              console.error('[Search] Query contains year:', queryYear);
+
               // Add literal results with position-based priority
               // CKAN returns most relevant first, so position matters
               literalResult.results.forEach((dataset, index) => {
                 // Position-based boost: 1st result gets highest (1000), 2nd gets 999, etc.
-                const positionBoost = 1000 - index;
+                let positionBoost = 1000 - index;
+
+                // EXTRA BOOST: If query contains a year and dataset has that year in title/name
+                if (queryYear) {
+                  const datasetText = `${dataset.title} ${dataset.name}`.toLowerCase();
+                  if (datasetText.includes(queryYear)) {
+                    positionBoost += 1000; // Massive boost for year match
+                    console.error('[Search] Year match bonus for:', dataset.name);
+                  }
+                }
 
                 if (datasetMap.has(dataset.id)) {
                   // Override matchCount with position-based boost for literal matches
