@@ -622,6 +622,17 @@ After restart, test:
 - **Impact**: Unlocked 182 datasets (6.9% of portal) that require browser automation
 - **Status**: ✅ FIXED and verified working
 
+**Bug #4: Search ranking issues with specific queries** (Commits: 095618d, 75add42, 0d7d687)
+- **Symptom**: Query "Einwohner LOR Planungsräume 2024" returned 2024 dataset at position #9, with older datasets ranked higher
+- **Root Cause**: Expansion search gave equal weight to all matches; older datasets with more expansion matches ranked higher than newer datasets with fewer matches
+- **Fix**: Implemented three-tier search strategy:
+  1. **Expansion search** - Broad term expansion for high recall
+  2. **Smart fallback detection** - Check if top 5 contain all key terms
+  3. **Literal search + year boosting** - If no exact match, run CKAN literal search with position-based scoring (1000, 999, 998...) and +1000 bonus for datasets containing query year
+- **Impact**: Specific queries (especially with years) now return exact matches at #1
+- **Example**: "Einwohner 2024" now returns 2024 dataset first (not 2020/2019)
+- **Status**: ✅ FIXED and verified working
+
 ### Test Results Summary
 
 **Completed**: 11 of 16 tests
@@ -634,9 +645,14 @@ After restart, test:
 
 **Critical Achievements**:
 1. All 5 MCP tools working correctly
-2. Query expansion working excellently (English/German equivalence)
-3. Data fetching working for CSV, Excel, and browser-automated downloads
-4. Found and fixed critical browser automation bug
+2. Three-tier search system providing optimal relevance:
+   - Expansion search for broad coverage
+   - Smart fallback for precision
+   - Year-based boosting for temporal relevance
+3. Query expansion working excellently (English/German equivalence: 2% difference)
+4. Data fetching working for CSV, Excel, and browser-automated downloads
+5. Found and fixed critical browser automation bug
+6. Search ranking now prioritizes exact matches and temporal relevance
 
 **Tool Evolution**:
 - Started: 8 tools (Phase 1 design)
@@ -647,6 +663,7 @@ After restart, test:
 ---
 
 **Testing Status**: Completed - Session 2
-**Last Updated**: 2025-11-18
+**Last Updated**: 2025-11-18 (including search ranking improvements)
 **Tests Passed**: 11/16 core tests (all critical functionality verified)
-**Bugs Fixed**: 3 total (2 in Session 1, 1 in Session 2)
+**Bugs Fixed**: 4 total (2 in Session 1, 2 in Session 2)
+**Search Improvements**: Three-tier strategy with year-based boosting for optimal relevance

@@ -141,7 +141,28 @@ class BerlinOpenDataMCPServer {
           case 'search_berlin_datasets': {
             const { query, limit = 20 } = args as { query: string; limit?: number };
 
-            // STEP 1: Run expansion search (existing logic)
+            // Three-Tier Search Strategy for Optimal Relevance
+            // ================================================
+            //
+            // TIER 1 - Expansion Search (Broad Coverage):
+            //   Expands query terms using portal metadata mappings
+            //   Example: "Einwohner" → ["Einwohnerinnen", "Kleinräumige einwohnerzahl", ...]
+            //   Purpose: Find all potentially relevant datasets (high recall)
+            //
+            // TIER 2 - Smart Fallback Detection:
+            //   Checks if top 5 expansion results contain ALL user's key terms
+            //   Purpose: Detect when expansion search found exact matches
+            //
+            // TIER 3 - Literal Search + Year Boosting (Precision):
+            //   If no exact match in top 5, runs literal CKAN search
+            //   Applies position-based scoring (1st=1000, 2nd=999, etc.)
+            //   Adds +1000 bonus for datasets containing query year
+            //   Purpose: Ensure specific queries return exact matches first
+            //   Example: "Einwohner 2024" → 2024 dataset ranked #1 (not 2020/2019)
+            //
+            // Result: Best of both worlds - broad coverage + precise ranking
+
+            // STEP 1: Expansion Search
             const searchTerms = this.queryProcessor.extractSearchTerms(query);
 
             // Search for each term separately and combine results
@@ -166,76 +187,60 @@ class BerlinOpenDataMCPServer {
               });
             });
 
-            // STEP 2: Check if top results contain user's exact key terms
-            // Extract key terms from original query (years, significant words)
+            // STEP 2: Smart Fallback - Check if expansion search found exact matches
+            // Extract key terms from original query (including years and significant words)
             const cleanedQuery = query.replace(/\b(find|search|show|me|list|all|datasets?|about|in|for|the|and)\b/gi, '').trim();
             const keyTerms = cleanedQuery.split(/\s+/).filter(term =>
               term.length >= 3 || /^\d{4}$/.test(term) // Include 4-digit years
             );
 
-            console.error('[Search] Key terms extracted:', keyTerms);
-
-            // Get top 5 results from expansion search
+            // Get top 5 results from expansion search to check quality
             const topExpansionResults = Array.from(datasetMap.values())
               .sort((a, b) => b.matchCount - a.matchCount)
               .slice(0, 5)
               .map(item => item.dataset);
 
-            console.error('[Search] Top 5 expansion results:', topExpansionResults.map(d => d.name));
-
-            // Check if any top result contains all key terms
+            // Check if any top result contains ALL user's key terms (exact match)
             const hasExactMatch = topExpansionResults.some(dataset => {
               const searchableText = `${dataset.title} ${dataset.name} ${dataset.notes || ''}`.toLowerCase();
-              const matches = keyTerms.every(term => searchableText.includes(term.toLowerCase()));
-              if (matches) {
-                console.error('[Search] Found exact match in top 5:', dataset.name);
-              }
-              return matches;
+              return keyTerms.every(term => searchableText.includes(term.toLowerCase()));
             });
 
-            console.error('[Search] Has exact match in top 5?', hasExactMatch);
-
-            // STEP 3: If no exact match found, run literal search and prepend
+            // STEP 3: Literal Search Fallback (if expansion didn't find exact match)
+            // This ensures specific queries like "Einwohner 2024" return the 2024 dataset first,
+            // even if expansion search ranked older datasets higher due to more term matches
             if (!hasExactMatch && cleanedQuery.length > 0) {
-              console.error('[Search] Running literal fallback search for:', cleanedQuery);
               const literalResult = await this.api.searchDatasets({ query: cleanedQuery, limit: limit });
 
-              console.error('[Search] Literal search returned', literalResult.results.length, 'results');
-
-              // Detect if query contains a year (4 digits)
+              // Detect if query contains a year for temporal relevance boosting
               const yearMatch = cleanedQuery.match(/\b(\d{4})\b/);
               const queryYear = yearMatch ? yearMatch[1] : null;
-              console.error('[Search] Query contains year:', queryYear);
 
-              // Add literal results with position-based priority
-              // CKAN returns most relevant first, so position matters
+              // Apply position-based scoring to literal results
+              // CKAN returns most relevant first, so we trust its ranking
               literalResult.results.forEach((dataset, index) => {
-                // Position-based boost: 1st result gets highest (1000), 2nd gets 999, etc.
+                // Base score: Position-based (1000, 999, 998, ...)
                 let positionBoost = 1000 - index;
 
-                // EXTRA BOOST: If query contains a year and dataset has that year in title/name
+                // Temporal relevance boost: Add +1000 if dataset contains query year
+                // Example: "Einwohner 2024" → datasets with "2024" get massive boost
                 if (queryYear) {
                   const datasetText = `${dataset.title} ${dataset.name}`.toLowerCase();
                   if (datasetText.includes(queryYear)) {
-                    positionBoost += 1000; // Massive boost for year match
-                    console.error('[Search] Year match bonus for:', dataset.name);
+                    positionBoost += 1000;
                   }
                 }
 
                 if (datasetMap.has(dataset.id)) {
-                  // Override matchCount with position-based boost for literal matches
+                  // Dataset already found by expansion - override score with literal match score
                   const item = datasetMap.get(dataset.id)!;
                   item.isLiteral = true;
-                  item.matchCount = positionBoost; // Use position boost, ignore expansion matches
-                  console.error('[Search] Boosted existing dataset:', dataset.name, 'position:', index + 1, 'new count:', item.matchCount);
+                  item.matchCount = positionBoost;
                 } else {
-                  // New dataset from literal search - add with position-based priority
+                  // New dataset from literal search - add with high priority
                   datasetMap.set(dataset.id, { dataset, matchCount: positionBoost, isLiteral: true });
-                  console.error('[Search] Added new literal match:', dataset.name, 'position:', index + 1, 'count:', positionBoost);
                 }
               });
-            } else {
-              console.error('[Search] Skipping literal search - exact match found in top 5');
             }
 
             // Sort by match count (literal matches boosted to top)

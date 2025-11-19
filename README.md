@@ -93,11 +93,24 @@ The server communicates via stdio following the MCP protocol.
 
 ## Query Processing
 
-The server includes intelligent query processing that:
-- Maps natural language to relevant search terms
-- Identifies categories (traffic, environment, housing, etc.)
-- Handles German and English keywords
-- Provides structured search results with summaries
+The server uses a **three-tier search strategy** for optimal relevance:
+
+1. **Expansion Search** - Broad coverage using portal metadata mappings
+   - Expands query terms (e.g., "Einwohner" → "Einwohnerinnen", "Kleinräumige einwohnerzahl")
+   - Handles German and English keywords
+   - Ensures high recall (finds all relevant datasets)
+
+2. **Smart Fallback Detection** - Precision checking
+   - Checks if top 5 expansion results contain all user's key terms
+   - Triggers literal search if exact match not found
+
+3. **Literal Search + Year Boosting** - Exact match prioritization
+   - Runs CKAN literal search when needed
+   - Position-based scoring (1st result = highest score)
+   - **+1000 bonus for datasets containing query year** (e.g., "2024")
+   - Ensures specific queries return exact matches first
+
+**Result**: Broad coverage with precise ranking. Queries like "Einwohner 2024" return the 2024 dataset first, not older alternatives.
 
 ## API Integration
 
