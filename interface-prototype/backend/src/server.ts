@@ -1,6 +1,7 @@
 // ABOUTME: Main Express server with WebSocket support
 // ABOUTME: Initializes MCP client, Claude client, and serves frontend
 
+import 'dotenv/config';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';

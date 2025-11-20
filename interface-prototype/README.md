@@ -16,9 +16,11 @@ Web-based chat interface for the Berlin Open Data MCP server.
 npm install
 ```
 
-2. Set your Claude API key:
+2. Configure your Claude API key:
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+cd backend
+cp .env.example .env
+# Edit .env and add your API key
 ```
 
 3. Build the Berlin MCP server (if not already built):
