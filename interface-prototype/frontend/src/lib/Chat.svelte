@@ -92,11 +92,17 @@
     }
   }
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive (only if user is near bottom)
   let chatContainer;
   $: if (messages.length && chatContainer) {
     setTimeout(() => {
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      // Check if user is near the bottom (within 100px)
+      const isNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100;
+
+      // Only auto-scroll if user hasn't manually scrolled up
+      if (isNearBottom) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
     }, 0);
   }
 </script>
