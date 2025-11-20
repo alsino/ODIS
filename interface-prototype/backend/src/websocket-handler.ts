@@ -76,7 +76,7 @@ export class WebSocketHandler {
       // Get available tools from MCP
       const tools = this.mcpClient.getTools();
 
-      // Send to Claude with tool execution callback
+      // Send to Claude with tool execution callback and streaming
       const result = await this.claudeClient.sendMessageWithTools(
         content,
         history,
@@ -84,16 +84,24 @@ export class WebSocketHandler {
         async (toolName: string, toolArgs: any) => {
           // Execute tool via MCP client
           return await this.mcpClient.callTool(toolName, toolArgs);
+        },
+        (chunk: string) => {
+          // Stream text chunks to frontend as they arrive
+          this.sendMessage(ws, {
+            type: 'assistant_message_chunk',
+            content: chunk,
+            done: false
+          });
         }
       );
 
       // Update conversation history with complete message chain (includes tool calls and results)
       this.conversationHistory.set(ws, result.messages);
 
-      // Send response to frontend
+      // Send final done message
       this.sendMessage(ws, {
         type: 'assistant_message',
-        content: result.response,
+        content: '',
         done: true
       });
 

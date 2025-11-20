@@ -96,15 +96,69 @@ Key guidelines:
   }
 
   /**
+   * Send a message with streaming support
+   * Streams text deltas via callback as they arrive
+   */
+  async sendMessageStreaming(
+    messages: ConversationMessage[],
+    tools: Tool[],
+    streamCallback: (chunk: string) => void
+  ): Promise<ClaudeResponse> {
+    try {
+      const claudeTools = this.transformToolsForClaude(tools);
+
+      const stream = await this.client.messages.stream({
+        model: this.model,
+        max_tokens: 4096,
+        system: this.systemPrompt,
+        messages: messages as any,
+        tools: claudeTools
+      });
+
+      let fullText = '';
+      const toolCalls: ToolCall[] = [];
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta') {
+          if (event.delta.type === 'text_delta') {
+            const chunk = event.delta.text;
+            fullText += chunk;
+            streamCallback(chunk);
+          }
+        } else if (event.type === 'content_block_start') {
+          if (event.content_block.type === 'tool_use') {
+            toolCalls.push({
+              id: event.content_block.id,
+              name: event.content_block.name,
+              input: event.content_block.input
+            });
+          }
+        }
+      }
+
+      return {
+        content: fullText,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        stopReason: 'end_turn'
+      };
+    } catch (error) {
+      console.error('Claude API streaming error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Send message and handle tool calling loop
    * Executes tools via provided callback and continues until final response
    * Returns both the final response text and the complete updated message history
+   * Streams text chunks via streamCallback as they arrive
    */
   async sendMessageWithTools(
     userMessage: string,
     conversationHistory: ConversationMessage[],
     tools: Tool[],
-    executeToolCallback: (name: string, args: any) => Promise<any>
+    executeToolCallback: (name: string, args: any) => Promise<any>,
+    streamCallback?: (chunk: string) => void
   ): Promise<{ response: string; messages: ConversationMessage[] }> {
     // Add user message to history
     const messages: ConversationMessage[] = [
@@ -118,6 +172,74 @@ Key guidelines:
 
     while (iterations < maxIterations) {
       iterations++;
+
+      // Use streaming for final response (when no tool calls expected)
+      const isLikelyFinalResponse = iterations > 1;
+
+      if (isLikelyFinalResponse && streamCallback) {
+        // Try streaming - if we get tool calls, we'll handle them normally
+        const response = await this.sendMessageStreaming(messages, tools, streamCallback);
+
+        if (!response.toolCalls || response.toolCalls.length === 0) {
+          finalResponse = response.content;
+          break;
+        }
+
+        // If we got tool calls despite streaming, continue with tool execution
+        // Add assistant's tool use to history
+        const toolUseContent = response.toolCalls.map(tc => ({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.name,
+          input: tc.input
+        }));
+
+        messages.push({
+          role: 'assistant',
+          content: toolUseContent
+        });
+
+        // Execute tools and collect results
+        const toolResults = [];
+        for (const toolCall of response.toolCalls) {
+          try {
+            const result = await executeToolCallback(toolCall.name, toolCall.input);
+
+            let resultText = '';
+            if (result.content && Array.isArray(result.content)) {
+              resultText = result.content
+                .filter((item: any) => item.type === 'text')
+                .map((item: any) => item.text)
+                .join('\n');
+            } else if (typeof result === 'string') {
+              resultText = result;
+            } else {
+              resultText = JSON.stringify(result);
+            }
+
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
+              content: resultText
+            });
+          } catch (error) {
+            console.error(`Tool execution error for ${toolCall.name}:`, error);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
+              content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+              is_error: true
+            });
+          }
+        }
+
+        messages.push({
+          role: 'user',
+          content: toolResults
+        });
+
+        continue;
+      }
 
       const response = await this.sendMessage(messages, tools);
 

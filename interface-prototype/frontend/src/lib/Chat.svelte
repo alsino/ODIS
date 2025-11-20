@@ -63,9 +63,29 @@
 
     if (data.type === 'status') {
       console.log('Status:', data.status);
+    } else if (data.type === 'assistant_message_chunk') {
+      // Streaming chunk - append to last assistant message or create new one
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
+        // Append to existing streaming message
+        messages[messages.length - 1].content += data.content;
+        messages = messages; // Trigger reactivity
+      } else {
+        // Start new streaming message
+        messages = [...messages, { role: 'assistant', content: data.content, streaming: true }];
+      }
     } else if (data.type === 'assistant_message') {
-      messages = [...messages, { role: 'assistant', content: data.content }];
-      waiting = false;
+      if (data.done) {
+        // Mark last message as complete
+        if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+          delete messages[messages.length - 1].streaming;
+          messages = messages; // Trigger reactivity
+        }
+        waiting = false;
+      } else {
+        // Non-streaming message (fallback)
+        messages = [...messages, { role: 'assistant', content: data.content }];
+        waiting = false;
+      }
     } else if (data.type === 'error') {
       error = data.error;
       waiting = false;

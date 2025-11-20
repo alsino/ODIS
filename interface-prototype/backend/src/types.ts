@@ -15,6 +15,12 @@ export interface AssistantMessage {
   done: boolean;
 }
 
+export interface AssistantMessageChunk {
+  type: 'assistant_message_chunk';
+  content: string;
+  done: boolean;
+}
+
 export interface ErrorMessage {
   type: 'error';
   error: string;
@@ -25,7 +31,7 @@ export interface StatusMessage {
   status: string;
 }
 
-export type WebSocketMessage = UserMessage | AssistantMessage | ErrorMessage | StatusMessage;
+export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ErrorMessage | StatusMessage;
 
 // Conversation history
 export interface ConversationMessage {
