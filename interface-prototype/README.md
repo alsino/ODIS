@@ -33,19 +33,19 @@ cd ../interface-prototype
 
 ## Development
 
-Start backend and frontend in separate terminals:
+Start both backend and frontend with a single command:
 
-**Terminal 1 - Backend:**
 ```bash
-npm run dev:backend
-```
-
-**Terminal 2 - Frontend:**
-```bash
-npm run dev:frontend
+npm run dev
 ```
 
 Open browser to http://localhost:5173
+
+**Alternative:** Run backend and frontend separately:
+```bash
+npm run dev:backend  # Terminal 1
+npm run dev:frontend # Terminal 2
+```
 
 ## Production Build
 

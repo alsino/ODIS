@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "install-all": "npm install",
+    "dev": "concurrently --names \"backend,frontend\" --prefix-colors \"blue,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
@@ -16,7 +17,15 @@
     "build": "npm run build:backend && npm run build:frontend",
     "test": "npm test --workspaces"
   },
-  "keywords": ["mcp", "berlin", "open-data", "chat"],
+  "keywords": [
+    "mcp",
+    "berlin",
+    "open-data",
+    "chat"
+  ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }
