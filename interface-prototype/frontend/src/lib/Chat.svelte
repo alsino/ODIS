@@ -2,7 +2,7 @@
 <!-- ABOUTME: Manages WebSocket connection and displays message history -->
 
 <script>
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import Message from './Message.svelte';
   import Input from './Input.svelte';
 
@@ -70,8 +70,15 @@
         messages[messages.length - 1].content += data.content;
         messages = messages; // Trigger reactivity
       } else {
-        // Start new streaming message
-        messages = [...messages, { role: 'assistant', content: data.content, streaming: true }];
+        // Start new streaming message - NOW trigger the scroll
+        const messageId = `msg-${Date.now()}`;
+        messages = [...messages, { role: 'assistant', content: data.content, streaming: true, id: messageId }];
+
+        // Trigger scroll to user question now that response is starting
+        if (pendingScrollId) {
+          scrollToId = pendingScrollId;
+          pendingScrollId = null;
+        }
       }
     } else if (data.type === 'assistant_message') {
       if (data.done) {
@@ -83,7 +90,8 @@
         waiting = false;
       } else {
         // Non-streaming message (fallback)
-        messages = [...messages, { role: 'assistant', content: data.content }];
+        const messageId = `msg-${Date.now()}`;
+        messages = [...messages, { role: 'assistant', content: data.content, id: messageId }];
         waiting = false;
       }
     } else if (data.type === 'error') {
@@ -92,11 +100,19 @@
     }
   }
 
+  let chatContainer;
+  let scrollToId = null;
+  let pendingScrollId = null;
+
   function handleSend(event) {
     const userMessage = event.detail.message;
 
-    // Add user message to UI
-    messages = [...messages, { role: 'user', content: userMessage }];
+    // Add user message to UI with unique ID
+    const messageId = `msg-${Date.now()}`;
+    messages = [...messages, { role: 'user', content: userMessage, id: messageId }];
+
+    // Don't scroll immediately - wait for response to start
+    pendingScrollId = messageId;
     waiting = true;
     error = null;
 
@@ -112,62 +128,83 @@
     }
   }
 
-  // Auto-scroll to bottom when new messages arrive (only if user is near bottom)
-  let chatContainer;
-  $: if (messages.length && chatContainer) {
-    setTimeout(() => {
-      // Check if user is near the bottom (within 100px)
-      const isNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100;
+  // Svelte action to scroll to a message
+  function scrollToMessage(node) {
+    if (!chatContainer) return;
 
-      // Only auto-scroll if user hasn't manually scrolled up
-      if (isNearBottom) {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+    console.log('scrollToMessage action called');
+
+    // Use a slight delay to ensure layout is complete
+    const timeoutId = setTimeout(() => {
+      console.log('Attempting scroll...');
+      const containerRect = chatContainer.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+
+      // Calculate target scroll position
+      const targetScroll = chatContainer.scrollTop + (nodeRect.top - containerRect.top) - 50;
+
+      console.log('Current scrollTop:', chatContainer.scrollTop);
+      console.log('Target scrollTop:', targetScroll);
+
+      chatContainer.scrollTop = targetScroll;
+
+      console.log('After scroll, scrollTop:', chatContainer.scrollTop);
+
+      scrollToId = null; // Clear the scroll target
+    }, 50);
+
+    return {
+      destroy() {
+        clearTimeout(timeoutId);
       }
-    }, 0);
+    };
   }
+
 </script>
 
 <div class="chat-container">
-  <div class="chat-header">
-    <h1>Berlin Open Data Chat</h1>
-    <div class="status">
-      {#if connected}
-        <span class="status-dot connected"></span>
-        Connected
-      {:else}
-        <span class="status-dot disconnected"></span>
-        Disconnected
+  <div class="messages-wrapper" bind:this={chatContainer}>
+    <div class="messages">
+      {#if messages.length === 0}
+        <div class="welcome">
+          <h2>Berlin Open Data</h2>
+          <p>Ask questions about Berlin's open datasets</p>
+          {#if !connected}
+            <div class="connection-status">
+              <span class="status-dot"></span>
+              Connecting to server...
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#each messages as message, i (message.id || i)}
+        {#if message.id && message.id === scrollToId}
+          <div use:scrollToMessage>
+            <Message role={message.role} content={message.content} />
+          </div>
+        {:else}
+          <Message role={message.role} content={message.content} />
+        {/if}
+      {/each}
+
+      {#if waiting}
+        <div class="loading">
+          <span class="loading-dot"></span>
+          <span class="loading-dot"></span>
+          <span class="loading-dot"></span>
+        </div>
+      {/if}
+
+      {#if error}
+        <div class="error-message">{error}</div>
       {/if}
     </div>
   </div>
 
-  <div class="messages" bind:this={chatContainer}>
-    {#if messages.length === 0}
-      <div class="welcome">
-        <h2>Welcome to Berlin Open Data Chat</h2>
-        <p>Ask questions about Berlin's open datasets. For example:</p>
-        <ul>
-          <li>"Find datasets about traffic"</li>
-          <li>"What data is available about housing?"</li>
-          <li>"Show me air quality datasets"</li>
-        </ul>
-      </div>
-    {/if}
-
-    {#each messages as message}
-      <Message role={message.role} content={message.content} />
-    {/each}
-
-    {#if waiting}
-      <div class="loading">Assistant is thinking...</div>
-    {/if}
-
-    {#if error}
-      <div class="error-message">Error: {error}</div>
-    {/if}
+  <div class="input-wrapper">
+    <Input on:send={handleSend} disabled={!connected || waiting} />
   </div>
-
-  <Input on:send={handleSend} disabled={!connected || waiting} />
 </div>
 
 <style>
@@ -175,93 +212,124 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    max-width: 1200px;
-    margin: 0 auto;
-    background: white;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    background: #f9f9f9;
   }
 
-  .chat-header {
+  .messages-wrapper {
+    flex: 1;
+    overflow-y: auto;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    border-bottom: 2px solid #1976d2;
-    background: #1976d2;
-    color: white;
-  }
-
-  .chat-header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-  }
-
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-  }
-
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-
-  .status-dot.connected {
-    background-color: #4caf50;
-  }
-
-  .status-dot.disconnected {
-    background-color: #f44336;
+    justify-content: center;
   }
 
   .messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.5rem;
+    width: 100%;
+    max-width: 48rem;
+    padding: 2rem 1rem;
     display: flex;
     flex-direction: column;
+    gap: 1.5rem;
   }
 
   .welcome {
     text-align: center;
-    color: #666;
+    color: #6b7280;
     margin: auto;
-    max-width: 600px;
+    padding: 2rem;
   }
 
   .welcome h2 {
-    color: #333;
-    margin-bottom: 1rem;
+    color: #1a1a1a;
+    font-size: 2rem;
+    font-weight: 400;
+    margin-bottom: 0.5rem;
   }
 
-  .welcome ul {
-    text-align: left;
-    display: inline-block;
+  .welcome p {
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
   }
 
-  .welcome li {
-    margin: 0.5rem 0;
-    font-style: italic;
+  .connection-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #9ca3af;
+    margin-top: 1rem;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #fbbf24;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 
   .loading {
-    padding: 0.75rem 1rem;
-    background-color: #f5f5f5;
-    border-radius: 8px;
-    color: #666;
-    font-style: italic;
-    max-width: 80%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: #6b7280;
+  }
+
+  .loading-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #9ca3af;
+    animation: loading 1.4s ease-in-out infinite;
+  }
+
+  .loading-dot:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .loading-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .loading-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes loading {
+    0%, 80%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    40% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
   }
 
   .error-message {
-    padding: 0.75rem 1rem;
-    background-color: #ffebee;
-    border: 1px solid #f44336;
-    border-radius: 8px;
-    color: #c62828;
-    max-width: 80%;
+    padding: 1rem;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 0.5rem;
+    color: #991b1b;
+    font-size: 0.875rem;
+  }
+
+  .input-wrapper {
+    display: flex;
+    justify-content: center;
+    border-top: 1px solid #e5e7eb;
+    background: white;
+    padding: 1rem;
   }
 </style>

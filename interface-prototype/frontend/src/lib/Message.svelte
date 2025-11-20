@@ -1,4 +1,4 @@
-<!-- ABOUTME: Individual message bubble component -->
+<!-- ABOUTME: Individual message component -->
 <!-- ABOUTME: Displays user or assistant messages with appropriate styling -->
 
 <script>
@@ -12,7 +12,6 @@
 </script>
 
 <div class="message {role}">
-  <div class="message-role">{role === 'user' ? 'You' : 'Assistant'}</div>
   <div class="message-content">
     {@html htmlContent}
   </div>
@@ -20,90 +19,89 @@
 
 <style>
   .message {
-    margin-bottom: 1rem;
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    max-width: 80%;
+    width: 100%;
+    padding: 1.5rem 1rem;
   }
 
   .message.user {
-    background-color: #e3f2fd;
-    margin-left: auto;
-    text-align: right;
+    background-color: white;
   }
 
   .message.assistant {
-    background-color: #f5f5f5;
-    margin-right: auto;
-  }
-
-  .message-role {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #666;
-    margin-bottom: 0.25rem;
-    text-transform: uppercase;
+    background-color: #f9f9f9;
   }
 
   .message-content {
     word-wrap: break-word;
-    line-height: 1.6;
+    line-height: 1.7;
+    font-size: 1rem;
+    color: #1a1a1a;
   }
 
   /* Markdown styling */
   .message-content :global(h1) {
-    font-size: 1.75rem;
-    font-weight: 700;
+    font-size: 1.875rem;
+    font-weight: 600;
     margin-top: 1.5rem;
-    margin-bottom: 0.75rem;
-    color: #1976d2;
-    border-bottom: 2px solid #e0e0e0;
-    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    color: #111827;
+    line-height: 1.3;
   }
 
   .message-content :global(h2) {
     font-size: 1.5rem;
-    font-weight: 700;
-    margin-top: 1.25rem;
-    margin-bottom: 0.5rem;
-    color: #1976d2;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: #111827;
+    line-height: 1.3;
   }
 
   .message-content :global(h3) {
     font-size: 1.25rem;
     font-weight: 600;
-    margin-top: 1rem;
+    margin-top: 1.25rem;
     margin-bottom: 0.5rem;
-    color: #424242;
+    color: #374151;
+    line-height: 1.4;
   }
 
   .message-content :global(h4) {
-    font-size: 1.1rem;
+    font-size: 1.125rem;
     font-weight: 600;
-    margin-top: 0.75rem;
+    margin-top: 1rem;
     margin-bottom: 0.5rem;
-    color: #424242;
+    color: #374151;
+    line-height: 1.4;
   }
 
   .message-content :global(p) {
     margin-top: 0;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .message-content :global(p:last-child) {
+    margin-bottom: 0;
   }
 
   .message-content :global(ul),
   .message-content :global(ol) {
-    margin-top: 0.5rem;
-    margin-bottom: 0.75rem;
-    padding-left: 1.5rem;
+    margin-top: 0.75rem;
+    margin-bottom: 1rem;
+    padding-left: 1.75rem;
   }
 
   .message-content :global(li) {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .message-content :global(li > p) {
+    margin-bottom: 0.5rem;
   }
 
   .message-content :global(strong) {
     font-weight: 600;
-    color: #212121;
+    color: #111827;
   }
 
   .message-content :global(em) {
@@ -111,31 +109,33 @@
   }
 
   .message-content :global(code) {
-    background-color: rgba(0, 0, 0, 0.05);
-    padding: 0.125rem 0.25rem;
-    border-radius: 3px;
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.9em;
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Courier New', monospace;
+    font-size: 0.875em;
+    color: #1f2937;
   }
 
   .message-content :global(pre) {
-    background-color: #2d2d2d;
-    color: #f8f8f2;
+    background-color: #1f2937;
+    color: #f9fafb;
     padding: 1rem;
-    border-radius: 6px;
+    border-radius: 0.5rem;
     overflow-x: auto;
-    margin-top: 0.5rem;
-    margin-bottom: 0.75rem;
+    margin-top: 0.75rem;
+    margin-bottom: 1rem;
   }
 
   .message-content :global(pre code) {
     background-color: transparent;
     padding: 0;
     color: inherit;
+    font-size: 0.875rem;
   }
 
   .message-content :global(a) {
-    color: #1976d2;
+    color: #2563eb;
     text-decoration: none;
   }
 
@@ -144,35 +144,40 @@
   }
 
   .message-content :global(blockquote) {
-    border-left: 4px solid #e0e0e0;
+    border-left: 3px solid #d1d5db;
     padding-left: 1rem;
     margin-left: 0;
     margin-right: 0;
-    color: #666;
-    font-style: italic;
+    color: #6b7280;
   }
 
   .message-content :global(hr) {
     border: none;
-    border-top: 1px solid #e0e0e0;
-    margin: 1rem 0;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5rem 0;
   }
 
   .message-content :global(table) {
     border-collapse: collapse;
     width: 100%;
-    margin: 0.75rem 0;
+    margin: 1rem 0;
+    font-size: 0.875rem;
   }
 
   .message-content :global(th),
   .message-content :global(td) {
-    border: 1px solid #e0e0e0;
-    padding: 0.5rem;
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem 0.75rem;
     text-align: left;
   }
 
   .message-content :global(th) {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: #f9fafb;
     font-weight: 600;
+    color: #374151;
+  }
+
+  .message-content :global(td) {
+    color: #1f2937;
   }
 </style>
