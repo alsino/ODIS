@@ -77,7 +77,7 @@ export class WebSocketHandler {
       const tools = this.mcpClient.getTools();
 
       // Send to Claude with tool execution callback
-      const response = await this.claudeClient.sendMessageWithTools(
+      const result = await this.claudeClient.sendMessageWithTools(
         content,
         history,
         tools,
@@ -87,15 +87,13 @@ export class WebSocketHandler {
         }
       );
 
-      // Update conversation history
-      history.push({ role: 'user', content });
-      history.push({ role: 'assistant', content: response });
-      this.conversationHistory.set(ws, history);
+      // Update conversation history with complete message chain (includes tool calls and results)
+      this.conversationHistory.set(ws, result.messages);
 
       // Send response to frontend
       this.sendMessage(ws, {
         type: 'assistant_message',
-        content: response,
+        content: result.response,
         done: true
       });
 

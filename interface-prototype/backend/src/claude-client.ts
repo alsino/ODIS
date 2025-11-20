@@ -20,6 +20,18 @@ export interface ToolCall {
 export class ClaudeClient {
   private client: Anthropic;
   private model = 'claude-sonnet-4-5-20250929';
+  private systemPrompt = `You are an assistant helping users discover and analyze open data from Berlin's Open Data Portal.
+
+You have access to tools that connect to the Berlin Open Data Portal. ALWAYS use these tools when users ask about datasets or data. NEVER make up or fabricate datasets, data, or analysis.
+
+Key guidelines:
+- Use search_berlin_datasets to find relevant datasets
+- Use get_dataset_details to get more information about a specific dataset
+- Use fetch_dataset_data to retrieve actual data from datasets
+- Only provide analysis based on data you've actually retrieved via tools
+- If you cannot find a dataset, tell the user clearly - do not invent one
+- When you fetch data, work with what's actually returned - do not extrapolate or fabricate additional data
+- Be helpful and conversational, but always grounded in the real data from the portal`;
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });
@@ -52,6 +64,7 @@ export class ClaudeClient {
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: 4096,
+        system: this.systemPrompt,
         messages: messages as any,
         tools: claudeTools
       });
@@ -85,13 +98,14 @@ export class ClaudeClient {
   /**
    * Send message and handle tool calling loop
    * Executes tools via provided callback and continues until final response
+   * Returns both the final response text and the complete updated message history
    */
   async sendMessageWithTools(
     userMessage: string,
     conversationHistory: ConversationMessage[],
     tools: Tool[],
     executeToolCallback: (name: string, args: any) => Promise<any>
-  ): Promise<string> {
+  ): Promise<{ response: string; messages: ConversationMessage[] }> {
     // Add user message to history
     const messages: ConversationMessage[] = [
       ...conversationHistory,
@@ -176,6 +190,9 @@ export class ClaudeClient {
       finalResponse = finalResponse || 'I apologize, but I encountered too many tool calls. Please try rephrasing your question.';
     }
 
-    return finalResponse;
+    return {
+      response: finalResponse,
+      messages: messages
+    };
   }
 }
