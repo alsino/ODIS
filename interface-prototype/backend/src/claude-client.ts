@@ -19,10 +19,22 @@ export interface ToolCall {
 
 export class ClaudeClient {
   private client: Anthropic;
-  private model = 'claude-3-5-sonnet-20241022';
+  private model = 'claude-sonnet-4-5-20250929';
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });
+  }
+
+  /**
+   * Transform MCP tools to Claude API format
+   * MCP uses inputSchema, Claude uses input_schema
+   */
+  private transformToolsForClaude(mcpTools: Tool[]): any[] {
+    return mcpTools.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.inputSchema
+    }));
   }
 
   /**
@@ -34,11 +46,14 @@ export class ClaudeClient {
     tools: Tool[]
   ): Promise<ClaudeResponse> {
     try {
+      // Transform MCP tools to Claude API format
+      const claudeTools = this.transformToolsForClaude(tools);
+
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: 4096,
         messages: messages as any,
-        tools: tools as any
+        tools: claudeTools
       });
 
       // Extract text content
