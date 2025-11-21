@@ -83,9 +83,9 @@ The interface shows real-time tool execution to give users visibility into the a
 
 **2. Tool activity** (during and after execution)
 - **During**: Active tools display with spinner: "Searching Berlin Datasets..."
-- **After**: Collapsible badge: "🔧 Used X tools"
-- Click to expand and see tool details:
-  - Tool name and status
+- **After**: Individual collapsible badge for each tool: "🔧 Search Berlin Datasets"
+- Multiple tools appear as stacked badges, showing the tool chain
+- Click each badge to expand and see tool details:
   - Input arguments (JSON)
   - Results or error messages
 

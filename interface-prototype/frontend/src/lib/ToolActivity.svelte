@@ -66,26 +66,23 @@
 
 {#if completedCalls.length > 0}
   <div class="completed-tools">
-    <button
-      class="tools-badge"
-      on:click={() => toggleExpanded('all')}
-    >
-      <span class="badge-icon">🔧</span>
-      <span class="badge-text">Used {completedCalls.length} tool{completedCalls.length > 1 ? 's' : ''}</span>
-      <span class="expand-icon">{expandedCalls.has('all') ? '▼' : '▶'}</span>
-    </button>
+    {#each completedCalls as call}
+      <div class="tool-item">
+        <button
+          class="tools-badge"
+          class:error={call.isError}
+          on:click={() => toggleExpanded(call.id)}
+        >
+          <span class="badge-icon">🔧</span>
+          <span class="badge-text">{formatToolName(call.name)}</span>
+          {#if call.isError}
+            <span class="error-indicator">⚠</span>
+          {/if}
+          <span class="expand-icon">{expandedCalls.has(call.id) ? '▼' : '▶'}</span>
+        </button>
 
-    {#if expandedCalls.has('all')}
-      <div class="tool-details">
-        {#each completedCalls as call}
-          <div class="tool-call" class:error={call.isError}>
-            <div class="tool-header">
-              <span class="tool-name">{formatToolName(call.name)}</span>
-              {#if call.isError}
-                <span class="error-badge">Error</span>
-              {/if}
-            </div>
-
+        {#if expandedCalls.has(call.id)}
+          <div class="tool-details">
             {#if call.args}
               <details class="tool-section" open>
                 <summary>Anfrage</summary>
@@ -100,9 +97,9 @@
               </details>
             {/if}
           </div>
-        {/each}
+        {/if}
       </div>
-    {/if}
+    {/each}
   </div>
 {/if}
 
@@ -142,6 +139,16 @@
 
   .completed-tools {
     margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    background: #f9f9f9;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .tool-item {
+    display: flex;
+    flex-direction: column;
   }
 
   .tools-badge {
@@ -156,11 +163,22 @@
     color: #6b7280;
     cursor: pointer;
     transition: all 0.2s;
+    width: fit-content;
   }
 
   .tools-badge:hover {
     background: #f3f4f6;
     border-color: #d1d5db;
+  }
+
+  .tools-badge.error {
+    border-color: #fecaca;
+    background: #fef2f2;
+  }
+
+  .error-indicator {
+    color: #dc2626;
+    font-size: 1rem;
   }
 
   .badge-icon {
@@ -177,48 +195,14 @@
   }
 
   .tool-details {
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     padding: 0.75rem;
-    background: #f9fafb;
+    background: white;
     border: 1px solid #e5e7eb;
     border-radius: 0.5rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-  }
-
-  .tool-call {
-    padding: 0.75rem;
-    background: white;
-    border-radius: 0.375rem;
-    border: 1px solid #e5e7eb;
-  }
-
-  .tool-call.error {
-    border-color: #fecaca;
-    background: #fef2f2;
-  }
-
-  .tool-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .tool-name {
-    font-weight: 600;
-    color: #1f2937;
-    font-size: 0.875rem;
-  }
-
-  .error-badge {
-    padding: 0.125rem 0.5rem;
-    background: #fee2e2;
-    color: #991b1b;
-    font-size: 0.75rem;
-    border-radius: 0.25rem;
-    font-weight: 500;
   }
 
   .tool-section {
