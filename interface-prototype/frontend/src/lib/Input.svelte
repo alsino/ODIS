@@ -6,7 +6,7 @@
 
   const dispatch = createEventDispatcher();
 
-  let inputValue = 'Gibt es Daten zu Berliner Kitas?';
+  let inputValue = '';
   let disabled = false;
   let textarea;
 
