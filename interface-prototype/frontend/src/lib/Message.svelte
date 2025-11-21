@@ -20,7 +20,7 @@
 <style>
   .message {
     width: 100%;
-    padding: 1.5rem 1rem;
+    padding: 1.2rem 1rem;
   }
 
   .message.user {
