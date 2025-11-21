@@ -31,7 +31,30 @@ export interface StatusMessage {
   status: string;
 }
 
-export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ErrorMessage | StatusMessage;
+/**
+ * Sent when a tool execution begins
+ * Allows frontend to display real-time spinner/status indicator
+ */
+export interface ToolCallStart {
+  type: 'tool_call_start';
+  toolCallId: string;  // Unique ID to track this specific tool call
+  toolName: string;    // Name of the MCP tool being executed
+  toolArgs: any;       // Arguments passed to the tool
+}
+
+/**
+ * Sent when a tool execution completes (successfully or with error)
+ * Frontend uses this to update the tool display with results
+ */
+export interface ToolCallComplete {
+  type: 'tool_call_complete';
+  toolCallId: string;  // Matches the ID from ToolCallStart
+  toolName: string;    // Name of the tool that completed
+  result: string;      // Result text or error message
+  isError?: boolean;   // True if tool execution failed
+}
+
+export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete;
 
 // Conversation history
 export interface ConversationMessage {

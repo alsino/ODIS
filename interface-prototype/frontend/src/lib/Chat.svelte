@@ -5,8 +5,12 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import Message from './Message.svelte';
   import Input from './Input.svelte';
+  import ToolActivity from './ToolActivity.svelte';
 
   let messages = [];
+  // currentToolCalls tracks tool activity for the in-progress assistant response
+  // Once the response is complete, these are attached to the assistant message
+  let currentToolCalls = [];
   let ws = null;
   let connected = false;
   let waiting = false;
@@ -63,6 +67,23 @@
 
     if (data.type === 'status') {
       console.log('Status:', data.status);
+    } else if (data.type === 'tool_call_start') {
+      // Tool execution started - add to currentToolCalls for real-time display
+      // The tool will show with a spinner in the ToolActivity component
+      currentToolCalls = [...currentToolCalls, {
+        id: data.toolCallId,
+        name: data.toolName,
+        args: data.toolArgs,
+        completed: false
+      }];
+    } else if (data.type === 'tool_call_complete') {
+      // Tool execution completed - update the tool call with results
+      // The ToolActivity component will update from spinner to completed badge
+      currentToolCalls = currentToolCalls.map(call =>
+        call.id === data.toolCallId
+          ? { ...call, completed: true, result: data.result, isError: data.isError }
+          : call
+      );
     } else if (data.type === 'assistant_message_chunk') {
       // Streaming chunk - append to last assistant message or create new one
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
@@ -72,7 +93,13 @@
       } else {
         // Start new streaming message - NOW trigger the scroll
         const messageId = `msg-${Date.now()}`;
-        messages = [...messages, { role: 'assistant', content: data.content, streaming: true, id: messageId }];
+        messages = [...messages, {
+          role: 'assistant',
+          content: data.content,
+          streaming: true,
+          id: messageId,
+          toolCalls: [...currentToolCalls]
+        }];
 
         // Trigger scroll to user question now that response is starting
         if (pendingScrollId) {
@@ -82,16 +109,24 @@
       }
     } else if (data.type === 'assistant_message') {
       if (data.done) {
-        // Mark last message as complete
+        // Mark last message as complete and attach final tool calls
         if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
           delete messages[messages.length - 1].streaming;
+          messages[messages.length - 1].toolCalls = [...currentToolCalls];
           messages = messages; // Trigger reactivity
         }
+        currentToolCalls = [];
         waiting = false;
       } else {
         // Non-streaming message (fallback)
         const messageId = `msg-${Date.now()}`;
-        messages = [...messages, { role: 'assistant', content: data.content, id: messageId }];
+        messages = [...messages, {
+          role: 'assistant',
+          content: data.content,
+          id: messageId,
+          toolCalls: [...currentToolCalls]
+        }];
+        currentToolCalls = [];
         waiting = false;
       }
     } else if (data.type === 'error') {
@@ -167,8 +202,8 @@
     <div class="messages">
       {#if messages.length === 0}
         <div class="welcome">
-          <h2>Berlin Open Data</h2>
-          <p>Ask questions about Berlin's open datasets</p>
+          <h2>Berlin Simple Open Data (Soda)</h2>
+          <p>Find and ask questions about Berlin's open datasets</p>
           {#if !connected}
             <div class="connection-status">
               <span class="status-dot"></span>
@@ -182,11 +217,21 @@
         {#if message.id && message.id === scrollToId}
           <div use:scrollToMessage>
             <Message role={message.role} content={message.content} />
+            {#if message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0}
+              <ToolActivity toolCalls={message.toolCalls} />
+            {/if}
           </div>
         {:else}
           <Message role={message.role} content={message.content} />
+          {#if message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0}
+            <ToolActivity toolCalls={message.toolCalls} />
+          {/if}
         {/if}
       {/each}
+
+      {#if currentToolCalls.length > 0}
+        <ToolActivity toolCalls={currentToolCalls} />
+      {/if}
 
       {#if waiting}
         <div class="loading">

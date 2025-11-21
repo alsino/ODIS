@@ -92,6 +92,27 @@ export class WebSocketHandler {
             content: chunk,
             done: false
           });
+        },
+        (activity) => {
+          // Forward tool activity to frontend for real-time display
+          // This allows the UI to show a spinner during execution and
+          // then display results in an expandable badge when complete
+          if (activity.type === 'start') {
+            this.sendMessage(ws, {
+              type: 'tool_call_start',
+              toolCallId: activity.toolCallId,
+              toolName: activity.toolName,
+              toolArgs: activity.toolArgs
+            });
+          } else {
+            this.sendMessage(ws, {
+              type: 'tool_call_complete',
+              toolCallId: activity.toolCallId,
+              toolName: activity.toolName,
+              result: activity.result || '',
+              isError: activity.isError
+            });
+          }
         }
       );
 

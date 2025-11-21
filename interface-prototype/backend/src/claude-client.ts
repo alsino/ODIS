@@ -151,14 +151,22 @@ Key guidelines:
    * Send message and handle tool calling loop
    * Executes tools via provided callback and continues until final response
    * Returns both the final response text and the complete updated message history
-   * Streams text chunks via streamCallback as they arrive
+   *
+   * @param userMessage - The user's message to send
+   * @param conversationHistory - Previous messages in the conversation
+   * @param tools - Available MCP tools
+   * @param executeToolCallback - Callback to execute a tool (called for each tool use)
+   * @param streamCallback - Optional callback for streaming text chunks as they arrive
+   * @param toolActivityCallback - Optional callback for tool execution events (start/complete)
+   *                                Enables real-time tool activity display in the UI
    */
   async sendMessageWithTools(
     userMessage: string,
     conversationHistory: ConversationMessage[],
     tools: Tool[],
     executeToolCallback: (name: string, args: any) => Promise<any>,
-    streamCallback?: (chunk: string) => void
+    streamCallback?: (chunk: string) => void,
+    toolActivityCallback?: (activity: { type: 'start' | 'complete', toolCallId: string, toolName: string, toolArgs?: any, result?: string, isError?: boolean }) => void
   ): Promise<{ response: string; messages: ConversationMessage[] }> {
     // Add user message to history
     const messages: ConversationMessage[] = [
@@ -203,6 +211,14 @@ Key guidelines:
         const toolResults = [];
         for (const toolCall of response.toolCalls) {
           try {
+            // Notify that tool execution is starting
+            toolActivityCallback?.({
+              type: 'start',
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              toolArgs: toolCall.input
+            });
+
             const result = await executeToolCallback(toolCall.name, toolCall.input);
 
             let resultText = '';
@@ -217,6 +233,14 @@ Key guidelines:
               resultText = JSON.stringify(result);
             }
 
+            // Notify that tool execution completed
+            toolActivityCallback?.({
+              type: 'complete',
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              result: resultText
+            });
+
             toolResults.push({
               type: 'tool_result',
               tool_use_id: toolCall.id,
@@ -224,10 +248,21 @@ Key guidelines:
             });
           } catch (error) {
             console.error(`Tool execution error for ${toolCall.name}:`, error);
+            const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+
+            // Notify that tool execution failed
+            toolActivityCallback?.({
+              type: 'complete',
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              result: errorMessage,
+              isError: true
+            });
+
             toolResults.push({
               type: 'tool_result',
               tool_use_id: toolCall.id,
-              content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+              content: errorMessage,
               is_error: true
             });
           }
@@ -269,6 +304,14 @@ Key guidelines:
       const toolResults = [];
       for (const toolCall of response.toolCalls) {
         try {
+          // Notify that tool execution is starting
+          toolActivityCallback?.({
+            type: 'start',
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            toolArgs: toolCall.input
+          });
+
           const result = await executeToolCallback(toolCall.name, toolCall.input);
 
           // Extract text from MCP result
@@ -284,6 +327,14 @@ Key guidelines:
             resultText = JSON.stringify(result);
           }
 
+          // Notify that tool execution completed
+          toolActivityCallback?.({
+            type: 'complete',
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            result: resultText
+          });
+
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolCall.id,
@@ -291,10 +342,21 @@ Key guidelines:
           });
         } catch (error) {
           console.error(`Tool execution error for ${toolCall.name}:`, error);
+          const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+
+          // Notify that tool execution failed
+          toolActivityCallback?.({
+            type: 'complete',
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            result: errorMessage,
+            isError: true
+          });
+
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolCall.id,
-            content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            content: errorMessage,
             is_error: true
           });
         }

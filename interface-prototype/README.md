@@ -66,11 +66,33 @@ npm start
 2. Frontend sends via WebSocket to backend
 3. Backend forwards to Claude API with available MCP tools
 4. Claude decides which tools to call
-5. Backend executes tools via Berlin MCP server
+5. Backend executes tools via Berlin MCP server and streams tool activity to frontend
 6. Backend sends results back to Claude
 7. Claude generates final response
 8. Backend streams response to frontend
-9. Frontend displays response in chat
+9. Frontend displays response in chat with tool activity indicators
+
+### Tool Activity Display
+
+The interface shows real-time tool execution to give users visibility into the assistant's work:
+
+**During execution:**
+- Active tools display with spinner: "Searching Berlin Datasets..."
+- Multiple tools can be shown simultaneously
+
+**After completion:**
+- Collapsible badge: "🔧 Used X tools"
+- Click to expand and see:
+  - Tool name and status
+  - Input arguments (JSON)
+  - Results or error messages
+
+**Implementation:**
+- Backend emits `tool_call_start` when tool execution begins
+- Backend emits `tool_call_complete` when tool finishes (with result or error)
+- Frontend tracks active tools and displays them in real-time
+- Tool calls are attached to the assistant message they belong to
+- See `/backend/src/types.ts` for WebSocket message types
 
 ## Testing
 
