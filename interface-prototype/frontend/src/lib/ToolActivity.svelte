@@ -87,15 +87,15 @@
             </div>
 
             {#if call.args}
-              <details class="tool-section">
-                <summary>Arguments</summary>
+              <details class="tool-section" open>
+                <summary>Anfrage</summary>
                 <pre class="tool-content">{JSON.stringify(call.args, null, 2)}</pre>
               </details>
             {/if}
 
             {#if call.result}
-              <details class="tool-section" open>
-                <summary>Result</summary>
+              <details class="tool-section">
+                <summary>Antwort</summary>
                 <div class="tool-content result">{call.result}</div>
               </details>
             {/if}
