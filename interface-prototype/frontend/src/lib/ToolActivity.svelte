@@ -75,7 +75,7 @@
       <span class="expand-icon">{expandedCalls.has('all') ? '▼' : '▶'}</span>
     </button>
 
-    {#if expandedCalls.has('all')}
+    <div class="tool-details-wrapper" class:expanded={expandedCalls.has('all')}>
       <div class="tool-details">
         {#each completedCalls as call}
           <div class="tool-call" class:error={call.isError}>
@@ -102,7 +102,7 @@
           </div>
         {/each}
       </div>
-    {/if}
+    </div>
   </div>
 {/if}
 
@@ -142,6 +142,8 @@
 
   .completed-tools {
     margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    background: #f9f9f9;
   }
 
   .tools-badge {
@@ -149,7 +151,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
-    background: #f9fafb;
+    background: white;
     border: 1px solid #e5e7eb;
     border-radius: 0.5rem;
     font-size: 0.875rem;
@@ -159,7 +161,7 @@
   }
 
   .tools-badge:hover {
-    background: #f3f4f6;
+    background: #f9fafb;
     border-color: #d1d5db;
   }
 
@@ -176,10 +178,22 @@
     margin-left: auto;
   }
 
+  .tool-details-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease-out;
+    overflow: hidden;
+  }
+
+  .tool-details-wrapper.expanded {
+    grid-template-rows: 1fr;
+  }
+
   .tool-details {
+    min-height: 0;
     margin-top: 0.75rem;
     padding: 0.75rem;
-    background: #f9fafb;
+    background: white;
     border: 1px solid #e5e7eb;
     border-radius: 0.5rem;
     display: flex;
