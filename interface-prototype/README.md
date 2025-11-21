@@ -74,24 +74,31 @@ npm start
 
 ### Tool Activity Display
 
-The interface shows real-time tool execution to give users visibility into the assistant's work:
+The interface shows real-time tool execution to give users visibility into the assistant's work. The display is structured in three parts:
 
-**During execution:**
-- Active tools display with spinner: "Searching Berlin Datasets..."
-- Multiple tools can be shown simultaneously
+**1. Intro text** (if provided by Claude)
+- Natural language explanation of what Claude is about to do
+- Example: "Let me search for traffic datasets..."
+- Streams immediately when Claude responds
 
-**After completion:**
-- Collapsible badge: "🔧 Used X tools"
-- Click to expand and see:
+**2. Tool activity** (during and after execution)
+- **During**: Active tools display with spinner: "Searching Berlin Datasets..."
+- **After**: Collapsible badge: "🔧 Used X tools"
+- Click to expand and see tool details:
   - Tool name and status
   - Input arguments (JSON)
   - Results or error messages
 
+**3. Final response**
+- Claude's response after analyzing tool results
+- Example: "I found 5 datasets about traffic in Berlin..."
+
 **Implementation:**
+- Backend extracts intro text from Claude's response (if present) and streams it immediately
 - Backend emits `tool_call_start` when tool execution begins
 - Backend emits `tool_call_complete` when tool finishes (with result or error)
-- Frontend tracks active tools and displays them in real-time
-- Tool calls are attached to the assistant message they belong to
+- Backend streams final response after tools complete
+- Frontend displays intro → tools → response in order
 - See `/backend/src/types.ts` for WebSocket message types
 
 ## Testing

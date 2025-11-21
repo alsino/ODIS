@@ -194,17 +194,31 @@ Key guidelines:
         }
 
         // If we got tool calls despite streaming, continue with tool execution
-        // Add assistant's tool use to history
-        const toolUseContent = response.toolCalls.map(tc => ({
-          type: 'tool_use',
-          id: tc.id,
-          name: tc.name,
-          input: tc.input
-        }));
+        // Note: intro text was already streamed by sendMessageStreaming
+        // Add assistant's response to history (both text and tool use)
+        const assistantContent: any[] = [];
+
+        // Include intro text if present
+        if (response.content && response.content.trim()) {
+          assistantContent.push({
+            type: 'text',
+            text: response.content
+          });
+        }
+
+        // Add tool use blocks
+        response.toolCalls.forEach(tc => {
+          assistantContent.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.name,
+            input: tc.input
+          });
+        });
 
         messages.push({
           role: 'assistant',
-          content: toolUseContent
+          content: assistantContent
         });
 
         // Execute tools and collect results
@@ -287,17 +301,36 @@ Key guidelines:
       // Execute tool calls
       console.log(`Claude requested ${response.toolCalls.length} tool calls`);
 
-      // Add assistant's tool use to history
-      const toolUseContent = response.toolCalls.map(tc => ({
-        type: 'tool_use',
-        id: tc.id,
-        name: tc.name,
-        input: tc.input
-      }));
+      // If Claude provided intro text along with tool calls, stream it immediately
+      // This shows the user what Claude is about to do (e.g., "Let me search for that...")
+      if (response.content && response.content.trim() && streamCallback) {
+        streamCallback(response.content);
+      }
+
+      // Add assistant's response to history (both text and tool use)
+      const assistantContent: any[] = [];
+
+      // Include intro text if present
+      if (response.content && response.content.trim()) {
+        assistantContent.push({
+          type: 'text',
+          text: response.content
+        });
+      }
+
+      // Add tool use blocks
+      response.toolCalls.forEach(tc => {
+        assistantContent.push({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.name,
+          input: tc.input
+        });
+      });
 
       messages.push({
         role: 'assistant',
-        content: toolUseContent
+        content: assistantContent
       });
 
       // Execute tools and collect results

@@ -9,8 +9,9 @@
 
   let messages = [];
   // currentToolCalls tracks tool activity for the in-progress assistant response
-  // Once the response is complete, these are attached to the assistant message
   let currentToolCalls = [];
+  // Track whether we're currently in a tool-calling phase
+  let inToolPhase = false;
   let ws = null;
   let connected = false;
   let waiting = false;
@@ -70,6 +71,7 @@
     } else if (data.type === 'tool_call_start') {
       // Tool execution started - add to currentToolCalls for real-time display
       // The tool will show with a spinner in the ToolActivity component
+      inToolPhase = true;
       currentToolCalls = [...currentToolCalls, {
         id: data.toolCallId,
         name: data.toolName,
@@ -85,21 +87,30 @@
           : call
       );
     } else if (data.type === 'assistant_message_chunk') {
-      // Streaming chunk - append to last assistant message or create new one
+      // Streaming chunk - could be intro text OR final response
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
         // Append to existing streaming message
-        messages[messages.length - 1].content += data.content;
+        // If we're in tool phase, this is final response text. Otherwise, it's intro.
+        if (inToolPhase) {
+          // This is the final response after tools
+          messages[messages.length - 1].responseText = (messages[messages.length - 1].responseText || '') + data.content;
+        } else {
+          // This is intro text before tools
+          messages[messages.length - 1].introText = (messages[messages.length - 1].introText || '') + data.content;
+        }
         messages = messages; // Trigger reactivity
       } else {
-        // Start new streaming message - NOW trigger the scroll
+        // Start new streaming message
         const messageId = `msg-${Date.now()}`;
-        messages = [...messages, {
+        const newMessage = {
           role: 'assistant',
-          content: data.content,
           streaming: true,
           id: messageId,
-          toolCalls: [...currentToolCalls]
-        }];
+          introText: inToolPhase ? '' : data.content,
+          toolCalls: [],
+          responseText: inToolPhase ? data.content : ''
+        };
+        messages = [...messages, newMessage];
 
         // Trigger scroll to user question now that response is starting
         if (pendingScrollId) {
@@ -109,24 +120,27 @@
       }
     } else if (data.type === 'assistant_message') {
       if (data.done) {
-        // Mark last message as complete and attach final tool calls
+        // Mark last message as complete and attach tool calls
         if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
           delete messages[messages.length - 1].streaming;
           messages[messages.length - 1].toolCalls = [...currentToolCalls];
           messages = messages; // Trigger reactivity
         }
         currentToolCalls = [];
+        inToolPhase = false;
         waiting = false;
       } else {
         // Non-streaming message (fallback)
         const messageId = `msg-${Date.now()}`;
         messages = [...messages, {
           role: 'assistant',
-          content: data.content,
           id: messageId,
-          toolCalls: [...currentToolCalls]
+          introText: inToolPhase ? '' : data.content,
+          toolCalls: [...currentToolCalls],
+          responseText: inToolPhase ? data.content : ''
         }];
         currentToolCalls = [];
+        inToolPhase = false;
         waiting = false;
       }
     } else if (data.type === 'error') {
@@ -202,7 +216,7 @@
     <div class="messages">
       {#if messages.length === 0}
         <div class="welcome">
-          <h2>Berlin Simple Open Data (Soda)</h2>
+          <h2>Berlin Simple Open Data</h2>
           <p>Find and ask questions about Berlin's open datasets</p>
           {#if !connected}
             <div class="connection-status">
@@ -216,15 +230,33 @@
       {#each messages as message, i (message.id || i)}
         {#if message.id && message.id === scrollToId}
           <div use:scrollToMessage>
-            <Message role={message.role} content={message.content} />
-            {#if message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0}
-              <ToolActivity toolCalls={message.toolCalls} />
+            {#if message.role === 'user'}
+              <Message role={message.role} content={message.content} />
+            {:else if message.role === 'assistant'}
+              {#if message.introText}
+                <Message role={message.role} content={message.introText} />
+              {/if}
+              {#if message.toolCalls && message.toolCalls.length > 0}
+                <ToolActivity toolCalls={message.toolCalls} />
+              {/if}
+              {#if message.responseText}
+                <Message role={message.role} content={message.responseText} />
+              {/if}
             {/if}
           </div>
         {:else}
-          <Message role={message.role} content={message.content} />
-          {#if message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0}
-            <ToolActivity toolCalls={message.toolCalls} />
+          {#if message.role === 'user'}
+            <Message role={message.role} content={message.content} />
+          {:else if message.role === 'assistant'}
+            {#if message.introText}
+              <Message role={message.role} content={message.introText} />
+            {/if}
+            {#if message.toolCalls && message.toolCalls.length > 0}
+              <ToolActivity toolCalls={message.toolCalls} />
+            {/if}
+            {#if message.responseText}
+              <Message role={message.role} content={message.responseText} />
+            {/if}
           {/if}
         {/if}
       {/each}
