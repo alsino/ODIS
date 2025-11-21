@@ -14,6 +14,7 @@
   let connected = false;
   let waiting = false;
   let error = null;
+  let showSpacer = false;
 
   onMount(() => {
     connectWebSocket();
@@ -121,12 +122,6 @@
           responseText: inToolPhase ? data.content : ''
         };
         messages = [...messages, newMessage];
-
-        // Trigger scroll to user question now that response is starting
-        if (pendingScrollId) {
-          scrollToId = pendingScrollId;
-          pendingScrollId = null;
-        }
       }
     } else if (data.type === 'assistant_message') {
       if (data.done) {
@@ -137,6 +132,7 @@
         }
         inToolPhase = false;
         waiting = false;
+        showSpacer = false;
       } else {
         // Non-streaming message (fallback)
         const messageId = `msg-${Date.now()}`;
@@ -157,8 +153,6 @@
   }
 
   let chatContainer;
-  let scrollToId = null;
-  let pendingScrollId = null;
 
   function handleSend(event) {
     const userMessage = event.detail.message;
@@ -167,10 +161,29 @@
     const messageId = `msg-${Date.now()}`;
     messages = [...messages, { role: 'user', content: userMessage, id: messageId }];
 
-    // Don't scroll immediately - wait for response to start
-    pendingScrollId = messageId;
     waiting = true;
     error = null;
+    showSpacer = true;
+
+    // Scroll the user message to top immediately after it's added
+    tick().then(() => {
+      const messageElement = document.getElementById(messageId);
+      if (messageElement && chatContainer) {
+        // Get current scroll position and element positions
+        const containerRect = chatContainer.getBoundingClientRect();
+        const messageRect = messageElement.getBoundingClientRect();
+
+        // Calculate where the message currently is in the container
+        const messageOffsetTop = chatContainer.scrollTop + (messageRect.top - containerRect.top);
+
+        // Scroll so the message is at the top of the container with some offset
+        const topOffset = 50; // Pixels from top of viewport
+        chatContainer.scrollTo({
+          top: messageOffsetTop - topOffset,
+          behavior: 'smooth'
+        });
+      }
+    });
 
     // Send to backend
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -184,37 +197,6 @@
     }
   }
 
-  // Svelte action to scroll to a message
-  function scrollToMessage(node) {
-    if (!chatContainer) return;
-
-    console.log('scrollToMessage action called');
-
-    // Use a slight delay to ensure layout is complete
-    const timeoutId = setTimeout(() => {
-      console.log('Attempting scroll...');
-      const containerRect = chatContainer.getBoundingClientRect();
-      const nodeRect = node.getBoundingClientRect();
-
-      // Calculate target scroll position
-      const targetScroll = chatContainer.scrollTop + (nodeRect.top - containerRect.top) - 50;
-
-      console.log('Current scrollTop:', chatContainer.scrollTop);
-      console.log('Target scrollTop:', targetScroll);
-
-      chatContainer.scrollTop = targetScroll;
-
-      console.log('After scroll, scrollTop:', chatContainer.scrollTop);
-
-      scrollToId = null; // Clear the scroll target
-    }, 50);
-
-    return {
-      destroy() {
-        clearTimeout(timeoutId);
-      }
-    };
-  }
 
 </script>
 
@@ -235,35 +217,19 @@
       {/if}
 
       {#each messages as message, i (message.id || i)}
-        {#if message.id && message.id === scrollToId}
-          <div use:scrollToMessage>
-            {#if message.role === 'user'}
-              <Message role={message.role} content={message.content} />
-            {:else if message.role === 'assistant'}
-              {#if message.introText}
-                <Message role={message.role} content={message.introText} />
-              {/if}
-              {#if message.toolCalls && message.toolCalls.length > 0}
-                <ToolActivity toolCalls={message.toolCalls} />
-              {/if}
-              {#if message.responseText}
-                <Message role={message.role} content={message.responseText} />
-              {/if}
-            {/if}
-          </div>
-        {:else}
-          {#if message.role === 'user'}
+        {#if message.role === 'user'}
+          <div id={message.id}>
             <Message role={message.role} content={message.content} />
-          {:else if message.role === 'assistant'}
-            {#if message.introText}
-              <Message role={message.role} content={message.introText} />
-            {/if}
-            {#if message.toolCalls && message.toolCalls.length > 0}
-              <ToolActivity toolCalls={message.toolCalls} />
-            {/if}
-            {#if message.responseText}
-              <Message role={message.role} content={message.responseText} />
-            {/if}
+          </div>
+        {:else if message.role === 'assistant'}
+          {#if message.introText}
+            <Message role={message.role} content={message.introText} />
+          {/if}
+          {#if message.toolCalls && message.toolCalls.length > 0}
+            <ToolActivity toolCalls={message.toolCalls} />
+          {/if}
+          {#if message.responseText}
+            <Message role={message.role} content={message.responseText} />
           {/if}
         {/if}
       {/each}
@@ -278,6 +244,11 @@
 
       {#if error}
         <div class="error-message">{error}</div>
+      {/if}
+
+      <!-- Spacer to ensure there's always scroll space for messages to reach the top -->
+      {#if showSpacer}
+        <div class="scroll-spacer"></div>
       {/if}
     </div>
   </div>
@@ -309,6 +280,12 @@
     display: flex;
     flex-direction: column;
     gap: 0rem;
+  }
+
+  .scroll-spacer {
+    /* Create scroll space equal to viewport height minus header/input */
+    height: calc(100vh - 12rem);
+    flex-shrink: 0;
   }
 
   .welcome {
