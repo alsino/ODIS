@@ -8,8 +8,6 @@
   import ToolActivity from './ToolActivity.svelte';
 
   let messages = [];
-  // currentToolCalls tracks tool activity for the in-progress assistant response
-  let currentToolCalls = [];
   // Track whether we're currently in a tool-calling phase
   let inToolPhase = false;
   let ws = null;
@@ -69,23 +67,35 @@
     if (data.type === 'status') {
       console.log('Status:', data.status);
     } else if (data.type === 'tool_call_start') {
-      // Tool execution started - add to currentToolCalls for real-time display
+      // Tool execution started - add to the current assistant message
       // The tool will show with a spinner in the ToolActivity component
       inToolPhase = true;
-      currentToolCalls = [...currentToolCalls, {
+      const newToolCall = {
         id: data.toolCallId,
         name: data.toolName,
         args: data.toolArgs,
         completed: false
-      }];
+      };
+
+      // Add to the current streaming message immediately
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        if (!messages[messages.length - 1].toolCalls) {
+          messages[messages.length - 1].toolCalls = [];
+        }
+        messages[messages.length - 1].toolCalls = [...messages[messages.length - 1].toolCalls, newToolCall];
+        messages = messages; // Trigger reactivity
+      }
     } else if (data.type === 'tool_call_complete') {
       // Tool execution completed - update the tool call with results
-      // The ToolActivity component will update from spinner to completed badge
-      currentToolCalls = currentToolCalls.map(call =>
-        call.id === data.toolCallId
-          ? { ...call, completed: true, result: data.result, isError: data.isError }
-          : call
-      );
+      // Update the tool in the current assistant message
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].toolCalls) {
+        messages[messages.length - 1].toolCalls = messages[messages.length - 1].toolCalls.map(call =>
+          call.id === data.toolCallId
+            ? { ...call, completed: true, result: data.result, isError: data.isError }
+            : call
+        );
+        messages = messages; // Trigger reactivity
+      }
     } else if (data.type === 'assistant_message_chunk') {
       // Streaming chunk - could be intro text OR final response
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
@@ -120,13 +130,11 @@
       }
     } else if (data.type === 'assistant_message') {
       if (data.done) {
-        // Mark last message as complete and attach tool calls
+        // Mark last message as complete
         if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
           delete messages[messages.length - 1].streaming;
-          messages[messages.length - 1].toolCalls = [...currentToolCalls];
           messages = messages; // Trigger reactivity
         }
-        currentToolCalls = [];
         inToolPhase = false;
         waiting = false;
       } else {
@@ -136,10 +144,9 @@
           role: 'assistant',
           id: messageId,
           introText: inToolPhase ? '' : data.content,
-          toolCalls: [...currentToolCalls],
+          toolCalls: [],
           responseText: inToolPhase ? data.content : ''
         }];
-        currentToolCalls = [];
         inToolPhase = false;
         waiting = false;
       }
@@ -260,10 +267,6 @@
           {/if}
         {/if}
       {/each}
-
-      {#if currentToolCalls.length > 0}
-        <ToolActivity toolCalls={currentToolCalls} />
-      {/if}
 
       {#if waiting}
         <div class="loading">
