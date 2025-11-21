@@ -71,7 +71,8 @@ interface-prototype/
 │   │   ├── lib/
 │   │   │   ├── Chat.svelte
 │   │   │   ├── Message.svelte
-│   │   │   └── Input.svelte
+│   │   │   ├── Input.svelte
+│   │   │   └── ToolActivity.svelte
 │   │   ├── main.js
 │   │   └── app.css
 │   ├── public/
@@ -482,7 +483,30 @@ export interface StatusMessage {
   status: string;
 }
 
-export type WebSocketMessage = UserMessage | AssistantMessage | ErrorMessage | StatusMessage;
+/**
+ * Sent when a tool execution begins
+ * Allows frontend to display real-time spinner/status indicator
+ */
+export interface ToolCallStart {
+  type: 'tool_call_start';
+  toolCallId: string;  // Unique ID to track this specific tool call
+  toolName: string;    // Name of the MCP tool being executed
+  toolArgs: any;       // Arguments passed to the tool
+}
+
+/**
+ * Sent when a tool execution completes (successfully or with error)
+ * Frontend uses this to update the tool display with results
+ */
+export interface ToolCallComplete {
+  type: 'tool_call_complete';
+  toolCallId: string;  // Matches the ID from ToolCallStart
+  toolName: string;    // Name of the tool that completed
+  result: string;      // Result text or error message
+  isError?: boolean;   // True if tool execution failed
+}
+
+export type WebSocketMessage = UserMessage | AssistantMessage | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete;
 
 // Conversation history
 export interface ConversationMessage {
@@ -1609,7 +1633,7 @@ Connected to Berlin MCP server with 5 tools
     {#if messages.length === 0}
       <div class="welcome">
         <h2>Welcome to Berlin Open Data Chat</h2>
-        <p>Ask questions about Berlin's open datasets. For example:</p>
+        <p>Find and ask questions about Berlin's open datasets. For example:</p>
         <ul>
           <li>"Find datasets about traffic"</li>
           <li>"What data is available about housing?"</li>
@@ -2371,7 +2395,7 @@ Once the interface prototype is working:
 
 **UI Improvements:**
 - Add syntax highlighting for code blocks (using a library like highlight.js)
-- Show tool execution indicators ("Searching datasets...")
+- ✅ **DONE:** Show tool execution indicators ("Searching datasets...") - Implemented as ToolActivity component with hybrid display
 - Add data preview panels
 - Implement chart galleries
 
