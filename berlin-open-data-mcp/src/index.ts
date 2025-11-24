@@ -109,7 +109,7 @@ class BerlinOpenDataMCPServer {
         },
         {
           name: 'fetch_dataset_data',
-          description: 'Download and parse Berlin Open Data datasets. Returns 10 sample rows initially. For small datasets (≤500 rows), use full_data: true to get all data. Large datasets must be downloaded manually.',
+          description: 'VIEW dataset content in the chat for analysis. Returns a preview (10 sample rows) or full data for small datasets. Use when user wants to SEE/ANALYZE data, not download it. Keywords: "zeig mir", "schau dir an", "wie sieht aus", "analysiere".',
           inputSchema: {
             type: 'object',
             properties: {
@@ -125,6 +125,29 @@ class BerlinOpenDataMCPServer {
                 type: 'boolean',
                 description: 'If true, return all data for small datasets (≤500 rows). Refused for large datasets.',
                 default: false,
+              },
+            },
+            required: ['dataset_id'],
+          },
+        },
+        {
+          name: 'download_dataset',
+          description: 'DOWNLOAD dataset as a file to the user\'s computer. Triggers browser download dialog. Use when user wants to SAVE/DOWNLOAD the file. Keywords: "herunterladen", "download", "speichern", "save", "auf meinem Computer", "als Datei". Always use this tool when user says they need the data on their computer.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              dataset_id: {
+                type: 'string',
+                description: 'The dataset ID or name',
+              },
+              resource_id: {
+                type: 'string',
+                description: 'Optional: specific resource ID. If not provided, uses first available data resource (CSV/JSON/Excel).',
+              },
+              format: {
+                type: 'string',
+                description: 'Output format: "csv" or "json". If not specified, uses resource format.',
+                enum: ['csv', 'json'],
               },
             },
             required: ['dataset_id'],
@@ -546,6 +569,117 @@ class BerlinOpenDataMCPServer {
             if (!isLarge) {
               responseText += `💡 Use \`full_data: true\` to analyze all ${totalRows} rows.\n`;
             }
+
+            return {
+              content: [{ type: 'text', text: responseText }],
+            };
+          }
+
+          case 'download_dataset': {
+            const { dataset_id, resource_id, format: requestedFormat } = args as {
+              dataset_id: string;
+              resource_id?: string;
+              format?: 'csv' | 'json';
+            };
+
+            // Get dataset to find resources
+            const dataset = await this.api.getDataset(dataset_id);
+
+            if (!dataset.resources || dataset.resources.length === 0) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ No resources available for dataset "${dataset_id}". This dataset may not have downloadable files.`,
+                }],
+              };
+            }
+
+            // Select resource - prefer data formats
+            let resource;
+            if (resource_id) {
+              resource = dataset.resources.find(r => r.id === resource_id);
+              if (!resource) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `❌ Resource "${resource_id}" not found. Use \`get_dataset_details\` to see available resources and their IDs.`,
+                  }],
+                };
+              }
+            } else {
+              // Smart resource selection - prefer data formats over HTML/other
+              const dataFormats = ['CSV', 'JSON', 'XLSX', 'XLS', 'XML', 'WMS', 'WFS'];
+              resource = dataset.resources.find(r =>
+                dataFormats.includes(r.format?.toUpperCase())
+              ) || dataset.resources[0];
+            }
+
+            // Fetch the data
+            const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format);
+
+            if (fetchedData.error) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ Error downloading data: ${fetchedData.error}\n\nYou can try:\n- Using a different resource\n- Downloading manually from: ${resource.url}`,
+                }],
+              };
+            }
+
+            // Determine output format
+            const outputFormat = requestedFormat || (resource.format.toLowerCase() === 'csv' ? 'csv' : 'json');
+
+            // Generate file content
+            let fileContent: string;
+            let mimeType: string;
+            let fileExtension: string;
+
+            if (outputFormat === 'csv') {
+              // Convert to CSV
+              if (fetchedData.rows.length > 0) {
+                const header = fetchedData.columns.join(',') + '\n';
+                const rows = fetchedData.rows.map(row => {
+                  return fetchedData.columns.map(col => {
+                    const val = row[col];
+                    // Escape CSV values with commas or quotes
+                    if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
+                      return `"${val.replace(/"/g, '""')}"`;
+                    }
+                    return val ?? '';
+                  }).join(',');
+                }).join('\n');
+                fileContent = header + rows;
+              } else {
+                fileContent = fetchedData.columns.join(',');
+              }
+              mimeType = 'text/csv';
+              fileExtension = 'csv';
+            } else {
+              // JSON format
+              fileContent = JSON.stringify(fetchedData.rows, null, 2);
+              mimeType = 'application/json';
+              fileExtension = 'json';
+            }
+
+            // Generate filename from dataset title
+            const safeFilename = dataset.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .substring(0, 50);
+            const filename = `${safeFilename}.${fileExtension}`;
+
+            const fileSizeKB = (fileContent.length / 1024).toFixed(2);
+
+            // Return with special marker for download
+            let responseText = `✅ **Download ready!**\n\n`;
+            responseText += `**Dataset:** ${dataset.title}\n`;
+            responseText += `**Format:** ${outputFormat.toUpperCase()}\n`;
+            responseText += `**Size:** ${fileSizeKB} KB\n`;
+            responseText += `**Rows:** ${fetchedData.rows.length}\n`;
+            responseText += `**Columns:** ${fetchedData.columns.length}\n\n`;
+            responseText += `[DOWNLOAD:${filename}:${mimeType}]\n`;
+            responseText += fileContent;
 
             return {
               content: [{ type: 'text', text: responseText }],

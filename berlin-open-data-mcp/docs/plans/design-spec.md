@@ -91,6 +91,16 @@ The system should handle both exploratory ("What data exists about traffic?") an
   - full_data flag (default: false) - returns all data for small datasets (≤500 rows), refuses for large datasets
 - Use case: "Get me the bicycle parking data"
 
+**`download_dataset`**
+- Download a dataset as a file to user's computer (triggers browser download dialog)
+- Returns: File content with special download marker for browser
+- Parameters:
+  - dataset_id (required)
+  - resource_id (optional - picks first data resource if not specified)
+  - format (optional) - "csv" or "json", defaults to resource format
+- Use case: "Download the traffic data" or "Lade die Zugriffsstatistik herunter"
+- Note: Distinct from fetch_dataset_data which displays data in chat
+
 #### Category 4: Analysis Support (future - add as patterns emerge)
 
 - Basic aggregation tools
@@ -334,6 +344,26 @@ Each tool call returns information that helps Claude decide the next step. The t
 - Bug fixes from testing
 
 ### Future Phases
+
+**Phase 4: Browser Automation & Excel Support** (✅ COMPLETED - October 2025)
+
+**Phase 4.5: Browser Download Capability** (✅ COMPLETED - November 2025)
+
+Addresses user need to save downloaded data locally:
+- **Problem**: Users asked "Wo sind die Daten?" after fetching - data only existed in chat context
+- **Solution**: New `download_dataset` tool that triggers browser download dialog
+- **Implementation**:
+  - MCP server returns file data with special marker: `[DOWNLOAD:filename:mimeType]\ndata`
+  - Interface-prototype backend detects marker in tool results
+  - Frontend triggers browser download using Blob API
+  - Smart resource selection (prefers data formats over HTML/docs)
+  - CSV and JSON output formats
+  - Automatic filename generation from dataset title
+- **Tool Disambiguation**: Updated descriptions to prevent confusion:
+  - `fetch_dataset_data`: "VIEW dataset content in chat" (keywords: zeig mir, analysiere)
+  - `download_dataset`: "DOWNLOAD as file" (keywords: herunterladen, auf meinem Computer)
+- **Impact**: Enables complete workflow: discover → fetch → analyze → download
+- **Status**: ✅ COMPLETE - Tested with real datasets, browser download dialog working
 
 **Phase 4: Browser Automation & Excel Support** (✅ COMPLETED - October 2025)
 

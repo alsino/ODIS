@@ -49,7 +49,8 @@ The server implements the MCP protocol and provides these tools:
 
 **Data Fetching & Analysis:**
 
-5. **fetch_dataset_data**: Download and parse dataset contents with smart sampling
+5. **fetch_dataset_data**: View dataset contents in chat for analysis (returns sample/preview)
+6. **download_dataset**: Download dataset as a file to user's computer (triggers browser download)
 
 ### Example Queries
 
@@ -71,9 +72,17 @@ User: "What's available in the Berlin Open Data Portal?"
 ```
 User: "Which Berlin district has the most green space per capita?"
 → Uses search_berlin_datasets for green space data
-→ Uses fetch_dataset_data to get the actual data
+→ Uses fetch_dataset_data to view the data in chat
 → Performs calculation using fetched data
 → Returns answer with methodology
+```
+
+**Download data for local use:**
+```
+User: "Lade die Zugriffsstatistik herunter" / "Download the traffic data"
+→ Uses search_berlin_datasets to find dataset
+→ Uses download_dataset to trigger browser download
+→ User saves file locally with browser download dialog
 ```
 
 **Multi-dataset analysis:**
