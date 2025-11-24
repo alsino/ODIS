@@ -408,10 +408,10 @@ This phase extends format support to handle geospatial data, significantly expan
 
 **Formats to implement**:
 
-*Part A: File-Based Geodata* (~94 datasets, 3.5%)
+*Part A: File-Based Geodata* (~78 datasets, 3.0%)
 - **GeoJSON** (39 datasets, 1.5%) - JSON-based vector data format
 - **KML** (39 datasets, 1.5%) - XML-based format from Google Earth
-- **Shapefiles** (16+ datasets, 0.6%) - ESRI binary format in ZIP archives
+- **Shapefiles** - SKIPPED (most datasets have GeoJSON/KML alternatives)
 
 *Part B: OGC Web Services* (596 datasets, 22.4%)
 - **WFS** (Web Feature Service) - Query and download vector features as GeoJSON
@@ -423,7 +423,7 @@ This phase extends format support to handle geospatial data, significantly expan
 - Geometry stored in special columns: `geometry_type`, `geometry_coordinates`
 - Reuse existing DataFetcher/DataSampler infrastructure
 
-**Expected impact**: +25.9% portal coverage (94 file-based + 596 WFS datasets)
+**Expected impact**: +25.3% portal coverage (78 file-based + 596 WFS datasets = 674 total)
 
 **Phase 6: Data Filtering/Querying Tools**
 - Accept filter parameters (e.g., "only rows where district='Mitte'")
@@ -618,8 +618,9 @@ This phase extends format support to handle geospatial data, significantly expan
 **Implementation order**:
 1. GeoJSON first (simplest - just JSON with schema)
 2. KML second (XML, but library handles conversion)
-3. Shapefiles third (binary + ZIP, most complex)
-4. WFS fourth (requires protocol understanding, pagination)
+3. WFS third (requires protocol understanding, pagination)
+
+**Shapefiles skipped**: Most datasets with shapefiles also provide GeoJSON or KML alternatives, making shapefile support unnecessary complexity.
 
 ---
 
