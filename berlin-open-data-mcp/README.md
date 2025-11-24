@@ -7,12 +7,18 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 - 🔍 **Natural Language Search**: Query datasets using plain English
 - 📊 **Dataset Discovery**: Browse datasets by category, organization, or explore all available data
 - 📈 **Portal Overview**: Get statistics and understand the data landscape
-- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON, Excel)
+- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON, Excel, GeoJSON, KML)
 - 📑 **Excel Support**: Automatically parses XLS and XLSX files (545 datasets, 20.6% of portal)
+- 🗺️ **Geodata Support**: Parse GeoJSON and KML geospatial formats (78 datasets, 3.0% of portal)
+  - Automatic feature-to-table conversion
+  - Geometry metadata extraction (type, coordinates)
+  - Works with JSON-tagged GeoJSON files
 - 🌐 **Browser Automation**: Optional Puppeteer support for JavaScript-rendered downloads (182 datasets, 6.9% of portal)
 - 🎯 **Smart Sampling**: Automatic data sampling with statistics to prevent context overflow
 - 🔗 **Direct API Integration**: Connects to Berlin's official CKAN-based data portal
 - 🤖 **Agentic Workflows**: Tools can be chained together for complex analysis tasks
+
+**Total Portal Coverage**: 1,113 datasets (41.9% of portal)
 
 ## Installation
 
@@ -102,6 +108,43 @@ npm start
 ```
 
 The server communicates via stdio following the MCP protocol.
+
+## Geodata Support
+
+The server automatically handles geospatial data formats, converting them to tabular format for easy analysis:
+
+**Supported Formats:**
+- **GeoJSON**: JSON-based vector data (may be tagged as JSON, GeoJSON, or GEOJSON-Datei)
+- **KML**: Keyhole Markup Language from Google Earth
+
+**How It Works:**
+- Each geographic feature becomes a table row
+- Feature properties become regular columns
+- Geometry is stored in special columns:
+  - `geometry_type`: Type of geometry (Point, LineString, Polygon, etc.)
+  - `geometry_coordinates`: Coordinate array as JSON string
+  - `feature_id`: Feature identifier (if present)
+
+**Example:**
+
+A GeoJSON with drinking fountains:
+```json
+{
+  "type": "Feature",
+  "geometry": {"type": "Point", "coordinates": [13.4, 52.5]},
+  "properties": {"name": "Trinkbrunnen", "category": "public"}
+}
+```
+
+Becomes a table row:
+```
+name: "Trinkbrunnen"
+category: "public"
+geometry_type: "Point"
+geometry_coordinates: "[13.4, 52.5]"
+```
+
+This enables standard data analysis operations on geospatial datasets.
 
 ## Query Processing
 
