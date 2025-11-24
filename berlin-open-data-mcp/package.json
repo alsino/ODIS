@@ -12,10 +12,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "@tmcw/togeojson": "^7.1.2",
+    "@types/geojson": "^7946.0.16",
+    "@xmldom/xmldom": "^0.8.11",
     "axios": "^1.12.2",
+    "jszip": "^3.10.1",
     "node-fetch": "^3.3.2",
     "papaparse": "^5.5.3",
     "puppeteer": "^24.26.1",
+    "shpjs": "^6.2.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
