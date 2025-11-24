@@ -26,6 +26,25 @@
     }
   });
 
+  function triggerDownload(filename, content, mimeType) {
+    // Create a Blob from the content
+    const blob = new Blob([content], { type: mimeType });
+
+    // Create a temporary URL for the blob
+    const url = URL.createObjectURL(blob);
+
+    // Create a temporary anchor element and trigger download
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    // Clean up
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.hostname}:3000/ws`;
@@ -97,6 +116,9 @@
         );
         messages = messages; // Trigger reactivity
       }
+    } else if (data.type === 'file_download') {
+      // File download ready - trigger browser download
+      triggerDownload(data.filename, data.content, data.mimeType);
     } else if (data.type === 'assistant_message_chunk') {
       // Streaming chunk - could be intro text OR final response
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {

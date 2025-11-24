@@ -58,9 +58,11 @@ Key guidelines:
     tools: Tool[]
   ): Promise<ClaudeResponse> {
     try {
+      console.log('[ClaudeClient] sendMessage: Preparing API request');
       // Transform MCP tools to Claude API format
       const claudeTools = this.transformToolsForClaude(tools);
 
+      console.log('[ClaudeClient] sendMessage: Calling Claude API...');
       const response = await this.client.messages.create({
         model: this.model,
         max_tokens: 4096,
@@ -68,6 +70,8 @@ Key guidelines:
         messages: messages as any,
         tools: claudeTools
       });
+
+      console.log('[ClaudeClient] sendMessage: API response received, id:', response.id, 'model:', response.model);
 
       // Extract text content
       const textContent = response.content
@@ -168,6 +172,10 @@ Key guidelines:
     streamCallback?: (chunk: string) => void,
     toolActivityCallback?: (activity: { type: 'start' | 'complete', toolCallId: string, toolName: string, toolArgs?: any, result?: string, isError?: boolean }) => void
   ): Promise<{ response: string; messages: ConversationMessage[] }> {
+    console.log('[ClaudeClient] sendMessageWithTools called with message:', userMessage);
+    console.log('[ClaudeClient] Conversation history length:', conversationHistory.length);
+    console.log('[ClaudeClient] Available tools:', tools.length);
+
     // Add user message to history
     const messages: ConversationMessage[] = [
       ...conversationHistory,
@@ -180,13 +188,16 @@ Key guidelines:
 
     while (iterations < maxIterations) {
       iterations++;
+      console.log(`[ClaudeClient] Iteration ${iterations}/${maxIterations}`);
 
       // Use streaming for final response (when no tool calls expected)
       const isLikelyFinalResponse = iterations > 1;
 
       if (isLikelyFinalResponse && streamCallback) {
         // Try streaming - if we get tool calls, we'll handle them normally
+        console.log('[ClaudeClient] Using streaming for likely final response');
         const response = await this.sendMessageStreaming(messages, tools, streamCallback);
+        console.log('[ClaudeClient] Streaming response received, stopReason:', response.stopReason);
 
         if (!response.toolCalls || response.toolCalls.length === 0) {
           finalResponse = response.content;
@@ -290,11 +301,18 @@ Key guidelines:
         continue;
       }
 
+      console.log('[ClaudeClient] Calling sendMessage (non-streaming)');
       const response = await this.sendMessage(messages, tools);
+      console.log('[ClaudeClient] Response received, content length:', response.content.length, 'toolCalls:', response.toolCalls?.length || 0);
 
       // If no tool calls, we have final response
       if (!response.toolCalls || response.toolCalls.length === 0) {
         finalResponse = response.content;
+        // Stream the response if callback provided (iteration 1 uses non-streaming mode)
+        if (streamCallback && response.content) {
+          streamCallback(response.content);
+        }
+        console.log('[ClaudeClient] Final response received, breaking loop');
         break;
       }
 
@@ -403,10 +421,11 @@ Key guidelines:
     }
 
     if (iterations >= maxIterations) {
-      console.warn('Max tool calling iterations reached');
+      console.warn('[ClaudeClient] Max tool calling iterations reached');
       finalResponse = finalResponse || 'I apologize, but I encountered too many tool calls. Please try rephrasing your question.';
     }
 
+    console.log('[ClaudeClient] Returning final response, length:', finalResponse.length);
     return {
       response: finalResponse,
       messages: messages

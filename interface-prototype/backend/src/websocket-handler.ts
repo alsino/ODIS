@@ -83,15 +83,83 @@ export class WebSocketHandler {
         tools,
         async (toolName: string, toolArgs: any) => {
           // Execute tool via MCP client
-          return await this.mcpClient.callTool(toolName, toolArgs);
+          const result = await this.mcpClient.callTool(toolName, toolArgs);
+
+          // Extract text from MCP result structure
+          let resultText = '';
+          if (result && result.content && Array.isArray(result.content)) {
+            // MCP returns { content: [{ type: 'text', text: '...' }] }
+            const textContent = result.content.find((item: any) => item.type === 'text');
+            if (textContent) {
+              resultText = textContent.text;
+            }
+          } else if (typeof result === 'string') {
+            resultText = result;
+          }
+
+          console.log('[WebSocket] Tool result text length:', resultText.length);
+          console.log('[WebSocket] Checking for download marker...');
+
+          // Check if the result contains a file download
+          const downloadMatch = resultText.match(/\[DOWNLOAD:([^:]+):([^\]]+)\]\n([\s\S]*)/);
+
+          if (downloadMatch) {
+            console.log('[WebSocket] Download marker found!');
+            const [, filename, mimeType, fileContent] = downloadMatch;
+
+            // Extract the message before the download marker
+            const messageBeforeDownload = resultText.substring(0, resultText.indexOf('[DOWNLOAD:'));
+
+            // Send file download message immediately
+            this.sendMessage(ws, {
+              type: 'file_download',
+              filename: filename,
+              mimeType: mimeType,
+              content: fileContent
+            });
+
+            // Return only the message part (without the file content) as the tool result
+            // Keep the same structure as the original result
+            return {
+              content: [{ type: 'text', text: messageBeforeDownload.trim() }]
+            };
+          }
+
+          return result;
         },
         (chunk: string) => {
-          // Stream text chunks to frontend as they arrive
-          this.sendMessage(ws, {
-            type: 'assistant_message_chunk',
-            content: chunk,
-            done: false
-          });
+          // Check if this is a file download
+          const downloadMatch = chunk.match(/\[DOWNLOAD:([^:]+):([^\]]+)\]\n([\s\S]*)/);
+          if (downloadMatch) {
+            const [, filename, mimeType, fileContent] = downloadMatch;
+
+            // Extract the message before the download marker
+            const messageBeforeDownload = chunk.substring(0, chunk.indexOf('[DOWNLOAD:'));
+
+            // Send the message text first (without the file content)
+            if (messageBeforeDownload.trim()) {
+              this.sendMessage(ws, {
+                type: 'assistant_message_chunk',
+                content: messageBeforeDownload,
+                done: false
+              });
+            }
+
+            // Send file download message
+            this.sendMessage(ws, {
+              type: 'file_download',
+              filename: filename,
+              mimeType: mimeType,
+              content: fileContent
+            });
+          } else {
+            // Regular text chunk - stream to frontend
+            this.sendMessage(ws, {
+              type: 'assistant_message_chunk',
+              content: chunk,
+              done: false
+            });
+          }
         },
         (activity) => {
           // Forward tool activity to frontend for real-time display

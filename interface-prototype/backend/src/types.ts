@@ -54,7 +54,18 @@ export interface ToolCallComplete {
   isError?: boolean;   // True if tool execution failed
 }
 
-export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete;
+/**
+ * Sent when a file download is ready
+ * Frontend triggers browser download dialog
+ */
+export interface FileDownload {
+  type: 'file_download';
+  filename: string;    // Name of the file to download
+  mimeType: string;    // MIME type (e.g., 'text/csv', 'application/json')
+  content: string;     // File content
+}
+
+export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete | FileDownload;
 
 // Conversation history
 export interface ConversationMessage {
