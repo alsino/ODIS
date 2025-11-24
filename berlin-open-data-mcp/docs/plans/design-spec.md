@@ -400,11 +400,30 @@ This phase addresses two format-related limitations discovered during user testi
 **Combined Impact**: +8% portal coverage (182 + 30 unique datasets)
 **Status**: ✅ COMPLETE - All Phase 4 features implemented and tested
 
-**Phase 5: GeoJSON Support for Spatial Data**
-- Parse GeoJSON format
-- Extract geometries and coordinates
-- Basic spatial operations (within, intersects)
-- Return geographic data in LLM-friendly format
+**Phase 5: Geodata Format Support** (✅ IN PROGRESS - November 2025)
+
+This phase extends format support to handle geospatial data, significantly expanding portal coverage.
+
+**Motivation**: 60.9% of portal datasets (1,620) use geodata formats that are currently unsupported. This represents the largest opportunity for expanding accessible data.
+
+**Formats to implement**:
+
+*Part A: File-Based Geodata* (~94 datasets, 3.5%)
+- **GeoJSON** (39 datasets, 1.5%) - JSON-based vector data format
+- **KML** (39 datasets, 1.5%) - XML-based format from Google Earth
+- **Shapefiles** (16+ datasets, 0.6%) - ESRI binary format in ZIP archives
+
+*Part B: OGC Web Services* (596 datasets, 22.4%)
+- **WFS** (Web Feature Service) - Query and download vector features as GeoJSON
+- **WMS** (Web Map Service) - Deferred (returns images, not queryable data)
+
+**Implementation approach**:
+- All geodata converted to tabular format for LLM consumption
+- Each feature becomes a table row, properties become columns
+- Geometry stored in special columns: `geometry_type`, `geometry_coordinates`
+- Reuse existing DataFetcher/DataSampler infrastructure
+
+**Expected impact**: +25.9% portal coverage (94 file-based + 596 WFS datasets)
 
 **Phase 6: Data Filtering/Querying Tools**
 - Accept filter parameters (e.g., "only rows where district='Mitte'")
@@ -560,6 +579,47 @@ This phase addresses two format-related limitations discovered during user testi
 **Trade-offs**:
 - Can't analyze spatial datasets initially
 - BUT: Most common analyses are tabular
+
+**Status**: ✅ IMPLEMENTED (CSV/JSON/Excel supported)
+
+### Decision 7: Geodata Format Support Strategy
+
+**Options Considered**:
+- A) File-based only (GeoJSON, KML, Shapefiles)
+- B) Web services only (WFS, WMS)
+- C) Both file-based and web services
+- D) Convert everything to one canonical format
+- E) Preserve native formats
+
+**Decision**: C - Both file-based and web services, with D - Convert to tabular format
+
+**Rationale**:
+- **File-based geodata** provides quick wins (94 datasets, 3.5%)
+  - Straightforward download and parse
+  - Reuse existing DataFetcher patterns
+  - Libraries readily available (togeojson, shpjs, jszip)
+- **WFS support** provides massive impact (596 datasets, 22.4%)
+  - Standard OGC protocol, well-documented
+  - Returns actual queryable vector data (vs WMS images)
+  - Can request GeoJSON output format
+- **Tabular conversion** makes geodata LLM-friendly
+  - Each feature → table row
+  - Properties → columns
+  - Geometry → special columns (type, coordinates)
+  - Enables same analysis patterns as CSV/JSON
+  - No need for LLM to understand complex geometry structures
+
+**Trade-offs**:
+- Loses some spatial richness (can't easily perform geometric operations)
+- BUT: Most use cases are about feature attributes, not geometric analysis
+- WMS skipped (returns images, not queryable data)
+- BUT: WMS has limited value for data analysis
+
+**Implementation order**:
+1. GeoJSON first (simplest - just JSON with schema)
+2. KML second (XML, but library handles conversion)
+3. Shapefiles third (binary + ZIP, most complex)
+4. WFS fourth (requires protocol understanding, pagination)
 
 ---
 

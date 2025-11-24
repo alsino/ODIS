@@ -3251,6 +3251,69 @@ Successfully tested file saving with various datasets:
 
 ---
 
+## Phase 5: Geodata Format Support
+
+**Goal**: Extend format support to handle geospatial data (GeoJSON, KML, Shapefiles, WFS), unlocking an additional 25.9% of the portal (690 datasets).
+
+**Background**: Analysis of the Berlin Open Data Portal format distribution reveals that 60.9% of portal datasets (1,620) use geodata formats. Currently only 38.9% of portal datasets are accessible (CSV/JSON/Excel). Adding geodata support represents the largest opportunity for expanding data coverage.
+
+**Format distribution analysis**:
+```
+High Priority Geodata Formats:
+- WFS (596 datasets, 22.4%) - Web Feature Service (queryable vector data)
+- KML (39 datasets, 1.5%) - Keyhole Markup Language
+- GeoJSON (39 datasets, 1.5%) - JSON-based vector format
+- Shapefiles (16+ datasets, 0.6%) - ESRI binary format
+- WMS (933 datasets, 35.1%) - SKIPPED (returns images, not queryable data)
+
+Currently Supported:
+- CSV (356 datasets, 13.4%)
+- JSON (130 datasets, 4.9%)
+- Excel (549 datasets, 20.6%)
+Total: 1,035 datasets (38.9%)
+```
+
+**Implementation strategy**:
+- **Part A**: File-based geodata (GeoJSON, KML, Shapefiles) - 94 datasets, 3.5%
+- **Part B**: WFS web service support - 596 datasets, 22.4%
+- **WMS skipped**: Returns images not data, limited analysis value
+
+**Target coverage after Phase 5**: 1,725 datasets (64.8%)
+
+**Estimated time**: 12-16 hours total
+- GeoJSON: 2-3 hours
+- KML: 2-3 hours
+- Shapefiles: 4-5 hours
+- WFS: 4-5 hours
+
+---
+
+### Part A: File-Based Geodata Formats
+
+See full implementation steps in docs/plans/geodata-support.md for detailed code and procedures.
+
+**Summary**:
+1. Install geodata libraries (@tmcw/togeojson, @xmldom/xmldom, jszip, shpjs)
+2. Add GeoJSON detection and parsing (features → table rows)
+3. Add KML parsing via KML→GeoJSON conversion
+4. Add Shapefile parsing with ZIP extraction
+5. Test all formats with real portal datasets
+
+**Key design**: All geodata converted to tabular format with `geometry_type` and `geometry_coordinates` columns.
+
+### Part B: WFS (Web Feature Service) Support
+
+**Summary**:
+1. Create WFSClient module for OGC protocol
+2. Implement GetCapabilities parsing
+3. Implement GetFeature with GeoJSON output
+4. Integrate into DataFetcher with auto-detection
+5. Test with real WFS services
+
+**Coverage impact**: +690 datasets (+25.9% of portal)
+
+---
+
 ## Appendix: Debugging Tips
 
 ### Common Issues
