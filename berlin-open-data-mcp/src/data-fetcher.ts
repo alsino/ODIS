@@ -140,6 +140,11 @@ export class DataFetcher {
     try {
       const parsed = JSON.parse(text);
 
+      // Check if this is GeoJSON
+      if (this.isGeoJSON(parsed)) {
+        return this.parseGeoJSON(parsed);
+      }
+
       // Find the largest array in the JSON structure (recursively)
       const rows = this.findLargestArray(parsed);
 
@@ -169,6 +174,88 @@ export class DataFetcher {
         totalRows: 0,
         columns: [],
         error: `JSON parse error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  private isGeoJSON(obj: any): boolean {
+    // Check for FeatureCollection or Feature
+    return (
+      (obj.type === 'FeatureCollection' && Array.isArray(obj.features)) ||
+      (obj.type === 'Feature' && obj.geometry && obj.properties)
+    );
+  }
+
+  private parseGeoJSON(geojson: any): FetchedData {
+    try {
+      // Extract features array
+      const features = geojson.type === 'FeatureCollection'
+        ? geojson.features
+        : [geojson]; // Single Feature
+
+      if (!Array.isArray(features) || features.length === 0) {
+        return {
+          format: 'GeoJSON',
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'No features found in GeoJSON',
+        };
+      }
+
+      // Convert features to tabular rows
+      const rows: any[] = [];
+      const columnSet = new Set<string>();
+
+      for (const feature of features) {
+        if (feature.type !== 'Feature') continue;
+
+        const row: any = {};
+
+        // Add properties as columns
+        if (feature.properties && typeof feature.properties === 'object') {
+          Object.keys(feature.properties).forEach(key => {
+            row[key] = feature.properties[key];
+            columnSet.add(key);
+          });
+        }
+
+        // Add geometry metadata
+        if (feature.geometry) {
+          row['geometry_type'] = feature.geometry.type;
+          columnSet.add('geometry_type');
+
+          // Store coordinates as JSON string
+          if (feature.geometry.coordinates) {
+            row['geometry_coordinates'] = JSON.stringify(feature.geometry.coordinates);
+            columnSet.add('geometry_coordinates');
+          }
+        }
+
+        // Add feature ID if present
+        if (feature.id !== undefined) {
+          row['feature_id'] = feature.id;
+          columnSet.add('feature_id');
+        }
+
+        rows.push(row);
+      }
+
+      const columns = Array.from(columnSet);
+
+      return {
+        format: 'GeoJSON',
+        rows,
+        totalRows: rows.length,
+        columns,
+      };
+    } catch (error) {
+      return {
+        format: 'GeoJSON',
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: `GeoJSON parse error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
