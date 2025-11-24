@@ -5,6 +5,8 @@ import fetch from 'node-fetch';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { BrowserFetcher } from './browser-fetcher.js';
+import { DOMParser } from '@xmldom/xmldom';
+import * as toGeoJSON from '@tmcw/togeojson';
 
 export interface FetchedData {
   format: string;
@@ -120,6 +122,12 @@ export class DataFetcher {
         columns: [],
         error: 'Excel files require binary download - internal error',
       };
+    }
+
+    // Try KML if format or content suggests it
+    if (formatLower === 'kml' || contentType.includes('kml') ||
+        text.trim().includes('<kml')) {
+      return this.parseKML(text);
     }
 
     // Try JSON first if format or content-type suggests it
@@ -256,6 +264,47 @@ export class DataFetcher {
         totalRows: 0,
         columns: [],
         error: `GeoJSON parse error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  private parseKML(text: string): FetchedData {
+    try {
+      // Parse XML
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(text, 'text/xml');
+
+      // Check for XML parsing errors
+      const parseError = xmlDoc.getElementsByTagName('parsererror');
+      if (parseError.length > 0) {
+        return {
+          format: 'KML',
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'Invalid KML/XML structure',
+        };
+      }
+
+      // Convert KML to GeoJSON
+      const geojson = toGeoJSON.kml(xmlDoc);
+
+      // Use existing GeoJSON parser
+      const result = this.parseGeoJSON(geojson);
+
+      // Update format to KML
+      return {
+        ...result,
+        format: 'KML',
+      };
+
+    } catch (error) {
+      return {
+        format: 'KML',
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: `KML parse error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
