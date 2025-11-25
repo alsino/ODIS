@@ -1,5 +1,5 @@
 // ABOUTME: Downloads and parses dataset resources from URLs
-// ABOUTME: Handles CSV, JSON, and Excel (XLS/XLSX) formats with robust error handling
+// ABOUTME: Handles CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats
 
 import fetch from 'node-fetch';
 import Papa from 'papaparse';
@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { BrowserFetcher } from './browser-fetcher.js';
 import { DOMParser } from '@xmldom/xmldom';
 import * as toGeoJSON from '@tmcw/togeojson';
+import { WFSClient } from './wfs-client.js';
 
 export interface FetchedData {
   format: string;
@@ -37,6 +38,11 @@ export class DataFetcher {
   }
 
   async fetchResource(url: string, format: string): Promise<FetchedData> {
+    // Check if this is a WFS service
+    if (format.toUpperCase() === 'WFS' || WFSClient.isWFSUrl(url)) {
+      return this.fetchWFS(url);
+    }
+
     // First try with browser if this URL needs it
     if (this.shouldUseBrowser(url)) {
       const browserResult = await this.fetchWithBrowser(url, format);
@@ -476,6 +482,69 @@ export class DataFetcher {
     } catch (error) {
       console.error('Browser fetch error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Fetch data from WFS (Web Feature Service)
+   */
+  private async fetchWFS(url: string): Promise<FetchedData> {
+    try {
+      const wfsClient = new WFSClient();
+
+      // Parse URL to get base service URL
+      const { baseUrl } = wfsClient.parseWFSUrl(url);
+
+      // Get capabilities to discover feature types
+      console.error('[DataFetcher] Getting WFS capabilities...');
+      const capabilities = await wfsClient.getCapabilities(baseUrl);
+
+      if (capabilities.featureTypes.length === 0) {
+        return {
+          format: 'WFS',
+          rows: [],
+          totalRows: 0,
+          columns: [],
+          error: 'No feature types available in WFS service',
+        };
+      }
+
+      // Use first feature type (most Berlin WFS services have only one)
+      const featureType = capabilities.featureTypes[0];
+      console.error(`[DataFetcher] Fetching features from type: ${featureType.name}`);
+
+      // Get total feature count (non-blocking, for metadata)
+      const totalCount = await wfsClient.getFeatureCount(baseUrl, featureType.name);
+      console.error(`[DataFetcher] Total features available: ${totalCount}`);
+
+      // Fetch features as GeoJSON with pagination
+      const geojson = await wfsClient.getFeatures(baseUrl, featureType.name, {
+        count: 1000,
+        startIndex: 0,
+      });
+
+      console.error(`[DataFetcher] Received ${geojson.features.length} features`);
+
+      // Use existing GeoJSON parser to convert to tabular format
+      const result = this.parseGeoJSON(geojson);
+
+      // Update total rows to reflect actual count from service
+      if (totalCount > 0 && totalCount !== result.totalRows) {
+        result.totalRows = totalCount;
+      }
+
+      return {
+        ...result,
+        format: 'WFS',
+      };
+    } catch (error) {
+      return {
+        format: 'WFS',
+        rows: [],
+        totalRows: 0,
+        columns: [],
+        error: `WFS fetch error: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   }
 }

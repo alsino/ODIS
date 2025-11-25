@@ -7,18 +7,19 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 - 🔍 **Natural Language Search**: Query datasets using plain English
 - 📊 **Dataset Discovery**: Browse datasets by category, organization, or explore all available data
 - 📈 **Portal Overview**: Get statistics and understand the data landscape
-- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON, Excel, GeoJSON, KML)
+- 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON, Excel, GeoJSON, KML, WFS)
 - 📑 **Excel Support**: Automatically parses XLS and XLSX files (545 datasets, 20.6% of portal)
-- 🗺️ **Geodata Support**: Parse GeoJSON and KML geospatial formats (78 datasets, 3.0% of portal)
+- 🗺️ **Geodata Support**: Parse GeoJSON, KML, and WFS geospatial formats (674 datasets, 25.3% of portal)
   - Automatic feature-to-table conversion
   - Geometry metadata extraction (type, coordinates)
+  - WFS (Web Feature Service) protocol support (596 datasets, 22.4%)
   - Works with JSON-tagged GeoJSON files
 - 🌐 **Browser Automation**: Optional Puppeteer support for JavaScript-rendered downloads (182 datasets, 6.9% of portal)
 - 🎯 **Smart Sampling**: Automatic data sampling with statistics to prevent context overflow
 - 🔗 **Direct API Integration**: Connects to Berlin's official CKAN-based data portal
 - 🤖 **Agentic Workflows**: Tools can be chained together for complex analysis tasks
 
-**Total Portal Coverage**: 1,113 datasets (41.9% of portal)
+**Total Portal Coverage**: 1,709 datasets (64.2% of portal)
 
 ## Installation
 
@@ -114,8 +115,12 @@ The server communicates via stdio following the MCP protocol.
 The server automatically handles geospatial data formats, converting them to tabular format for easy analysis:
 
 **Supported Formats:**
-- **GeoJSON**: JSON-based vector data (may be tagged as JSON, GeoJSON, or GEOJSON-Datei)
-- **KML**: Keyhole Markup Language from Google Earth
+- **GeoJSON**: JSON-based vector data (may be tagged as JSON, GeoJSON, or GEOJSON-Datei) - 39 datasets
+- **KML**: Keyhole Markup Language from Google Earth - 39 datasets
+- **WFS**: Web Feature Service (OGC standard) - 596 datasets hosted on gdi.berlin.de
+  - Automatic GetCapabilities discovery
+  - Fetches features as GeoJSON
+  - Supports pagination for large datasets
 
 **How It Works:**
 - Each geographic feature becomes a table row
@@ -124,6 +129,7 @@ The server automatically handles geospatial data formats, converting them to tab
   - `geometry_type`: Type of geometry (Point, LineString, Polygon, etc.)
   - `geometry_coordinates`: Coordinate array as JSON string
   - `feature_id`: Feature identifier (if present)
+- WFS services are automatically detected and queried using the OGC WFS 2.0.0 protocol
 
 **Example:**
 
