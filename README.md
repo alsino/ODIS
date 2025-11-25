@@ -1,4 +1,4 @@
-# ODIS - Open Data Integration System
+# Berlin Simple Open Data (Soda)
 
 A collection of MCP (Model Context Protocol) servers and tools for working with Berlin's open data ecosystem.
 
