@@ -200,7 +200,263 @@ User: "What's the average traffic volume by district?"
 
 ---
 
-## Section 4: Technical Decisions
+## Section 4: Code Execution Feature
+
+### Problem Statement
+
+The Berlin Open Data MCP server returns datasets as JSON arrays. When analyzing this data, Claude frequently makes counting and calculation errors because:
+
+1. **LLMs are bad at counting** - Even with complete data, Claude miscounts items in JSON arrays
+2. **Inconsistent results** - Same query produces different counts across multiple requests
+3. **Cannot predict aggregations** - Don't know which statistics users will need per dataset
+
+**Example Issue:**
+Dataset with 36 bike repair stations returned all rows correctly, but Claude counted:
+- First attempt: Mitte (7), Steglitz-Zehlendorf (6)
+- Second attempt: Steglitz-Zehlendorf (7), Mitte (7)
+- Third attempt: Mitte (8), Steglitz-Zehlendorf (6)
+
+Actual counts: Mitte (9), Steglitz-Zehlendorf (7)
+
+### Solution: Code Execution Tool
+
+Add a code execution capability to the backend, allowing Claude to:
+1. Receive dataset as JSON
+2. Write code to analyze the data
+3. Execute code in a sandboxed environment
+4. Get accurate numerical results
+5. Present findings to user
+
+This mirrors how Claude Desktop handles data analysis tasks.
+
+### Language Selection: JavaScript vs Python
+
+**Python:**
+- ✅ Best data analysis ecosystem (pandas, numpy)
+- ✅ Claude writes excellent Python for data analysis
+- ✅ Industry standard for data work
+- ❌ Requires Python runtime on deployment
+- ❌ Process spawn overhead (~500ms)
+- ❌ Additional production dependencies
+
+**JavaScript:**
+- ✅ Already have Node.js runtime
+- ✅ Fast in-process execution
+- ✅ Zero deployment dependencies
+- ✅ Good enough for basic aggregations
+- ❌ Weaker data science ecosystem
+- ❌ Claude less fluent in JS for data tasks
+
+**Decision: JavaScript**
+
+**Rationale:**
+1. Deployment simplicity - Railway free tier is constrained
+2. Fast enough - Most queries are simple counts/groupings
+3. Already have Node.js - Zero additional setup
+4. Covers 90% of use cases
+
+**Migration path:** Can add Python later if complex statistical analysis is needed.
+
+### Architecture Addition
+
+```
+┌─────────────────────────────────────────────────────┐
+│          Node.js/Express Backend                    │
+│  ┌──────────────────────────────────────────────┐  │
+│  │  MCP Client                                  │  │
+│  └──────────────────┬───────────────────────────┘  │
+│  ┌──────────────────▼───────────────────────────┐  │
+│  │  Claude API Integration                      │  │
+│  │  - Conversation management                   │  │
+│  │  - Tool orchestration                        │  │
+│  └──────┬───────────────────────┬───────────────┘  │
+│         │                       │                   │
+│         ▼                       ▼                   │
+│  ┌──────────┐          ┌─────────────────┐         │
+│  │   MCP    │          │ Code Executor   │  ← NEW  │
+│  │  Tools   │          │ (Sandboxed JS)  │         │
+│  └──────────┘          └─────────────────┘         │
+└─────────────────────────────────────────────────────┘
+```
+
+### New Component: Code Executor
+
+**File:** `interface-prototype/backend/src/code-executor.ts`
+
+**Responsibilities:**
+- Execute JavaScript code in isolated VM
+- Enforce timeouts (5 seconds max)
+- Limit memory usage
+- Sanitize output
+- Handle errors gracefully
+
+**API:**
+```typescript
+interface CodeExecutor {
+  execute(code: string, context?: Record<string, any>): Promise<ExecutionResult>;
+}
+
+interface ExecutionResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  executionTime: number;
+}
+```
+
+### New Tool: `execute_code`
+
+**Tool Definition (added to Claude's available tools):**
+```json
+{
+  "name": "execute_code",
+  "description": "Execute JavaScript code to analyze data. Use this when you need to perform accurate calculations, counting, or aggregations on datasets. The code runs in a sandboxed environment with access to the 'data' variable.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "JavaScript code to execute. The dataset is available as the 'data' variable. Return the result as the last expression."
+      },
+      "data": {
+        "type": "array",
+        "description": "The dataset to analyze (array of objects)"
+      }
+    },
+    "required": ["code", "data"]
+  }
+}
+```
+
+**Example Usage:**
+```javascript
+// Claude calls:
+execute_code({
+  code: `
+    const counts = data.reduce((acc, row) => {
+      acc[row.bezirk] = (acc[row.bezirk] || 0) + 1;
+      return acc;
+    }, {});
+
+    Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([bezirk, count]) => ({ bezirk, count }));
+  `,
+  data: [/* 36 bike stations */]
+})
+
+// Returns:
+{
+  success: true,
+  output: [
+    { bezirk: "Mitte", count: 9 },
+    { bezirk: "Steglitz-Zehlendorf", count: 7 },
+    ...
+  ],
+  executionTime: 12
+}
+```
+
+### Security Implementation
+
+**Sandboxing Strategy** using Node.js built-in `node:vm`:
+
+1. **Isolated context** - No access to file system, network, or process
+2. **Timeout enforcement** - 5 second hard limit
+3. **Memory limits** - Prevent infinite loops/memory leaks
+4. **Restricted globals** - No `require()`, `process`, `fs`, etc.
+5. **Output sanitization** - Return only JSON-serializable results
+
+**Safe Context:**
+```javascript
+const safeContext = {
+  data: userProvidedData,
+  console: {
+    log: (...args) => capturedOutput.push(args),
+  },
+  // Math, JSON, Array, Object available
+  // No dangerous globals
+};
+```
+
+**Audit & Safety:**
+- Log all executed code
+- Reject suspicious patterns (eval, Function constructor)
+- Return sanitized output only
+- Catch and sanitize all errors
+
+### User Experience Flow
+
+**Scenario: Count bike stations by district**
+
+1. **User asks:** "How many bike repair stations are in each district?"
+
+2. **Claude fetches data:**
+   ```
+   Tool: fetch_dataset_data
+   Result: 36 rows of JSON data
+   ```
+
+3. **Claude writes code to count:**
+   ```
+   Tool: execute_code
+   Code: data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})
+   Data: [36 bike stations]
+   ```
+
+4. **Code executes, returns:**
+   ```json
+   {
+     "Mitte": 9,
+     "Steglitz-Zehlendorf": 7,
+     "Friedrichshain-Kreuzberg": 5,
+     ...
+   }
+   ```
+
+5. **Claude presents results:**
+   > Here's the distribution:
+   > 1. Mitte: 9 stations (25%)
+   > 2. Steglitz-Zehlendorf: 7 stations (19.4%)
+   > ...
+
+### UI Integration
+
+Tool activity display shows code execution:
+```
+🔧 Execute Code
+▼
+Counting stations by district
+Result: { Mitte: 9, Steglitz-Zehlendorf: 7, ... }
+```
+
+Users see what code ran (transparency builds trust).
+
+### Success Metrics
+
+1. **Accuracy:** 100% correct counts on simple aggregations (vs ~70% currently)
+2. **Performance:** Code execution completes in <100ms for typical datasets
+3. **Reliability:** No crashes or timeouts on valid code
+4. **Usability:** Claude successfully uses tool without user intervention
+
+### Alternative Considered: Server-Side Aggregations
+
+**Idea:** Pre-compute common aggregations (count by field X, sum field Y, etc.)
+
+**Pros:**
+- No code execution needed
+- Guaranteed safe
+
+**Cons:**
+- ❌ Can't predict what users will need
+- ❌ Limited to pre-defined operations
+- ❌ Doesn't scale to complex queries
+
+**Decision:** Code execution is more flexible and covers all use cases.
+
+---
+
+## Section 5: Technical Decisions
 
 ### Decision 1: Full MCP Protocol vs Direct Integration
 

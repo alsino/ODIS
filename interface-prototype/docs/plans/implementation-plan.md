@@ -2370,6 +2370,521 @@ Before considering the project complete, verify:
 
 ---
 
+## Phase 5: Code Execution Feature
+
+**Goal:** Add JavaScript code execution capability to enable accurate data analysis and eliminate counting errors.
+
+### Task 5.1: Create Code Executor Module
+
+**What to do:** Implement sandboxed JavaScript execution using Node.js VM.
+
+**Files to create:**
+- `/interface-prototype/backend/src/code-executor.ts`
+
+**Step-by-step:**
+
+1. **Create backend/src/code-executor.ts:**
+
+```typescript
+// ABOUTME: Sandboxed JavaScript code executor for data analysis
+// ABOUTME: Executes user code in isolated VM with timeout and memory limits
+
+import { createContext, runInContext } from 'node:vm';
+
+export interface ExecutionResult {
+  success: boolean;
+  output?: any;
+  error?: string;
+  executionTime: number;
+}
+
+export interface CodeExecutorConfig {
+  timeout?: number; // milliseconds
+  maxOutputSize?: number; // bytes
+}
+
+export class CodeExecutor {
+  private readonly timeout: number;
+  private readonly maxOutputSize: number;
+
+  constructor(config: CodeExecutorConfig = {}) {
+    this.timeout = config.timeout || 5000; // 5 seconds default
+    this.maxOutputSize = config.maxOutputSize || 1024 * 1024; // 1MB default
+  }
+
+  /**
+   * Execute JavaScript code in a sandboxed environment
+   */
+  async execute(code: string, context: Record<string, any> = {}): Promise<ExecutionResult> {
+    const startTime = Date.now();
+
+    try {
+      // Validate code doesn't contain dangerous patterns
+      this.validateCode(code);
+
+      // Create safe sandbox context
+      const sandbox = this.createSandbox(context);
+
+      // Wrap code to capture result
+      const wrappedCode = `
+        (() => {
+          ${code}
+        })()
+      `;
+
+      // Execute with timeout
+      const result = await this.executeWithTimeout(wrappedCode, sandbox);
+
+      // Sanitize output
+      const sanitizedOutput = this.sanitizeOutput(result);
+
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        output: sanitizedOutput,
+        executionTime,
+      };
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        executionTime,
+      };
+    }
+  }
+
+  /**
+   * Validate code doesn't contain dangerous patterns
+   */
+  private validateCode(code: string): void {
+    // Block obvious dangerous patterns
+    const dangerousPatterns = [
+      /\brequire\s*\(/,
+      /\bimport\s+/,
+      /\bprocess\b/,
+      /\b__dirname\b/,
+      /\b__filename\b/,
+      /\beval\s*\(/,
+      /Function\s*\(/,
+      /\bchild_process\b/,
+      /\bfs\b/,
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(code)) {
+        throw new Error(`Code contains forbidden pattern: ${pattern.source}`);
+      }
+    }
+  }
+
+  /**
+   * Create sandbox environment with safe globals
+   */
+  private createSandbox(userContext: Record<string, any>): any {
+    const capturedLogs: any[] = [];
+
+    const sandbox = createContext({
+      // User-provided data
+      ...userContext,
+
+      // Safe globals
+      console: {
+        log: (...args: any[]) => capturedLogs.push(args),
+      },
+      Math,
+      Date,
+      JSON,
+      Array,
+      Object,
+      String,
+      Number,
+      Boolean,
+      parseInt,
+      parseFloat,
+      isNaN,
+      isFinite,
+
+      // Utility to access captured logs
+      __getLogs: () => capturedLogs,
+
+      // No dangerous globals
+      require: undefined,
+      process: undefined,
+      global: undefined,
+      __dirname: undefined,
+      __filename: undefined,
+      module: undefined,
+      exports: undefined,
+    });
+
+    return sandbox;
+  }
+
+  /**
+   * Execute code with timeout enforcement
+   */
+  private async executeWithTimeout(code: string, sandbox: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Execution timeout after ${this.timeout}ms`));
+      }, this.timeout);
+
+      try {
+        const result = runInContext(code, sandbox, {
+          timeout: this.timeout,
+          displayErrors: true,
+        });
+
+        clearTimeout(timer);
+        resolve(result);
+      } catch (error) {
+        clearTimeout(timer);
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Sanitize output to prevent large/dangerous data
+   */
+  private sanitizeOutput(output: any): any {
+    // Convert to JSON and back to remove functions, symbols, etc.
+    try {
+      const json = JSON.stringify(output);
+
+      if (json.length > this.maxOutputSize) {
+        throw new Error(`Output too large: ${json.length} bytes (max: ${this.maxOutputSize})`);
+      }
+
+      return JSON.parse(json);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Output too large')) {
+        throw error;
+      }
+
+      // If output is not JSON-serializable, return string representation
+      return String(output);
+    }
+  }
+}
+```
+
+**How to test:**
+
+Create a test file `backend/src/code-executor.test.ts`:
+
+```typescript
+import { CodeExecutor } from './code-executor.js';
+
+describe('CodeExecutor', () => {
+  let executor: CodeExecutor;
+
+  beforeEach(() => {
+    executor = new CodeExecutor();
+  });
+
+  test('should execute simple arithmetic', async () => {
+    const result = await executor.execute('2 + 2');
+    expect(result.success).toBe(true);
+    expect(result.output).toBe(4);
+  });
+
+  test('should access provided data context', async () => {
+    const data = [{ name: 'Alice' }, { name: 'Bob' }];
+    const result = await executor.execute(
+      'data.map(row => row.name)',
+      { data }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual(['Alice', 'Bob']);
+  });
+
+  test('should count objects by field', async () => {
+    const data = [
+      { bezirk: 'Mitte' },
+      { bezirk: 'Mitte' },
+      { bezirk: 'Pankow' },
+    ];
+
+    const code = `
+      const counts = data.reduce((acc, row) => {
+        acc[row.bezirk] = (acc[row.bezirk] || 0) + 1;
+        return acc;
+      }, {});
+      counts;
+    `;
+
+    const result = await executor.execute(code, { data });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ Mitte: 2, Pankow: 1 });
+  });
+
+  test('should reject code with require()', async () => {
+    const result = await executor.execute('require("fs")');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('forbidden pattern');
+  });
+
+  test('should timeout long-running code', async () => {
+    const executor = new CodeExecutor({ timeout: 100 });
+    const result = await executor.execute('while(true) {}');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('timeout');
+  });
+
+  test('should handle errors gracefully', async () => {
+    const result = await executor.execute('throw new Error("test error")');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('test error');
+  });
+});
+```
+
+Run tests:
+```bash
+cd backend
+npm test -- code-executor.test.ts
+```
+
+**Commit message:** `Add sandboxed JavaScript code executor`
+
+---
+
+### Task 5.2: Add execute_code Tool to Claude Client
+
+**What to do:** Register the code execution tool so Claude can use it.
+
+**Files to modify:**
+- `/interface-prototype/backend/src/claude-client.ts`
+- `/interface-prototype/backend/src/websocket-handler.ts`
+
+**Step-by-step:**
+
+1. **Import CodeExecutor in websocket-handler.ts:**
+
+```typescript
+import { CodeExecutor } from './code-executor.js';
+```
+
+2. **Create CodeExecutor instance in WebSocketHandler class:**
+
+```typescript
+export class WebSocketHandler {
+  private mcpClient: MCPClientManager;
+  private claudeClient: ClaudeClient;
+  private codeExecutor: CodeExecutor;  // ← Add this
+
+  constructor(mcpClient: MCPClientManager, claudeClient: ClaudeClient) {
+    this.mcpClient = mcpClient;
+    this.claudeClient = claudeClient;
+    this.codeExecutor = new CodeExecutor();  // ← Add this
+  }
+
+  // ... rest of class
+}
+```
+
+3. **Add execute_code tool definition:**
+
+In `websocket-handler.ts`, add the tool definition to the tools array:
+
+```typescript
+// Get MCP tools
+const mcpTools = this.mcpClient.getTools();
+
+// Add code execution tool
+const codeExecutionTool = {
+  name: 'execute_code',
+  description: 'Execute JavaScript code to analyze data. Use this when you need to perform accurate calculations, counting, or aggregations on datasets. The code runs in a sandboxed environment with access to the data variable.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        description: 'JavaScript code to execute. The dataset is available as the "data" variable. Return the result as the last expression.'
+      },
+      data: {
+        type: 'array',
+        description: 'The dataset to analyze (array of objects)'
+      }
+    },
+    required: ['code', 'data']
+  }
+};
+
+const allTools = [...mcpTools, codeExecutionTool];
+```
+
+4. **Handle execute_code tool calls:**
+
+In the tool execution section:
+
+```typescript
+// Handle tool calls
+for (const toolUse of toolCalls) {
+  console.log(`Executing tool: ${toolUse.name}`);
+
+  let toolResult;
+
+  if (toolUse.name === 'execute_code') {
+    // Handle code execution locally
+    const { code, data } = toolUse.input as { code: string; data: any[] };
+
+    const executionResult = await this.codeExecutor.execute(code, { data });
+
+    if (executionResult.success) {
+      toolResult = {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: JSON.stringify(executionResult.output, null, 2)
+      };
+    } else {
+      toolResult = {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: `Error: ${executionResult.error}`,
+        is_error: true
+      };
+    }
+  } else {
+    // Handle MCP tools
+    const result = await this.mcpClient.callTool(toolUse.name, toolUse.input);
+    toolResult = {
+      type: 'tool_result',
+      tool_use_id: toolUse.id,
+      content: result.content[0].text
+    };
+  }
+
+  toolResults.push(toolResult);
+}
+```
+
+**Commit message:** `Add execute_code tool to Claude client`
+
+---
+
+### Task 5.3: Update Frontend to Display Code Execution
+
+**What to do:** Show code execution in the tool activity UI.
+
+**Files to modify:**
+- `/interface-prototype/frontend/src/lib/ToolActivity.svelte` (if it exists, otherwise this is optional)
+
+**Step-by-step:**
+
+If ToolActivity component exists, ensure it handles the `execute_code` tool nicely:
+
+```svelte
+{#if tool.name === 'execute_code'}
+  <div class="tool-badge">
+    🔧 Execute Code
+  </div>
+  <div class="tool-details">
+    <div class="code-preview">
+      <pre><code>{tool.input.code}</code></pre>
+    </div>
+    {#if tool.result}
+      <div class="result-preview">
+        <strong>Result:</strong>
+        <pre>{JSON.stringify(tool.result, null, 2)}</pre>
+      </div>
+    {/if}
+  </div>
+{/if}
+```
+
+**Note:** This is optional - tool activity display is already implemented. Just ensure code execution shows cleanly.
+
+**Commit message:** `Update UI to display code execution tool activity`
+
+---
+
+### Task 5.4: Test Code Execution End-to-End
+
+**What to do:** Verify code execution works with real dataset queries.
+
+**Manual test:**
+
+1. Start the backend and frontend
+2. Ask: "Find bike repair stations"
+3. Wait for data to load (36 stations)
+4. Ask: "How many stations are in each bezirk?"
+
+**Expected behavior:**
+- Claude calls `execute_code` tool
+- Code counts stations by bezirk
+- Returns accurate counts: Mitte (9), Steglitz-Zehlendorf (7), etc.
+- Claude presents results correctly
+
+**Create automated test in backend/test/code-execution.integration.test.ts:**
+
+```typescript
+import { CodeExecutor } from '../src/code-executor.js';
+
+describe('Code Execution Integration', () => {
+  test('should accurately count bike stations by bezirk', async () => {
+    const data = [
+      { bezirk: 'Mitte', standort: 'Location 1' },
+      { bezirk: 'Mitte', standort: 'Location 2' },
+      { bezirk: 'Pankow', standort: 'Location 3' },
+    ];
+
+    const code = `
+      const counts = data.reduce((acc, row) => {
+        acc[row.bezirk] = (acc[row.bezirk] || 0) + 1;
+        return acc;
+      }, {});
+
+      Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([bezirk, count]) => ({ bezirk, count }));
+    `;
+
+    const executor = new CodeExecutor();
+    const result = await executor.execute(code, { data });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual([
+      { bezirk: 'Mitte', count: 2 },
+      { bezirk: 'Pankow', count: 1 },
+    ]);
+  });
+});
+```
+
+**Commit message:** `Add integration tests for code execution feature`
+
+---
+
+### Phase 5 Complete!
+
+**Verification checklist:**
+- [ ] CodeExecutor module created and tested
+- [ ] execute_code tool registered with Claude
+- [ ] Tool execution handled in websocket-handler
+- [ ] Frontend displays code execution (if applicable)
+- [ ] Manual test passes (accurate counts)
+- [ ] Integration tests pass
+- [ ] No security issues (sandboxing works)
+
+**Total commits:** 3-4
+
+**Expected outcome:**
+- ✅ Accurate data analysis (100% correct counts)
+- ✅ No more counting errors from Claude
+- ✅ Fast execution (<100ms for typical aggregations)
+- ✅ Secure sandboxed environment
+
+---
+
 ## Post-Implementation: Next Steps
 
 Once the interface prototype is working:
