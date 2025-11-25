@@ -100,7 +100,13 @@ export class GeoJSONTransformer {
       // proj4 expects [x, y] (or [lon, lat])
       const [x, y] = coord;
       const transformed = proj4(fromCRS, toCRS, [x, y]);
-      return [transformed[0], transformed[1]];
+
+      // Round to 7 decimal places (~1cm precision) to reduce file size
+      // This preserves all meaningful precision from UTM source data
+      return [
+        Math.round(transformed[0] * 10000000) / 10000000,
+        Math.round(transformed[1] * 10000000) / 10000000
+      ];
     };
   }
 
