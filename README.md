@@ -34,7 +34,3 @@ See [interface-prototype/README.md](interface-prototype/README.md) for setup and
 ## Getting Started
 
 Each component has its own setup instructions in its respective directory.
-
-## Development
-
-See [CLAUDE.md](CLAUDE.md) for collaboration guidelines and development practices.
