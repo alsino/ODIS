@@ -10,6 +10,7 @@ import { CodeExecutor } from './code-executor.js';
 export class WebSocketHandler {
   private conversationHistory: Map<WebSocket, ConversationMessage[]> = new Map();
   private codeExecutor: CodeExecutor;
+  private fetchedDatasets: Map<WebSocket, Map<string, any[]>> = new Map();
 
   constructor(
     private mcpClient: MCPClientManager,
@@ -24,8 +25,9 @@ export class WebSocketHandler {
   handleConnection(ws: WebSocket): void {
     console.log('New WebSocket connection');
 
-    // Initialize conversation history for this connection
+    // Initialize conversation history and dataset cache for this connection
     this.conversationHistory.set(ws, []);
+    this.fetchedDatasets.set(ws, new Map());
 
     // Send welcome message
     this.sendMessage(ws, {
@@ -42,6 +44,7 @@ export class WebSocketHandler {
     ws.on('close', () => {
       console.log('WebSocket connection closed');
       this.conversationHistory.delete(ws);
+      this.fetchedDatasets.delete(ws);
     });
 
     // Handle errors
@@ -83,20 +86,20 @@ export class WebSocketHandler {
       // Add code execution tool
       const codeExecutionTool = {
         name: 'execute_code',
-        description: 'Execute JavaScript code to analyze data. Use this when you need to perform accurate calculations, counting, or aggregations on datasets. The code runs in a sandboxed environment with access to the data variable.',
+        description: 'Execute JavaScript code to analyze a dataset that was previously fetched with fetch_dataset_data. Use this AFTER fetch_dataset_data when you need accurate calculations, counting, or aggregations. The dataset will automatically be retrieved from the last fetch.',
         inputSchema: {
           type: 'object' as const,
           properties: {
+            dataset_id: {
+              type: 'string',
+              description: 'The dataset ID that was used with fetch_dataset_data. Example: "fahrradreparaturstationen-wfs-ffeaba56"'
+            },
             code: {
               type: 'string',
-              description: 'JavaScript code to execute. The dataset is available as the "data" variable. Return the result as the last expression.'
-            },
-            data: {
-              type: 'array',
-              description: 'The dataset to analyze (array of objects)'
+              description: 'JavaScript code to execute. The dataset will be available as the "data" variable. Use data.reduce(), data.map(), data.filter() etc. Return the result as the last expression. Example: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"'
             }
           },
-          required: ['code', 'data']
+          required: ['dataset_id', 'code']
         }
       };
 
@@ -110,10 +113,40 @@ export class WebSocketHandler {
         async (toolName: string, toolArgs: any) => {
           // Handle code execution locally
           if (toolName === 'execute_code') {
-            const { code, data } = toolArgs as { code: string; data: any[] };
+            const { dataset_id, code } = toolArgs as { dataset_id: string; code: string };
+
+            // Validate required parameters
+            if (!dataset_id || !code) {
+              console.error('[execute_code] Missing required parameters:', { hasDatasetId: !!dataset_id, hasCode: !!code });
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Error: execute_code requires both 'dataset_id' and 'code' parameters. Received: dataset_id=${!!dataset_id}, code=${!!code}`
+                }],
+                isError: true
+              };
+            }
+
+            // Get cached dataset
+            const datasetCache = this.fetchedDatasets.get(ws);
+            const data = datasetCache?.get(dataset_id);
+
+            if (!data) {
+              console.error('[execute_code] Dataset not found in cache:', dataset_id);
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Error: Dataset "${dataset_id}" not found. Please use fetch_dataset_data first to load the dataset.`
+                }],
+                isError: true
+              };
+            }
+
+            console.log('[execute_code] Executing code on', dataset_id, 'with', data.length, 'rows');
             const executionResult = await this.codeExecutor.execute(code, { data });
 
             if (executionResult.success) {
+              console.log('[execute_code] Success, execution time:', executionResult.executionTime, 'ms');
               return {
                 content: [{
                   type: 'text',
@@ -121,6 +154,7 @@ export class WebSocketHandler {
                 }]
               };
             } else {
+              console.error('[execute_code] Execution failed:', executionResult.error);
               return {
                 content: [{
                   type: 'text',
@@ -144,6 +178,25 @@ export class WebSocketHandler {
             }
           } else if (typeof result === 'string') {
             resultText = result;
+          }
+
+          // Cache dataset if this was fetch_dataset_data
+          if (toolName === 'fetch_dataset_data') {
+            const { dataset_id } = toolArgs as { dataset_id: string };
+            // Extract JSON from markdown code block
+            const jsonMatch = resultText.match(/```json\n([\s\S]*?)\n```/);
+            if (jsonMatch && dataset_id) {
+              try {
+                const parsedData = JSON.parse(jsonMatch[1]);
+                const datasetCache = this.fetchedDatasets.get(ws);
+                if (datasetCache && Array.isArray(parsedData)) {
+                  datasetCache.set(dataset_id, parsedData);
+                  console.log('[fetch_dataset_data] Cached', parsedData.length, 'rows for', dataset_id);
+                }
+              } catch (error) {
+                console.error('[fetch_dataset_data] Failed to parse/cache dataset:', error);
+              }
+            }
           }
 
           console.log('[WebSocket] Tool result text length:', resultText.length);
