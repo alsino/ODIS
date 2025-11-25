@@ -92,7 +92,7 @@ export class WebSocketHandler {
           properties: {
             code: {
               type: 'string',
-              description: 'JavaScript code to execute. The fetched dataset will be available as the "data" variable (an array of objects). Use standard JavaScript array methods like data.reduce(), data.map(), data.filter(). The result of the last expression will be returned. Examples:\n- Count total rows: "data.length"\n- Count by bezirk: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"\n- Get unique values: "[...new Set(data.map(row => row.bezirk))]"'
+              description: 'JavaScript code to execute. The fetched dataset will be available as the "data" variable (an array of objects). Use standard JavaScript array methods like data.reduce(), data.map(), data.filter(). The result of the last expression will be returned. Examples:\n- Count total rows: "data.length"\n- Count by bezirk: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"\n- Return object literal: Wrap in parentheses: "({ total: data.length, unique: [...new Set(data.map(row => row.bezirk))] })"\n- Get unique values: "[...new Set(data.map(row => row.bezirk))]"'
             },
             dataset_id: {
               type: 'string',
