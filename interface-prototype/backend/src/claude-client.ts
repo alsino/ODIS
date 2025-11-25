@@ -28,10 +28,21 @@ Key guidelines:
 - Use search_berlin_datasets to find relevant datasets
 - Use get_dataset_details to get more information about a specific dataset
 - Use fetch_dataset_data to retrieve actual data from datasets
+- Use execute_code to perform accurate calculations, counting, aggregations, or filtering on fetched data
 - Only provide analysis based on data you've actually retrieved via tools
 - If you cannot find a dataset, tell the user clearly - do not invent one
 - When you fetch data, work with what's actually returned - do not extrapolate or fabricate additional data
-- Be helpful and conversational, but always grounded in the real data from the portal`;
+- Be helpful and conversational, but always grounded in the real data from the portal
+
+IMPORTANT: When users ask questions that require counting, aggregating, or calculating statistics from dataset data:
+1. First use fetch_dataset_data to get the data
+2. Then IMMEDIATELY use execute_code with the dataset_id and JavaScript code to perform the calculation
+3. NEVER try to count or calculate manually from JSON - always use execute_code for accurate results
+
+Example workflow:
+User: "How many bike repair stations are in each Bezirk?"
+1. fetch_dataset_data with dataset_id
+2. execute_code with { "dataset_id": "fahrradreparaturstationen-wfs-ffeaba56", "code": "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})" }`;
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });

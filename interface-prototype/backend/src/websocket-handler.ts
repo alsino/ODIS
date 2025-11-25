@@ -86,17 +86,17 @@ export class WebSocketHandler {
       // Add code execution tool
       const codeExecutionTool = {
         name: 'execute_code',
-        description: 'Execute JavaScript code to analyze a dataset that was previously fetched with fetch_dataset_data. Use this AFTER fetch_dataset_data when you need accurate calculations, counting, or aggregations. The dataset will automatically be retrieved from the last fetch.',
+        description: 'Execute JavaScript code to analyze a dataset that was previously fetched with fetch_dataset_data. REQUIRED: Use this tool immediately after fetch_dataset_data whenever you need to count, aggregate, filter, or calculate statistics. DO NOT try to count or calculate manually - always use this tool for accurate results.',
         inputSchema: {
           type: 'object' as const,
           properties: {
             dataset_id: {
               type: 'string',
-              description: 'The dataset ID that was used with fetch_dataset_data. Example: "fahrradreparaturstationen-wfs-ffeaba56"'
+              description: 'REQUIRED: The exact dataset ID string that was used with fetch_dataset_data. Example: "fahrradreparaturstationen-wfs-ffeaba56"'
             },
             code: {
               type: 'string',
-              description: 'JavaScript code to execute. The dataset will be available as the "data" variable. Use data.reduce(), data.map(), data.filter() etc. Return the result as the last expression. Example: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"'
+              description: 'REQUIRED: JavaScript code to execute. The fetched dataset will be available as the "data" variable (an array of objects). Use standard JavaScript array methods like data.reduce(), data.map(), data.filter(). The result of the last expression will be returned. Example to count by bezirk: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"'
             }
           },
           required: ['dataset_id', 'code']
