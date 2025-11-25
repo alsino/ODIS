@@ -10,8 +10,9 @@ This repository contains multiple components:
 
 MCP server for natural language discovery and fetching of Berlin's open datasets. Connects to the Berlin Open Data Portal (daten.berlin.de) and enables:
 - Natural language dataset search
-- Data fetching with smart sampling
-- CSV, JSON, and Excel support
+- Data fetching with smart sampling for large datasets
+- CSV, JSON, Excel, and WFS (Web Feature Service) support
+- GeoJSON coordinate transformation (EPSG:25833 → WGS84)
 - Browser automation for JavaScript-rendered downloads
 
 See [berlin-open-data-mcp/README.md](berlin-open-data-mcp/README.md) for details.
@@ -22,7 +23,13 @@ See [berlin-open-data-mcp/README.md](berlin-open-data-mcp/README.md) for details
 
 ### `/interface-prototype`
 
-*(Planned)* Prototype interface demonstrating the integration of both MCP servers for end-to-end workflows: data discovery → data fetching → visualization.
+Web-based chat interface for exploring Berlin open data through natural language. Integrates the Berlin Open Data MCP server with Claude to enable:
+- Conversational dataset search and discovery
+- Data fetching and preview
+- Accurate data analysis via sandboxed JavaScript code execution
+- Real-time streaming responses via WebSocket
+
+See [interface-prototype/README.md](interface-prototype/README.md) for setup and usage.
 
 ## Getting Started
 
