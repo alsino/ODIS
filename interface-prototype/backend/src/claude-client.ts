@@ -132,21 +132,43 @@ User: "How many bike repair stations are in each Bezirk?"
 
       let fullText = '';
       const toolCalls: ToolCall[] = [];
+      const toolInputJsonBuffers: Map<number, string> = new Map();
+      const blockIndexToToolCallIndex: Map<number, number> = new Map();
 
       for await (const event of stream) {
-        if (event.type === 'content_block_delta') {
+        if (event.type === 'content_block_start') {
+          if (event.content_block.type === 'tool_use') {
+            // Initialize tool call - input will be built from deltas
+            const toolCallIndex = toolCalls.length;
+            toolCalls.push({
+              id: event.content_block.id,
+              name: event.content_block.name,
+              input: {}
+            });
+            toolInputJsonBuffers.set(event.index, '');
+            blockIndexToToolCallIndex.set(event.index, toolCallIndex);
+          }
+        } else if (event.type === 'content_block_delta') {
           if (event.delta.type === 'text_delta') {
             const chunk = event.delta.text;
             fullText += chunk;
             streamCallback(chunk);
+          } else if (event.delta.type === 'input_json_delta') {
+            // Accumulate JSON input for tool calls
+            const currentJson = toolInputJsonBuffers.get(event.index) || '';
+            toolInputJsonBuffers.set(event.index, currentJson + event.delta.partial_json);
           }
-        } else if (event.type === 'content_block_start') {
-          if (event.content_block.type === 'tool_use') {
-            toolCalls.push({
-              id: event.content_block.id,
-              name: event.content_block.name,
-              input: event.content_block.input
-            });
+        } else if (event.type === 'content_block_stop') {
+          // Parse accumulated JSON input for tool calls
+          const jsonBuffer = toolInputJsonBuffers.get(event.index);
+          const toolCallIndex = blockIndexToToolCallIndex.get(event.index);
+          if (jsonBuffer !== undefined && toolCallIndex !== undefined) {
+            try {
+              const parsedInput = JSON.parse(jsonBuffer);
+              toolCalls[toolCallIndex].input = parsedInput;
+            } catch (error) {
+              console.error('[ClaudeClient] Failed to parse tool input JSON:', error);
+            }
           }
         }
       }
