@@ -634,7 +634,12 @@ class BerlinOpenDataMCPServer {
             let mimeType: string;
             let fileExtension: string;
 
-            if (outputFormat === 'csv') {
+            // Special handling for GeoJSON - return original structure when available
+            if (outputFormat === 'json' && fetchedData.originalGeoJSON) {
+              fileContent = JSON.stringify(fetchedData.originalGeoJSON, null, 2);
+              mimeType = 'application/geo+json';
+              fileExtension = 'geojson';
+            } else if (outputFormat === 'csv') {
               // Convert to CSV
               if (fetchedData.rows.length > 0) {
                 const header = fetchedData.columns.join(',') + '\n';

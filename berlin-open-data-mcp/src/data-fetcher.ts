@@ -15,6 +15,7 @@ export interface FetchedData {
   totalRows: number;
   columns: string[];
   error?: string;
+  originalGeoJSON?: any; // Preserve original GeoJSON structure for proper downloads
 }
 
 export class DataFetcher {
@@ -156,7 +157,10 @@ export class DataFetcher {
 
       // Check if this is GeoJSON
       if (this.isGeoJSON(parsed)) {
-        return this.parseGeoJSON(parsed);
+        const result = this.parseGeoJSON(parsed);
+        // Preserve original GeoJSON structure for proper downloads
+        result.originalGeoJSON = parsed;
+        return result;
       }
 
       // Find the largest array in the JSON structure (recursively)
@@ -298,10 +302,11 @@ export class DataFetcher {
       // Use existing GeoJSON parser
       const result = this.parseGeoJSON(geojson);
 
-      // Update format to KML
+      // Update format to KML and preserve GeoJSON
       return {
         ...result,
         format: 'KML',
+        originalGeoJSON: geojson, // Preserve GeoJSON for proper downloads
       };
 
     } catch (error) {
@@ -538,6 +543,7 @@ export class DataFetcher {
       return {
         ...result,
         format: 'WFS',
+        originalGeoJSON: geojson, // Preserve original GeoJSON for proper downloads
       };
     } catch (error) {
       return {
