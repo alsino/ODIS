@@ -5,14 +5,18 @@ import type { WebSocket } from 'ws';
 import type { MCPClientManager } from './mcp-client.js';
 import type { ClaudeClient } from './claude-client.js';
 import type { ConversationMessage, WebSocketMessage, UserMessage } from './types.js';
+import { CodeExecutor } from './code-executor.js';
 
 export class WebSocketHandler {
   private conversationHistory: Map<WebSocket, ConversationMessage[]> = new Map();
+  private codeExecutor: CodeExecutor;
 
   constructor(
     private mcpClient: MCPClientManager,
     private claudeClient: ClaudeClient
-  ) {}
+  ) {
+    this.codeExecutor = new CodeExecutor();
+  }
 
   /**
    * Handle new WebSocket connection
@@ -74,7 +78,29 @@ export class WebSocketHandler {
 
     try {
       // Get available tools from MCP
-      const tools = this.mcpClient.getTools();
+      const mcpTools = this.mcpClient.getTools();
+
+      // Add code execution tool
+      const codeExecutionTool = {
+        name: 'execute_code',
+        description: 'Execute JavaScript code to analyze data. Use this when you need to perform accurate calculations, counting, or aggregations on datasets. The code runs in a sandboxed environment with access to the data variable.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            code: {
+              type: 'string',
+              description: 'JavaScript code to execute. The dataset is available as the "data" variable. Return the result as the last expression.'
+            },
+            data: {
+              type: 'array',
+              description: 'The dataset to analyze (array of objects)'
+            }
+          },
+          required: ['code', 'data']
+        }
+      };
+
+      const tools = [...mcpTools, codeExecutionTool];
 
       // Send to Claude with tool execution callback and streaming
       const result = await this.claudeClient.sendMessageWithTools(
@@ -82,6 +108,29 @@ export class WebSocketHandler {
         history,
         tools,
         async (toolName: string, toolArgs: any) => {
+          // Handle code execution locally
+          if (toolName === 'execute_code') {
+            const { code, data } = toolArgs as { code: string; data: any[] };
+            const executionResult = await this.codeExecutor.execute(code, { data });
+
+            if (executionResult.success) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify(executionResult.output, null, 2)
+                }]
+              };
+            } else {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Error executing code: ${executionResult.error}`
+                }],
+                isError: true
+              };
+            }
+          }
+
           // Execute tool via MCP client
           const result = await this.mcpClient.callTool(toolName, toolArgs);
 
