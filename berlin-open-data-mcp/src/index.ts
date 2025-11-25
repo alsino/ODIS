@@ -629,6 +629,61 @@ class BerlinOpenDataMCPServer {
               };
             }
 
+            // Transform GeoJSON coordinates early if we have originalGeoJSON
+            // This ensures the preview shows transformed coordinates
+            if (fetchedData.originalGeoJSON) {
+              const transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(
+                fetchedData.originalGeoJSON
+              );
+              fetchedData.originalGeoJSON = transformedGeoJSON;
+
+              // Re-parse to update rows with transformed coordinates
+              const geojsonFeatures = transformedGeoJSON.type === 'FeatureCollection'
+                ? transformedGeoJSON.features
+                : [transformedGeoJSON];
+
+              const updatedRows: any[] = [];
+              const columnSet = new Set<string>(fetchedData.columns);
+
+              for (const feature of geojsonFeatures) {
+                if (feature.type !== 'Feature') continue;
+
+                const row: any = {};
+
+                // Add properties
+                if (feature.properties && typeof feature.properties === 'object') {
+                  Object.keys(feature.properties).forEach(key => {
+                    row[key] = (feature.properties as any)[key];
+                    columnSet.add(key);
+                  });
+                }
+
+                // Add geometry metadata
+                if (feature.geometry) {
+                  row['geometry_type'] = feature.geometry.type;
+                  columnSet.add('geometry_type');
+
+                  // GeometryCollection doesn't have coordinates directly
+                  const geom = feature.geometry as any;
+                  if (geom.coordinates) {
+                    row['geometry_coordinates'] = JSON.stringify(geom.coordinates);
+                    columnSet.add('geometry_coordinates');
+                  }
+                }
+
+                // Add feature ID if present
+                if (feature.id !== undefined) {
+                  row['feature_id'] = feature.id;
+                  columnSet.add('feature_id');
+                }
+
+                updatedRows.push(row);
+              }
+
+              fetchedData.rows = updatedRows;
+              fetchedData.columns = Array.from(columnSet);
+            }
+
             // Determine output format
             const outputFormat = requestedFormat || (resource.format.toLowerCase() === 'csv' ? 'csv' : 'json');
 
@@ -637,13 +692,10 @@ class BerlinOpenDataMCPServer {
             let mimeType: string;
             let fileExtension: string;
 
-            // Special handling for GeoJSON - transform to WGS84 and return original structure
+            // Special handling for GeoJSON - use already-transformed GeoJSON
             if (outputFormat === 'json' && fetchedData.originalGeoJSON) {
-              // Transform coordinates to WGS84 (EPSG:4326) for web map compatibility
-              const transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(
-                fetchedData.originalGeoJSON
-              );
-              fileContent = JSON.stringify(transformedGeoJSON, null, 2);
+              // GeoJSON already transformed to WGS84 earlier (see coordinate transformation above)
+              fileContent = JSON.stringify(fetchedData.originalGeoJSON, null, 2);
               mimeType = 'application/geo+json';
               fileExtension = 'geojson';
             } else if (outputFormat === 'csv') {
