@@ -37,15 +37,9 @@ export class CodeExecutor {
       // Create safe sandbox context
       const sandbox = this.createSandbox(context);
 
-      // Wrap code to capture result
-      const wrappedCode = `
-        (() => {
-          ${code}
-        })()
-      `;
-
-      // Execute with timeout
-      const result = await this.executeWithTimeout(wrappedCode, sandbox);
+      // Execute with timeout - run directly without IIFE wrapper
+      // This ensures the last expression is returned as the result
+      const result = await this.executeWithTimeout(code, sandbox);
 
       // Sanitize output
       const sanitizedOutput = this.sanitizeOutput(result);
