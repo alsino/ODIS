@@ -86,20 +86,20 @@ export class WebSocketHandler {
       // Add code execution tool
       const codeExecutionTool = {
         name: 'execute_code',
-        description: 'Execute JavaScript code to analyze a dataset that was previously fetched with fetch_dataset_data. REQUIRED: Use this tool immediately after fetch_dataset_data whenever you need to count, aggregate, filter, or calculate statistics. DO NOT try to count or calculate manually - always use this tool for accurate results.',
+        description: 'Execute JavaScript code to analyze a dataset that was previously fetched with fetch_dataset_data. Use this tool immediately after fetch_dataset_data whenever you need to count, aggregate, filter, or calculate statistics. DO NOT try to count or calculate manually - always use this tool for accurate results.',
         inputSchema: {
           type: 'object' as const,
           properties: {
-            dataset_id: {
-              type: 'string',
-              description: 'REQUIRED: The exact dataset ID string that was used with fetch_dataset_data. Example: "fahrradreparaturstationen-wfs-ffeaba56"'
-            },
             code: {
               type: 'string',
-              description: 'REQUIRED: JavaScript code to execute. The fetched dataset will be available as the "data" variable (an array of objects). Use standard JavaScript array methods like data.reduce(), data.map(), data.filter(). The result of the last expression will be returned. Example to count by bezirk: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"'
+              description: 'JavaScript code to execute. The fetched dataset will be available as the "data" variable (an array of objects). Use standard JavaScript array methods like data.reduce(), data.map(), data.filter(). The result of the last expression will be returned. Examples:\n- Count total rows: "data.length"\n- Count by bezirk: "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})"\n- Get unique values: "[...new Set(data.map(row => row.bezirk))]"'
+            },
+            dataset_id: {
+              type: 'string',
+              description: 'Optional: The dataset ID to use. If not provided, will use the most recently fetched dataset. Example: "fahrradreparaturstationen-wfs-ffeaba56"'
             }
           },
-          required: ['dataset_id', 'code']
+          required: ['code']
         }
       };
 
@@ -113,22 +113,45 @@ export class WebSocketHandler {
         async (toolName: string, toolArgs: any) => {
           // Handle code execution locally
           if (toolName === 'execute_code') {
-            const { dataset_id, code } = toolArgs as { dataset_id: string; code: string };
+            // Log what we received
+            console.log('[execute_code] Received toolArgs:', JSON.stringify(toolArgs, null, 2));
 
-            // Validate required parameters
-            if (!dataset_id || !code) {
-              console.error('[execute_code] Missing required parameters:', { hasDatasetId: !!dataset_id, hasCode: !!code });
+            let { dataset_id, code } = toolArgs as { dataset_id?: string; code?: string };
+            const datasetCache = this.fetchedDatasets.get(ws);
+
+            // Auto-detect dataset_id if not provided
+            if (!dataset_id && datasetCache && datasetCache.size > 0) {
+              // Get the most recently cached dataset
+              const datasets = Array.from(datasetCache.keys());
+              dataset_id = datasets[datasets.length - 1];
+              console.log('[execute_code] Auto-detected dataset_id:', dataset_id);
+            }
+
+            // Validate code parameter
+            if (!code) {
+              console.error('[execute_code] Missing code parameter. toolArgs:', toolArgs);
               return {
                 content: [{
                   type: 'text',
-                  text: `Error: execute_code requires both 'dataset_id' and 'code' parameters. Received: dataset_id=${!!dataset_id}, code=${!!code}`
+                  text: `Error: execute_code requires a 'code' parameter with JavaScript code to execute. Example: { "code": "data.length" }`
+                }],
+                isError: true
+              };
+            }
+
+            // Validate dataset_id
+            if (!dataset_id) {
+              console.error('[execute_code] No dataset_id provided and no cached datasets found');
+              return {
+                content: [{
+                  type: 'text',
+                  text: `Error: No dataset available. Please use fetch_dataset_data first to load a dataset.`
                 }],
                 isError: true
               };
             }
 
             // Get cached dataset
-            const datasetCache = this.fetchedDatasets.get(ws);
             const data = datasetCache?.get(dataset_id);
 
             if (!data) {
