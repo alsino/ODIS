@@ -519,7 +519,7 @@ class BerlinOpenDataMCPServer {
             let responseText = `# Data from: ${dataset.title}\n\n`;
             responseText += `**Resource**: ${resource.name} (${resource.format})\n\n`;
 
-            // Handle full_data request for large datasets
+            // Handle explicit full_data request for large datasets (reject)
             if (full_data && isLarge) {
               return {
                 content: [{
@@ -529,49 +529,41 @@ class BerlinOpenDataMCPServer {
               };
             }
 
-            // Return full data for small datasets when requested
-            if (full_data) {
+            // For small datasets, always return full data for accurate analysis
+            if (!isLarge) {
               responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
               responseText += `## Full Dataset\n\n`;
+              responseText += `**Columns (${fetchedData.columns.length}):** ${fetchedData.columns.join(', ')}\n\n`;
               responseText += `**Data:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
               return {
                 content: [{ type: 'text', text: responseText }],
               };
             }
 
-            // Always return sample initially
+            // For large datasets, return sample with warning
             const sample = this.dataSampler.generateSample(
               fetchedData.rows,
               fetchedData.columns
             );
 
             responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
-
-            // Prominent warning for large datasets at the top
-            if (isLarge) {
-              responseText += `## ⚠️ LARGE DATASET - MANUAL DOWNLOAD REQUIRED\n\n`;
-              responseText += `This dataset has **${totalRows} rows** and CANNOT be analyzed in-context.\n\n`;
-              responseText += `**CRITICAL: Do NOT attempt automated downloads or create sample/synthetic data.**\n\n`;
-              responseText += `**REQUIRED STEPS for analysis:**\n\n`;
-              responseText += `1. **Manual download ONLY:** Open ${resource.url} in your browser and save the file\n`;
-              responseText += `2. **Attach the downloaded file** to this conversation using the paperclip icon\n`;
-              responseText += `3. **Wait for confirmation** that the file is loaded before proceeding with analysis\n\n`;
-              responseText += `**DO NOT:**\n`;
-              responseText += `- ❌ Use wget, curl, or requests to download (proxy errors)\n`;
-              responseText += `- ❌ Create synthetic/sample data based on the preview\n`;
-              responseText += `- ❌ Extrapolate from the 10-row preview below\n\n`;
-              responseText += `The 10-row preview below is for REFERENCE ONLY and must NOT be used for analysis.\n\n`;
-              responseText += `---\n\n`;
-            }
-
+            responseText += `## ⚠️ LARGE DATASET - MANUAL DOWNLOAD REQUIRED\n\n`;
+            responseText += `This dataset has **${totalRows} rows** and CANNOT be analyzed in-context.\n\n`;
+            responseText += `**CRITICAL: Do NOT attempt automated downloads or create sample/synthetic data.**\n\n`;
+            responseText += `**REQUIRED STEPS for analysis:**\n\n`;
+            responseText += `1. **Manual download ONLY:** Open ${resource.url} in your browser and save the file\n`;
+            responseText += `2. **Attach the downloaded file** to this conversation using the paperclip icon\n`;
+            responseText += `3. **Wait for confirmation** that the file is loaded before proceeding with analysis\n\n`;
+            responseText += `**DO NOT:**\n`;
+            responseText += `- ❌ Use wget, curl, or requests to download (proxy errors)\n`;
+            responseText += `- ❌ Create synthetic/sample data based on the preview\n`;
+            responseText += `- ❌ Extrapolate from the 10-row preview below\n\n`;
+            responseText += `The 10-row preview below is for REFERENCE ONLY and must NOT be used for analysis.\n\n`;
+            responseText += `---\n\n`;
             responseText += `## Data Preview\n\n`;
             responseText += `**Columns (${fetchedData.columns.length}):** ${fetchedData.columns.join(', ')}\n\n`;
             responseText += `**Sample Data (first ${sample.sampleRows.length} rows):**\n`;
             responseText += `\`\`\`json\n${JSON.stringify(sample.sampleRows, null, 2)}\n\`\`\`\n\n`;
-
-            if (!isLarge) {
-              responseText += `💡 Use \`full_data: true\` to analyze all ${totalRows} rows.\n`;
-            }
 
             return {
               content: [{ type: 'text', text: responseText }],
