@@ -492,12 +492,12 @@ export class DataFetcher {
     try {
       const wfsClient = new WFSClient();
 
-      // Parse URL to get base service URL
-      const { baseUrl } = wfsClient.parseWFSUrl(url);
+      // Parse URL and preserve non-WFS params (like nodeId)
+      const { baseUrl, preservedParams } = wfsClient.parseWFSUrl(url);
 
-      // Get capabilities to discover feature types
+      // Get capabilities to discover feature types (with preserved params)
       console.error('[DataFetcher] Getting WFS capabilities...');
-      const capabilities = await wfsClient.getCapabilities(baseUrl);
+      const capabilities = await wfsClient.getCapabilities(baseUrl, preservedParams);
 
       if (capabilities.featureTypes.length === 0) {
         return {
@@ -513,15 +513,17 @@ export class DataFetcher {
       const featureType = capabilities.featureTypes[0];
       console.error(`[DataFetcher] Fetching features from type: ${featureType.name}`);
 
-      // Get total feature count (non-blocking, for metadata)
-      const totalCount = await wfsClient.getFeatureCount(baseUrl, featureType.name);
+      // Get total feature count (with preserved params)
+      const totalCount = await wfsClient.getFeatureCount(baseUrl, featureType.name, preservedParams);
       console.error(`[DataFetcher] Total features available: ${totalCount}`);
 
-      // Fetch features as GeoJSON with pagination
-      const geojson = await wfsClient.getFeatures(baseUrl, featureType.name, {
-        count: 1000,
-        startIndex: 0,
-      });
+      // Fetch features as GeoJSON with pagination (with preserved params)
+      const geojson = await wfsClient.getFeatures(
+        baseUrl,
+        featureType.name,
+        { count: 1000, startIndex: 0 },
+        preservedParams
+      );
 
       console.error(`[DataFetcher] Received ${geojson.features.length} features`);
 

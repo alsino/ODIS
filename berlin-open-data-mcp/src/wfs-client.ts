@@ -1,7 +1,7 @@
 // ABOUTME: WFS (Web Feature Service) client implementing OGC WFS 2.0.0 protocol
-// ABOUTME: Handles GetCapabilities and GetFeature requests for Berlin's gdi.berlin.de services
+// ABOUTME: Handles GetCapabilities and GetFeature requests for all Berlin WFS services
 
-import fetch from 'node-fetch';
+import axios from 'axios';
 import { DOMParser } from '@xmldom/xmldom';
 import type { FeatureCollection } from 'geojson';
 
@@ -23,20 +23,39 @@ export class WFSClient {
   private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
 
   /**
-   * Parse WFS URL to extract base service URL
-   * Handles both bare URLs and URLs with GetCapabilities parameters
+   * Parse WFS URL to extract base service URL and preserve non-WFS parameters
+   * Preserves parameters like nodeId while stripping WFS-specific params
    */
-  parseWFSUrl(url: string): { baseUrl: string; hasParams: boolean } {
+  parseWFSUrl(url: string): { baseUrl: string; preservedParams: URLSearchParams } {
     try {
       const urlObj = new URL(url);
 
-      // Check if URL has query parameters
-      const hasParams = urlObj.search.length > 0;
+      // WFS-specific parameters that we will override (lowercase for comparison)
+      const wfsParamNames = new Set([
+        'service',
+        'request',
+        'version',
+        'typenames',
+        'typename',
+        'outputformat',
+        'count',
+        'startindex',
+        'resulttype',
+      ]);
+
+      // Preserve only non-WFS parameters (like nodeId, SRSNAME, etc.)
+      const preservedParams = new URLSearchParams();
+      for (const [key, value] of urlObj.searchParams) {
+        // Case-insensitive comparison
+        if (!wfsParamNames.has(key.toLowerCase())) {
+          preservedParams.set(key, value);
+        }
+      }
 
       // Extract base URL (protocol + host + path, no query params)
       const baseUrl = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`;
 
-      return { baseUrl, hasParams };
+      return { baseUrl, preservedParams };
     } catch (error) {
       throw new Error(`Invalid WFS URL: ${url}`);
     }
@@ -45,37 +64,42 @@ export class WFSClient {
   /**
    * Execute GetCapabilities request to discover available feature types
    */
-  async getCapabilities(baseUrl: string): Promise<WFSCapabilities> {
-    const url = `${baseUrl}?SERVICE=WFS&REQUEST=GetCapabilities`;
+  async getCapabilities(baseUrl: string, preservedParams?: URLSearchParams): Promise<WFSCapabilities> {
+    const url = new URL(baseUrl);
+
+    // Add preserved params first (like nodeId)
+    if (preservedParams) {
+      for (const [key, value] of preservedParams) {
+        url.searchParams.set(key, value);
+      }
+    }
+
+    // Add/override WFS params
+    url.searchParams.set('SERVICE', 'WFS');
+    url.searchParams.set('REQUEST', 'GetCapabilities');
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
-
-      const response = await fetch(url, {
-        signal: controller.signal,
+      const response = await axios.get(url.toString(), {
+        timeout: this.REQUEST_TIMEOUT,
         headers: {
           'User-Agent': 'Berlin-Open-Data-MCP-Server/1.0',
         },
       });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const xml = await response.text();
+      const xml = response.data;
 
       return this.parseCapabilities(xml);
     } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
           throw new Error('GetCapabilities request timeout - WFS service may be slow or unavailable');
         }
-        throw error;
+        if (error.response) {
+          throw new Error(`HTTP ${error.response.status}: ${error.response.statusText}`);
+        }
+        throw new Error(`Network error: ${error.message}`);
       }
-      throw new Error('Unknown error during GetCapabilities request');
+      throw error instanceof Error ? error : new Error('Unknown error during GetCapabilities request');
     }
   }
 
@@ -92,15 +116,30 @@ export class WFSClient {
       throw new Error('Invalid XML in GetCapabilities response');
     }
 
-    // Extract feature types
+    // Extract feature types (try with namespace first, then without)
     const featureTypes: WFSCapabilities['featureTypes'] = [];
-    const featureTypeElements = doc.getElementsByTagName('FeatureType');
+    let featureTypeElements = doc.getElementsByTagNameNS('http://www.opengis.net/wfs/2.0', 'FeatureType');
+
+    // Fallback to non-namespaced search if namespace search returns nothing
+    if (featureTypeElements.length === 0) {
+      featureTypeElements = doc.getElementsByTagName('FeatureType');
+    }
 
     for (let i = 0; i < featureTypeElements.length; i++) {
       const ft = featureTypeElements[i];
-      const name = ft.getElementsByTagName('Name')[0]?.textContent;
-      const title = ft.getElementsByTagName('Title')[0]?.textContent;
-      const abstract = ft.getElementsByTagName('Abstract')[0]?.textContent;
+
+      // Try with namespace first, then without
+      const name = ft.getElementsByTagNameNS('http://www.opengis.net/wfs/2.0', 'Name')[0]?.textContent ||
+                   ft.getElementsByTagName('Name')[0]?.textContent ||
+                   ft.getElementsByTagName('wfs:Name')[0]?.textContent;
+
+      const title = ft.getElementsByTagNameNS('http://www.opengis.net/wfs/2.0', 'Title')[0]?.textContent ||
+                    ft.getElementsByTagName('Title')[0]?.textContent ||
+                    ft.getElementsByTagName('wfs:Title')[0]?.textContent;
+
+      const abstract = ft.getElementsByTagNameNS('http://www.opengis.net/wfs/2.0', 'Abstract')[0]?.textContent ||
+                       ft.getElementsByTagName('Abstract')[0]?.textContent ||
+                       ft.getElementsByTagName('wfs:Abstract')[0]?.textContent;
 
       if (name && title) {
         featureTypes.push({
@@ -135,11 +174,21 @@ export class WFSClient {
   async getFeatures(
     baseUrl: string,
     typeName: string,
-    options: WFSFeatureOptions = {}
+    options: WFSFeatureOptions = {},
+    preservedParams?: URLSearchParams
   ): Promise<FeatureCollection> {
     const { count = 1000, startIndex = 0 } = options;
 
     const url = new URL(baseUrl);
+
+    // Add preserved params first (like nodeId)
+    if (preservedParams) {
+      for (const [key, value] of preservedParams) {
+        url.searchParams.set(key, value);
+      }
+    }
+
+    // Add/override WFS params
     url.searchParams.set('SERVICE', 'WFS');
     url.searchParams.set('REQUEST', 'GetFeature');
     url.searchParams.set('VERSION', '2.0.0');
@@ -149,29 +198,20 @@ export class WFSClient {
     url.searchParams.set('STARTINDEX', startIndex.toString());
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
-
-      const response = await fetch(url.toString(), {
-        signal: controller.signal,
+      const response = await axios.get(url.toString(), {
+        timeout: this.REQUEST_TIMEOUT,
         headers: {
           'User-Agent': 'Berlin-Open-Data-MCP-Server/1.0',
         },
       });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
+      const contentType = response.headers['content-type'] || '';
 
       if (!contentType.includes('json')) {
         throw new Error(`Expected JSON response, got: ${contentType}`);
       }
 
-      const geojson = await response.json() as FeatureCollection;
+      const geojson = response.data as FeatureCollection;
 
       // Validate GeoJSON structure
       if (geojson.type !== 'FeatureCollection') {
@@ -180,21 +220,33 @@ export class WFSClient {
 
       return geojson;
     } catch (error) {
-      if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
           throw new Error('GetFeature request timeout - dataset may be very large or service is slow');
         }
-        throw error;
+        if (error.response) {
+          throw new Error(`HTTP ${error.response.status}: ${error.response.statusText}`);
+        }
+        throw new Error(`Network error: ${error.message}`);
       }
-      throw new Error('Unknown error during GetFeature request');
+      throw error instanceof Error ? error : new Error('Unknown error during GetFeature request');
     }
   }
 
   /**
    * Get total feature count without fetching all features
    */
-  async getFeatureCount(baseUrl: string, typeName: string): Promise<number> {
+  async getFeatureCount(baseUrl: string, typeName: string, preservedParams?: URLSearchParams): Promise<number> {
     const url = new URL(baseUrl);
+
+    // Add preserved params first (like nodeId)
+    if (preservedParams) {
+      for (const [key, value] of preservedParams) {
+        url.searchParams.set(key, value);
+      }
+    }
+
+    // Add/override WFS params
     url.searchParams.set('SERVICE', 'WFS');
     url.searchParams.set('REQUEST', 'GetFeature');
     url.searchParams.set('VERSION', '2.0.0');
@@ -202,33 +254,24 @@ export class WFSClient {
     url.searchParams.set('RESULTTYPE', 'hits');
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT);
-
-      const response = await fetch(url.toString(), {
-        signal: controller.signal,
+      const response = await axios.get(url.toString(), {
+        timeout: this.REQUEST_TIMEOUT,
         headers: {
           'User-Agent': 'Berlin-Open-Data-MCP-Server/1.0',
         },
       });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const xml = await response.text();
+      const xml = response.data;
 
       // Parse numberMatched attribute from XML response
-      const match = xml.match(/numberMatched="(\d+)"/);
+      const match = String(xml).match(/numberMatched="(\d+)"/);
       if (match && match[1]) {
         return parseInt(match[1], 10);
       }
 
       // Fallback: try to parse as JSON (some servers return JSON even for hits)
       try {
-        const json = JSON.parse(xml);
+        const json = typeof xml === 'string' ? JSON.parse(xml) : xml;
         if (json.numberMatched !== undefined) {
           return json.numberMatched;
         }
