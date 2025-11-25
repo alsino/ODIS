@@ -14,6 +14,7 @@ import { BerlinOpenDataAPI } from './berlin-api.js';
 import { QueryProcessor } from './query-processor.js';
 import { DataFetcher } from './data-fetcher.js';
 import { DataSampler } from './data-sampler.js';
+import { GeoJSONTransformer } from './geojson-transformer.js';
 
 class BerlinOpenDataMCPServer {
   private server: Server;
@@ -21,6 +22,7 @@ class BerlinOpenDataMCPServer {
   private queryProcessor: QueryProcessor;
   private dataFetcher: DataFetcher;
   private dataSampler: DataSampler;
+  private geoJSONTransformer: GeoJSONTransformer;
 
   constructor() {
     this.server = new Server(
@@ -40,6 +42,7 @@ class BerlinOpenDataMCPServer {
     this.queryProcessor = new QueryProcessor();
     this.dataFetcher = new DataFetcher({ useBrowserAutomation: true });
     this.dataSampler = new DataSampler();
+    this.geoJSONTransformer = new GeoJSONTransformer();
 
     this.setupHandlers();
   }
@@ -634,9 +637,13 @@ class BerlinOpenDataMCPServer {
             let mimeType: string;
             let fileExtension: string;
 
-            // Special handling for GeoJSON - return original structure when available
+            // Special handling for GeoJSON - transform to WGS84 and return original structure
             if (outputFormat === 'json' && fetchedData.originalGeoJSON) {
-              fileContent = JSON.stringify(fetchedData.originalGeoJSON, null, 2);
+              // Transform coordinates to WGS84 (EPSG:4326) for web map compatibility
+              const transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(
+                fetchedData.originalGeoJSON
+              );
+              fileContent = JSON.stringify(transformedGeoJSON, null, 2);
               mimeType = 'application/geo+json';
               fileExtension = 'geojson';
             } else if (outputFormat === 'csv') {
