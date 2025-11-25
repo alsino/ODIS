@@ -400,30 +400,37 @@ This phase addresses two format-related limitations discovered during user testi
 **Combined Impact**: +8% portal coverage (182 + 30 unique datasets)
 **Status**: ✅ COMPLETE - All Phase 4 features implemented and tested
 
-**Phase 5: Geodata Format Support** (✅ IN PROGRESS - November 2025)
+**Phase 5: Geodata Format Support** (✅ COMPLETED - November 2025)
 
 This phase extends format support to handle geospatial data, significantly expanding portal coverage.
 
-**Motivation**: 60.9% of portal datasets (1,620) use geodata formats that are currently unsupported. This represents the largest opportunity for expanding accessible data.
+**Motivation**: 60.9% of portal datasets (1,620) use geodata formats that were unsupported. This represented the largest opportunity for expanding accessible data.
 
-**Formats to implement**:
+**Formats implemented**:
 
-*Part A: File-Based Geodata* (~78 datasets, 3.0%)
+*Part A: File-Based Geodata* (78 datasets, 3.0%) ✅
 - **GeoJSON** (39 datasets, 1.5%) - JSON-based vector data format
-- **KML** (39 datasets, 1.5%) - XML-based format from Google Earth
+- **KML** (39 datasets, 1.5%) - XML-based format, converted to GeoJSON
 - **Shapefiles** - SKIPPED (most datasets have GeoJSON/KML alternatives)
 
-*Part B: OGC Web Services* (596 datasets, 22.4%)
-- **WFS** (Web Feature Service) - Query and download vector features as GeoJSON
+*Part B: WFS (Web Feature Service)* (596 datasets, 22.4%) ✅
+- **OGC WFS 2.0.0 protocol** - Query and download vector features
+- **Automatic GeoJSON output** - All WFS services return GeoJSON
+- **Parameter preservation** - Handles service-specific params (e.g., nodeId)
+- **Coordinate transformation** - Converts EPSG:25833 (UTM) to WGS84 (lat/lon)
 - **WMS** (Web Map Service) - Deferred (returns images, not queryable data)
 
-**Implementation approach**:
-- All geodata converted to tabular format for LLM consumption
-- Each feature becomes a table row, properties become columns
-- Geometry stored in special columns: `geometry_type`, `geometry_coordinates`
-- Reuse existing DataFetcher/DataSampler infrastructure
+**Implementation details**:
+- **WFSClient module**: GetCapabilities, GetFeature, pagination support
+- **Smart parameter handling**: Preserves service-specific params, overrides WFS params
+- **Geodata conversion**: Features → table rows with geometry columns
+- **Coordinate transformation**: proj4 library for EPSG:25833 → WGS84
+- **GeoJSON downloads**: Proper FeatureCollection structure with web-compatible coordinates
 
-**Expected impact**: +25.3% portal coverage (78 file-based + 596 WFS datasets = 674 total)
+**Coverage impact**: +25.3% portal coverage
+- File-based: 78 datasets (GeoJSON, KML)
+- WFS services: 596 datasets (99%+ working with transformation)
+- **Total coverage**: 41.9% → 64.2% (1,113 → 1,709 datasets)
 
 **Phase 6: Data Filtering/Querying Tools**
 - Accept filter parameters (e.g., "only rows where district='Mitte'")
