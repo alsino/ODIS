@@ -690,6 +690,12 @@ class BerlinOpenDataMCPServer {
             responseText += `**Size:** ${fileSizeKB} KB\n`;
             responseText += `**Rows:** ${fetchedData.rows.length}\n`;
             responseText += `**Columns:** ${fetchedData.columns.length}\n\n`;
+
+            // Show first row preview
+            if (fetchedData.rows.length > 0) {
+              responseText += `**First row:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows[0], null, 2)}\n\`\`\`\n\n`;
+            }
+
             responseText += `[DOWNLOAD:${filename}:${mimeType}]\n`;
             responseText += fileContent;
 
