@@ -86,7 +86,21 @@
             {#if call.args}
               <details class="tool-section" open>
                 <summary>Anfrage</summary>
-                <pre class="tool-content">{JSON.stringify(call.args, null, 2)}</pre>
+                {#if call.args.code}
+                  <!-- Special handling for code parameter -->
+                  {#if Object.keys(call.args).length > 1}
+                    <!-- Show other parameters if they exist -->
+                    <pre class="tool-content">{JSON.stringify(
+                      Object.fromEntries(Object.entries(call.args).filter(([k]) => k !== 'code')),
+                      null,
+                      2
+                    )}</pre>
+                  {/if}
+                  <div class="code-label">Code:</div>
+                  <pre class="tool-content code-block">{call.args.code}</pre>
+                {:else}
+                  <pre class="tool-content">{JSON.stringify(call.args, null, 2)}</pre>
+                {/if}
               </details>
             {/if}
 
@@ -240,5 +254,23 @@
   pre.tool-content {
     font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
     line-height: 1.5;
+  }
+
+  .code-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #6b7280;
+    margin-top: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  pre.code-block {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    line-height: 1.6;
+    margin-top: 0;
   }
 </style>
