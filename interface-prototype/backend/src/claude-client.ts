@@ -42,7 +42,12 @@ IMPORTANT: When users ask questions that require counting, aggregating, or calcu
 Example workflow:
 User: "How many bike repair stations are in each Bezirk?"
 1. fetch_dataset_data with dataset_id
-2. execute_code with { "dataset_id": "fahrradreparaturstationen-wfs-ffeaba56", "code": "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})" }`;
+2. execute_code with { "code": "data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + 1; return acc; }, {})" }
+
+Code execution notes:
+- The LAST EXPRESSION in your code becomes the result
+- DO NOT use console.log() - it returns undefined instead of your data
+- End your code with the value you want returned (e.g., an object, array, or number)`;
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });
