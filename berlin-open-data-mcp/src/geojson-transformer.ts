@@ -31,14 +31,24 @@ export class GeoJSONTransformer {
     // Create transformation
     const transform = this.createTransform(fromCRS, 'EPSG:4326');
 
-    // Transform all features
-    const transformed: FeatureCollection = {
+    // Transform all features and their geometries
+    const transformed: any = {
       type: 'FeatureCollection',
-      features: geojson.features.map((feature: Feature) => ({
-        ...feature,
-        geometry: this.transformGeometry(feature.geometry, transform),
-      })),
+      features: geojson.features.map((feature: Feature) => {
+        const transformedFeature: any = {
+          ...feature,
+          geometry: this.transformGeometry(feature.geometry, transform),
+        };
+
+        // Recursively transform all bbox fields in this feature
+        this.transformBboxRecursive(transformedFeature, transform);
+
+        return transformedFeature;
+      }),
     };
+
+    // Recursively transform all bbox fields at FeatureCollection level
+    this.transformBboxRecursive(transformed, transform);
 
     return transformed;
   }
@@ -155,6 +165,46 @@ export class GeoJSONTransformer {
         console.warn(`[GeoJSONTransformer] Unknown geometry type: ${(geometry as any).type}`);
         return geometry;
     }
+  }
+
+  /**
+   * Recursively find and transform all bbox fields in an object
+   */
+  private transformBboxRecursive(obj: any, transform: (coord: Position) => Position): void {
+    if (!obj || typeof obj !== 'object') return;
+
+    // If this object has a bbox field, transform it
+    if (obj.bbox && Array.isArray(obj.bbox)) {
+      obj.bbox = this.transformBbox(obj.bbox, transform);
+    }
+
+    // Recursively process all properties (except geometry which is handled separately)
+    for (const key in obj) {
+      if (key !== 'geometry' && typeof obj[key] === 'object' && obj[key] !== null) {
+        this.transformBboxRecursive(obj[key], transform);
+      }
+    }
+  }
+
+  /**
+   * Transform bbox (bounding box) coordinates
+   * bbox format: [minX, minY, maxX, maxY] for 2D
+   *              [minX, minY, minZ, maxX, maxY, maxZ] for 3D
+   */
+  private transformBbox(bbox: number[], transform: (coord: Position) => Position): number[] {
+    if (bbox.length === 4) {
+      // 2D bbox: [minX, minY, maxX, maxY]
+      const [minX, minY] = transform([bbox[0], bbox[1]]);
+      const [maxX, maxY] = transform([bbox[2], bbox[3]]);
+      return [minX, minY, maxX, maxY];
+    } else if (bbox.length === 6) {
+      // 3D bbox: [minX, minY, minZ, maxX, maxY, maxZ]
+      const [minX, minY] = transform([bbox[0], bbox[1]]);
+      const [maxX, maxY] = transform([bbox[3], bbox[4]]);
+      // Z coordinates remain unchanged in 2D projection transformation
+      return [minX, minY, bbox[2], maxX, maxY, bbox[5]];
+    }
+    return bbox; // Unknown format, return unchanged
   }
 
   /**
