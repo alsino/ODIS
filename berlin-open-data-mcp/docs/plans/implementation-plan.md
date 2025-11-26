@@ -3478,6 +3478,145 @@ If you get stuck:
 
 ---
 
+## Deployment & Remote Access
+
+### Production Deployment
+
+The Berlin Open Data MCP server is deployed on Railway as part of the unified interface-prototype backend service.
+
+**Deployment Details:**
+- Platform: Railway (https://railway.app)
+- URL: https://odis-production.up.railway.app
+- Deployment: Automatic on push to main branch
+- Build command: `npm run build` (builds both MCP server and backend)
+- Start command: `npm start` (from root package.json)
+
+**Architecture:**
+```
+Railway Deployment
+├── Berlin Open Data MCP Server (built to dist/)
+└── Interface Prototype Backend
+    ├── WebSocket handler (for web chat)
+    ├── Streamable HTTP MCP endpoint (for remote access)
+    └── Static frontend (Svelte build)
+```
+
+### Remote MCP Access Implementation
+
+The backend exposes the Berlin Open Data MCP server via Streamable HTTP transport at the `/mcp` endpoint.
+
+**Key Implementation Details:**
+
+**Transport:** StreamableHTTPServerTransport (from `@modelcontextprotocol/sdk/server/streamableHttp.js`)
+- **Why not SSE:** `mcp-remote` requires Streamable HTTP protocol (2025-03-26), not the deprecated SSE transport (2024-11-05)
+- **Endpoint:** Single `/mcp` endpoint handles all operations (GET, POST, DELETE)
+- **Session Management:** Via `mcp-session-id` header
+- **Initialization:** Client POSTs initialize request without session ID
+- **Subsequent Requests:** Client includes session ID in header
+
+**Code Location:** `interface-prototype/backend/src/server.ts`
+
+```typescript
+// Store MCP transports by session ID
+const mcpTransports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+
+// Streamable HTTP MCP endpoint (supports GET, POST, DELETE)
+app.all('/mcp', async (req, res) => {
+  const sessionId = req.headers['mcp-session-id'] as string;
+  let transport: StreamableHTTPServerTransport | undefined;
+
+  if (sessionId && mcpTransports[sessionId]) {
+    // Reuse existing transport
+    transport = mcpTransports[sessionId];
+  } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+    // Create new transport for initialization
+    const newTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sid) => {
+        mcpTransports[sid] = newTransport;
+      }
+    });
+
+    // Connect to Berlin MCP server
+    const mcpServer = new BerlinOpenDataMCPServer();
+    await mcpServer.connect(newTransport);
+    transport = newTransport;
+  }
+
+  // Handle the request
+  await transport.handleRequest(req, res, req.body);
+});
+```
+
+**MCP Server Export:** The `BerlinOpenDataMCPServer` class is exported from `berlin-open-data-mcp/src/index.ts` to allow programmatic instantiation with custom transports (not just stdio).
+
+### Usage from Claude Desktop
+
+Users can access the deployed server by adding this configuration:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "berlin-data": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://odis-production.up.railway.app/mcp"
+      ]
+    }
+  }
+}
+```
+
+**Requirements:**
+- Claude Pro, Team, or Enterprise plan (remote MCP not available on free tier)
+- Internet connection
+- Restart Claude Desktop after configuration change
+
+### Local Testing
+
+Test the remote MCP endpoint locally before deployment:
+
+```bash
+# Start backend
+cd interface-prototype
+npm run dev:backend
+
+# In another terminal, test with mcp-remote
+npx mcp-remote http://localhost:3000/mcp
+```
+
+### Troubleshooting Remote Access
+
+**Common Issues:**
+
+1. **"Cannot POST /mcp/sse" error**
+   - Cause: Using SSE transport instead of Streamable HTTP
+   - Fix: Ensure endpoint is `/mcp` not `/mcp/sse`
+   - Fix: Use StreamableHTTPServerTransport not SSEServerTransport
+
+2. **"Server disconnected" error**
+   - Check Railway deployment logs
+   - Verify endpoint is accessible: `curl https://odis-production.up.railway.app/mcp`
+   - Ensure build succeeded and deployed correctly
+
+3. **Session management issues**
+   - Verify `mcp-session-id` header is being set
+   - Check transport is stored in `mcpTransports` map
+   - Ensure cleanup on close is working
+
+**Debug Logs:**
+
+Check Railway logs for:
+- `MCP session initialized with ID: <uuid>` (session created)
+- `Received POST request to /mcp` (requests received)
+- `MCP session <uuid> closed` (cleanup working)
+
+---
+
 ## Final Notes
 
 **Remember**:

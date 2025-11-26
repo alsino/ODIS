@@ -33,6 +33,45 @@ Web-based chat interface for exploring Berlin open data through natural language
 
 See [interface-prototype/README.md](interface-prototype/README.md) for setup and usage.
 
+## Using the Berlin Open Data MCP Server
+
+The Berlin Open Data MCP server is available in two ways:
+
+### Remote Access (Claude Desktop)
+
+Connect directly from Claude Desktop to access Berlin Open Data tools in any conversation:
+
+```json
+{
+  "mcpServers": {
+    "berlin-data": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://odis-production.up.railway.app/mcp"
+      ]
+    }
+  }
+}
+```
+
+Add this to your Claude Desktop configuration file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Restart Claude Desktop after updating the configuration.
+
+**Requirements:**
+- Claude Pro, Team, or Enterprise plan (remote MCP servers not available on free tier)
+- Internet connection
+
+### Web Chat Interface
+
+Visit https://odis-production.up.railway.app/ for a web-based chat interface with:
+- Real-time tool execution display
+- Conversational data exploration
+- No authentication required
+
 ## Getting Started
 
 Each component has its own setup instructions in its respective directory.

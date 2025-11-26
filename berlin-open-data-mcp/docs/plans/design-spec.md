@@ -757,6 +757,104 @@ This phase extends format support to handle geospatial data, significantly expan
 
 ---
 
+## Section 8: Deployment & Access
+
+### Deployment Architecture
+
+The Berlin Open Data MCP server is deployed as part of a unified backend service on Railway, providing both remote MCP access and a web-based chat interface.
+
+**Infrastructure:**
+- Platform: Railway (https://railway.app)
+- Deployment URL: https://odis-production.up.railway.app
+- Transport Protocol: Streamable HTTP (MCP protocol version 2025-03-26)
+- Authentication: None (public access)
+
+### Access Methods
+
+#### 1. Remote MCP Access (Claude Desktop)
+
+The server can be accessed directly from Claude Desktop using the `mcp-remote` proxy. This enables all Berlin Open Data tools in any Claude Desktop conversation.
+
+**Configuration:**
+
+Add to Claude Desktop configuration file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "berlin-data": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://odis-production.up.railway.app/mcp"
+      ]
+    }
+  }
+}
+```
+
+**Requirements:**
+- Claude Pro, Team, or Enterprise plan (remote MCP not available on free tier)
+- Internet connection
+- `npx` available (comes with Node.js)
+
+**Endpoint:** `https://odis-production.up.railway.app/mcp`
+
+**Protocol:** Streamable HTTP transport over HTTPS
+- Initialization: POST to `/mcp` with initialize request
+- Session management: Via `mcp-session-id` header
+- Request handling: All methods (GET/POST/DELETE) on single endpoint
+
+#### 2. Web Chat Interface
+
+For users without Claude Desktop or requiring no authentication, a web-based chat interface is available.
+
+**URL:** https://odis-production.up.railway.app/
+
+**Features:**
+- Real-time tool execution display with collapsible badges
+- WebSocket-based streaming responses
+- Sandboxed JavaScript code execution for data analysis
+- No authentication required
+- Works in any modern web browser
+
+**Architecture:**
+- Frontend: Svelte + Vite (static build served by backend)
+- Backend: Express + WebSocket server
+- MCP Integration: Spawned stdio process for tool execution
+- AI: Claude API for conversation orchestration
+
+### Transport Protocol Details
+
+**Why Streamable HTTP instead of SSE:**
+- Streamable HTTP (2025-03-26) is the current MCP standard
+- SSE transport (2024-11-05) is deprecated
+- `mcp-remote` requires Streamable HTTP protocol
+- Better session management and resumability support
+
+**Implementation:**
+- Single `/mcp` endpoint handles all operations
+- Session initialization via POST with `initialize` request
+- Subsequent requests include `mcp-session-id` header
+- Session cleanup on transport close or explicit DELETE
+
+### Local Development
+
+For local testing and development:
+
+```bash
+# Start backend (includes MCP server)
+cd interface-prototype
+npm run dev:backend
+
+# Test remote MCP endpoint locally
+npx mcp-remote http://localhost:3000/mcp
+```
+
+---
+
 ## Appendix A: Key Terms & Definitions
 
 **MCP (Model Context Protocol)**: Protocol for connecting LLMs to external tools and data sources
