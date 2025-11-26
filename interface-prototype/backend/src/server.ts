@@ -10,8 +10,10 @@ import { fileURLToPath } from 'url';
 import { MCPClientManager, findBerlinMCPPath } from './mcp-client.js';
 import { ClaudeClient } from './claude-client.js';
 import { WebSocketHandler } from './websocket-handler.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { BerlinOpenDataMCPServer } from '../../../berlin-open-data-mcp/dist/index.js';
+import { randomUUID } from 'crypto';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,34 +57,84 @@ async function main() {
       wsHandler.handleConnection(ws);
     });
 
-    // Store MCP SSE transports by session ID
-    const sseTransports: { [sessionId: string]: SSEServerTransport } = {};
+    // Store MCP transports by session ID
+    const mcpTransports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-    // SSE endpoint for direct MCP access (e.g., from Claude Desktop)
-    app.get('/mcp/sse', async (req, res) => {
-      console.log('Establishing SSE connection for direct MCP access');
+    // Streamable HTTP MCP endpoint (supports GET, POST, DELETE)
+    app.all('/mcp', async (req, res) => {
+      console.log(`Received ${req.method} request to /mcp`);
 
-      const transport = new SSEServerTransport('/mcp/messages', res);
-      sseTransports[transport.sessionId] = transport;
+      try {
+        // Check for existing session ID
+        const sessionId = req.headers['mcp-session-id'] as string;
+        let transport: StreamableHTTPServerTransport | undefined;
 
-      res.on('close', () => {
-        console.log(`SSE connection closed for session ${transport.sessionId}`);
-        delete sseTransports[transport.sessionId];
-      });
+        if (sessionId && mcpTransports[sessionId]) {
+          // Reuse existing transport
+          transport = mcpTransports[sessionId];
+        } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+          // Create new transport for initialization
+          const newTransport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (sid) => {
+              console.log(`MCP session initialized with ID: ${sid}`);
+              mcpTransports[sid] = newTransport;
+            }
+          });
 
-      const mcpServer = new BerlinOpenDataMCPServer();
-      await mcpServer.connect(transport);
-    });
+          // Clean up on close
+          newTransport.onclose = () => {
+            const sid = newTransport.sessionId;
+            if (sid && mcpTransports[sid]) {
+              console.log(`MCP session ${sid} closed`);
+              delete mcpTransports[sid];
+            }
+          };
 
-    // POST endpoint for SSE messages
-    app.post('/mcp/messages', async (req, res) => {
-      const sessionId = req.query.sessionId as string;
-      const transport = sseTransports[sessionId];
+          // Connect to Berlin MCP server
+          const mcpServer = new BerlinOpenDataMCPServer();
+          await mcpServer.connect(newTransport);
 
-      if (transport) {
-        await transport.handlePostMessage(req, res, req.body);
-      } else {
-        res.status(400).send('No transport found for sessionId');
+          transport = newTransport;
+        } else {
+          // Invalid request
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Bad Request: No valid session ID provided',
+            },
+            id: null,
+          });
+          return;
+        }
+
+        // Handle the request
+        if (!transport) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal error: transport not initialized',
+            },
+            id: null,
+          });
+          return;
+        }
+
+        await transport.handleRequest(req, res, req.body);
+      } catch (error) {
+        console.error('Error handling MCP request:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal server error',
+            },
+            id: null,
+          });
+        }
       }
     });
 
