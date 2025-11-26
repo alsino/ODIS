@@ -16,7 +16,7 @@ import { DataFetcher } from './data-fetcher.js';
 import { DataSampler } from './data-sampler.js';
 import { GeoJSONTransformer } from './geojson-transformer.js';
 
-class BerlinOpenDataMCPServer {
+export class BerlinOpenDataMCPServer {
   private server: Server;
   private api: BerlinOpenDataAPI;
   private queryProcessor: QueryProcessor;
@@ -811,6 +811,10 @@ class BerlinOpenDataMCPServer {
 
       throw new Error(`Unknown prompt: ${name}`);
     });
+  }
+
+  async connect(transport: any) {
+    await this.server.connect(transport);
   }
 
   async run() {

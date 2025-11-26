@@ -10,6 +10,8 @@ import { fileURLToPath } from 'url';
 import { MCPClientManager, findBerlinMCPPath } from './mcp-client.js';
 import { ClaudeClient } from './claude-client.js';
 import { WebSocketHandler } from './websocket-handler.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { BerlinOpenDataMCPServer } from '../../../berlin-open-data-mcp/dist/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +41,7 @@ async function main() {
 
     // Create Express app
     const app = express();
+    app.use(express.json());
     const server = createServer(app);
 
     // Create WebSocket server
@@ -50,6 +53,37 @@ async function main() {
     // Handle WebSocket connections
     wss.on('connection', (ws) => {
       wsHandler.handleConnection(ws);
+    });
+
+    // Store MCP SSE transports by session ID
+    const sseTransports: { [sessionId: string]: SSEServerTransport } = {};
+
+    // SSE endpoint for direct MCP access (e.g., from Claude Desktop)
+    app.get('/mcp/sse', async (req, res) => {
+      console.log('Establishing SSE connection for direct MCP access');
+
+      const transport = new SSEServerTransport('/mcp/messages', res);
+      sseTransports[transport.sessionId] = transport;
+
+      res.on('close', () => {
+        console.log(`SSE connection closed for session ${transport.sessionId}`);
+        delete sseTransports[transport.sessionId];
+      });
+
+      const mcpServer = new BerlinOpenDataMCPServer();
+      await mcpServer.connect(transport);
+    });
+
+    // POST endpoint for SSE messages
+    app.post('/mcp/messages', async (req, res) => {
+      const sessionId = req.query.sessionId as string;
+      const transport = sseTransports[sessionId];
+
+      if (transport) {
+        await transport.handlePostMessage(req, res, req.body);
+      } else {
+        res.status(400).send('No transport found for sessionId');
+      }
     });
 
     // Serve static files (production build of frontend)
