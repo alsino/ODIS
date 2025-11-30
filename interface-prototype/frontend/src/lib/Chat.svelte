@@ -229,7 +229,7 @@
       {#if messages.length === 0}
         <div class="welcome">
           <h2>Berlin Simple Open Data</h2>
-          <p>Find and ask questions about Berlin's open datasets</p>
+          <p>Finde und erkunde Daten aus dem Berliner Open Data Portal</p>
           {#if !connected}
             <div class="connection-status">
               <span class="status-dot"></span>
