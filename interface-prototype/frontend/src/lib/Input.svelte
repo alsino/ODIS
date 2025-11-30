@@ -67,7 +67,7 @@
 
   .input-wrapper {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     background: white;
