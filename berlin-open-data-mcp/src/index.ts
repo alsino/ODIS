@@ -112,7 +112,7 @@ export class BerlinOpenDataMCPServer {
         },
         {
           name: 'fetch_dataset_data',
-          description: 'VIEW dataset content in the chat for analysis. Returns a preview (10 sample rows) or full data for small datasets. Use when user wants to SEE/ANALYZE data, not download it. Keywords: "zeig mir", "schau dir an", "wie sieht aus", "analysiere".',
+          description: 'VIEW dataset content in the chat for analysis. Returns a preview (10 sample rows) or full data for small datasets. Supports CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats. WFS data is automatically converted to tabular format. Use when user wants to SEE/ANALYZE data, not download it. Keywords: "zeig mir", "schau dir an", "wie sieht aus", "analysiere".',
           inputSchema: {
             type: 'object',
             properties: {
@@ -135,7 +135,7 @@ export class BerlinOpenDataMCPServer {
         },
         {
           name: 'download_dataset',
-          description: 'DOWNLOAD dataset as a file to the user\'s computer. Triggers browser download dialog. Use when user wants to SAVE/DOWNLOAD the file. Keywords: "herunterladen", "download", "speichern", "save", "auf meinem Computer", "als Datei". Always use this tool when user says they need the data on their computer.',
+          description: 'DOWNLOAD dataset as a file to the user\'s computer. Triggers browser download dialog. Use when user wants to SAVE/DOWNLOAD the file. Supports CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats. WFS data is automatically converted to GeoJSON. Keywords: "herunterladen", "download", "speichern", "save", "auf meinem Computer", "als Datei". Always use this tool when user says they need the data on their computer.',
           inputSchema: {
             type: 'object',
             properties: {
