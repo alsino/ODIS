@@ -7,6 +7,18 @@
   export let role = 'user'; // 'user' or 'assistant'
   export let content = '';
 
+  // Configure marked to open external links in new tab
+  marked.use({
+    renderer: {
+      link(href, title, text) {
+        const isExternal = href.startsWith('http://') || href.startsWith('https://');
+        const target = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
+        const titleAttr = title ? ` title="${title}"` : '';
+        return `<a href="${href}"${titleAttr}${target}>${text}</a>`;
+      }
+    }
+  });
+
   // Parse markdown to HTML
   $: htmlContent = marked.parse(content);
 </script>
