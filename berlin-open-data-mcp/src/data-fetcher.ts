@@ -38,10 +38,10 @@ export class DataFetcher {
            BrowserFetcher.isAvailable();
   }
 
-  async fetchResource(url: string, format: string): Promise<FetchedData> {
+  async fetchResource(url: string, format: string, options?: { fullData?: boolean }): Promise<FetchedData> {
     // Check if this is a WFS service
     if (format.toUpperCase() === 'WFS' || WFSClient.isWFSUrl(url)) {
-      return this.fetchWFS(url);
+      return this.fetchWFS(url, options?.fullData ?? false);
     }
 
     // First try with browser if this URL needs it
@@ -493,7 +493,7 @@ export class DataFetcher {
   /**
    * Fetch data from WFS (Web Feature Service)
    */
-  private async fetchWFS(url: string): Promise<FetchedData> {
+  private async fetchWFS(url: string, fullData: boolean): Promise<FetchedData> {
     try {
       const wfsClient = new WFSClient();
 
@@ -522,15 +522,53 @@ export class DataFetcher {
       const totalCount = await wfsClient.getFeatureCount(baseUrl, featureType.name, preservedParams);
       console.error(`[DataFetcher] Total features available: ${totalCount}`);
 
-      // Fetch features as GeoJSON with pagination (with preserved params)
-      const geojson = await wfsClient.getFeatures(
-        baseUrl,
-        featureType.name,
-        { count: 1000, startIndex: 0 },
-        preservedParams
-      );
+      let allFeatures: any[] = [];
 
-      console.error(`[DataFetcher] Received ${geojson.features.length} features`);
+      if (fullData || totalCount <= 500) {
+        // Fetch all features with pagination
+        const batchSize = 1000;
+        let startIndex = 0;
+
+        while (startIndex < totalCount) {
+          console.error(`[DataFetcher] Fetching features ${startIndex} to ${Math.min(startIndex + batchSize, totalCount)}...`);
+
+          const batch = await wfsClient.getFeatures(
+            baseUrl,
+            featureType.name,
+            { count: batchSize, startIndex },
+            preservedParams
+          );
+
+          allFeatures = allFeatures.concat(batch.features);
+          startIndex += batchSize;
+
+          // Safety check: if we got fewer features than requested, we've reached the end
+          if (batch.features.length < batchSize) {
+            break;
+          }
+        }
+
+        console.error(`[DataFetcher] Received ${allFeatures.length} total features`);
+      } else {
+        // For analysis of large datasets, fetch only first 500 features
+        console.error(`[DataFetcher] Large dataset (${totalCount} features), fetching sample of 500...`);
+
+        const sample = await wfsClient.getFeatures(
+          baseUrl,
+          featureType.name,
+          { count: 500, startIndex: 0 },
+          preservedParams
+        );
+
+        allFeatures = sample.features;
+        console.error(`[DataFetcher] Received ${allFeatures.length} sample features`);
+      }
+
+      // Create combined GeoJSON
+      const geojson: any = {
+        type: 'FeatureCollection',
+        features: allFeatures
+      };
 
       // Use existing GeoJSON parser to convert to tabular format
       const result = this.parseGeoJSON(geojson);

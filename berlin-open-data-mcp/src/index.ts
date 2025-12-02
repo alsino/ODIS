@@ -500,8 +500,8 @@ export class BerlinOpenDataMCPServer {
               ) || dataset.resources[0]; // Fallback to first if no data format found
             }
 
-            // Fetch the data
-            const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format);
+            // Fetch the data (sample for analysis, not full dataset)
+            const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format, { fullData: false });
 
             if (fetchedData.error) {
               return {
@@ -609,8 +609,8 @@ export class BerlinOpenDataMCPServer {
               ) || dataset.resources[0];
             }
 
-            // Fetch the data
-            const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format);
+            // Fetch the data (full dataset for download)
+            const fetchedData = await this.dataFetcher.fetchResource(resource.url, resource.format, { fullData: true });
 
             if (fetchedData.error) {
               return {
