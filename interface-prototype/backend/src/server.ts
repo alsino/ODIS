@@ -31,10 +31,6 @@ if (!ANTHROPIC_API_KEY) {
 async function main() {
   try {
     console.log('Starting Interface Prototype Backend...');
-    console.log('Environment check:');
-    console.log('- ANTHROPIC_API_KEY:', ANTHROPIC_API_KEY ? 'SET' : 'NOT SET');
-    console.log('- DATAWRAPPER_API_KEY:', DATAWRAPPER_API_KEY ? 'SET' : 'NOT SET');
-    console.log('- All env keys:', Object.keys(process.env).filter(k => k.includes('DATAWRAPPER') || k.includes('API')).join(', '));
 
     // Initialize Berlin MCP client
     const berlinMCPPath = findBerlinMCPPath();
