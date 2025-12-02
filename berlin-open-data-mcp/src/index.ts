@@ -746,7 +746,11 @@ export class BerlinOpenDataMCPServer {
 
             // Add resource name if it provides additional context
             let safeFilename = datasetPart;
-            if (resource.name && resource.name.trim() !== '') {
+
+            // Skip resource name for WFS resources (they typically have generic names)
+            const isWfsResource = resource.format.toUpperCase() === 'WFS';
+
+            if (!isWfsResource && resource.name && resource.name.trim() !== '') {
               const resourceName = resource.name
                 .toLowerCase()
                 .replace(/\(csv\)|\(json\)|\(xlsx?\)|\(geojson\)/gi, '') // Remove format indicators
