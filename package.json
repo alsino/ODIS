@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build:mcp && npm run build:frontend && npm run build:backend",
+    "build": "npm run build:mcp && npm run build:datawrapper && npm run build:frontend && npm run build:backend",
     "build:mcp": "cd berlin-open-data-mcp && npm install && npm run build",
+    "build:datawrapper": "cd datawrapper-mcp && npm install && npm run build",
     "build:frontend": "cd interface-prototype/frontend && npm install && npm run build",
     "build:backend": "cd interface-prototype/backend && npm install && npm run build",
     "start": "cd interface-prototype/backend && node dist/server.js"
