@@ -717,9 +717,17 @@ export class BerlinOpenDataMCPServer {
               fileExtension = 'json';
             }
 
+            // Helper function to transliterate German umlauts
+            const transliterateGerman = (text: string): string => {
+              return text
+                .replace(/ä/g, 'ae')
+                .replace(/ö/g, 'oe')
+                .replace(/ü/g, 'ue')
+                .replace(/ß/g, 'ss');
+            };
+
             // Generate filename from dataset title and resource name
-            const datasetPart = dataset.title
-              .toLowerCase()
+            const datasetPart = transliterateGerman(dataset.title.toLowerCase())
               .replace(/[^a-z0-9]+/g, '-')
               .replace(/^-+|-+$/g, '');
 
@@ -732,7 +740,7 @@ export class BerlinOpenDataMCPServer {
                 .trim();
 
               if (resourceName !== '' && resourceName !== dataset.title.toLowerCase()) {
-                const resourcePart = resourceName
+                const resourcePart = transliterateGerman(resourceName)
                   .replace(/[^a-z0-9]+/g, '-')
                   .replace(/^-+|-+$/g, '');
 
