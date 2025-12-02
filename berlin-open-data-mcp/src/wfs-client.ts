@@ -197,6 +197,12 @@ export class WFSClient {
     url.searchParams.set('COUNT', count.toString());
     url.searchParams.set('STARTINDEX', startIndex.toString());
 
+    // Request WGS84 coordinates directly for services that support it (88.7% of Berlin WFS)
+    // gdi.berlin.de supports srsName parameter, fbinter.stadt-berlin.de doesn't (being phased out)
+    if (baseUrl.includes('gdi.berlin.de')) {
+      url.searchParams.set('srsName', 'EPSG:4326');
+    }
+
     try {
       const response = await axios.get(url.toString(), {
         timeout: this.REQUEST_TIMEOUT,

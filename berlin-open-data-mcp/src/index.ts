@@ -624,9 +624,46 @@ export class BerlinOpenDataMCPServer {
             // Transform GeoJSON coordinates early if we have originalGeoJSON
             // This ensures the preview shows transformed coordinates
             if (fetchedData.originalGeoJSON) {
-              const transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(
-                fetchedData.originalGeoJSON
-              );
+              // Check if coordinates need transformation by looking at first coordinate
+              // WGS84: lon [-180, 180], lat [-90, 90]
+              // EPSG:25833: x ~[300000, 500000], y ~[5800000, 5900000]
+              let needsTransform = false;
+              const firstFeature = fetchedData.originalGeoJSON.features?.[0];
+              if (firstFeature?.geometry?.coordinates) {
+                const coords = firstFeature.geometry.coordinates;
+                // Get first coordinate point (handling different geometry types)
+                let firstCoord;
+                if (firstFeature.geometry.type === 'Point') {
+                  firstCoord = coords;
+                } else if (firstFeature.geometry.type === 'LineString') {
+                  firstCoord = coords[0];
+                } else if (firstFeature.geometry.type === 'Polygon') {
+                  firstCoord = coords[0][0];
+                } else if (firstFeature.geometry.type === 'MultiPolygon') {
+                  firstCoord = coords[0][0][0];
+                }
+
+                // If coordinates are outside WGS84 range, they need transformation
+                if (firstCoord && (Math.abs(firstCoord[0]) > 180 || Math.abs(firstCoord[1]) > 90)) {
+                  needsTransform = true;
+                }
+              }
+
+              let transformedGeoJSON;
+              if (needsTransform) {
+                // Berlin WFS services use EPSG:25833
+                const sourceCRS = resource.format.toUpperCase() === 'WFS' ? 'EPSG:25833' : undefined;
+                transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(
+                  fetchedData.originalGeoJSON,
+                  sourceCRS
+                );
+              } else {
+                // Already in WGS84, just clean CRS property
+                transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(
+                  fetchedData.originalGeoJSON
+                );
+              }
+
               fetchedData.originalGeoJSON = transformedGeoJSON;
 
               // Re-parse to update rows with transformed coordinates
@@ -786,7 +823,17 @@ export class BerlinOpenDataMCPServer {
             responseText += `**Dataset:** ${dataset.title}\n`;
             responseText += `**Format:** ${outputFormat.toUpperCase()}\n`;
             responseText += `**Size:** ${fileSizeKB} KB\n`;
-            responseText += `**Rows:** ${fetchedData.rows.length}\n`;
+            responseText += `**Rows:** ${fetchedData.rows.length}`;
+
+            // Add WFS-specific information about feature limits
+            if (isWfsResource && fetchedData.totalRows > 5000) {
+              responseText += ` (of ${fetchedData.totalRows.toLocaleString()} total features)\n`;
+              responseText += `\n⚠️ **Note:** Due to browser resource limitations, only 5,000 features are included in this download.\n`;
+              responseText += `For the complete dataset, use the [WFS Explorer](https://wfsexplorer.odis-berlin.de/?wfs=${encodeURIComponent(resource.url.split('?')[0])}).\n`;
+            } else {
+              responseText += `\n`;
+            }
+
             responseText += `**Columns:** ${fetchedData.columns.length}\n\n`;
 
             // Show first row preview

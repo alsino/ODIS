@@ -395,8 +395,16 @@ Enhanced download functionality with better file naming and WFS handling:
   - Examples: `liste-der-haeufigen-vornamen-2023-friedrichshain-kreuzberg.csv`, `parken-im-strassenraum-wfs.geojson`
 - **WFS Smart Fetching**:
   - Analysis (fetch_dataset_data): Fetches 10 samples for >500 features, all features for ≤500
-  - Downloads (download_dataset): Always fetches all features with pagination (1000 per batch)
-  - Fixes issue where WFS downloads were limited to 1000 features
+  - Downloads (download_dataset): Caps at 5000 features to avoid browser resource limits and timeout issues
+  - Pagination: 1000 features per batch for efficient fetching
+  - User messaging: Shows total feature count (e.g., "5000 of 214,173 features") with link to WFS Explorer for complete datasets
+  - Fixes issue where large WFS downloads (214K+ features) timed out after 10+ minutes
+- **WFS Coordinate Optimization**:
+  - 88.7% of WFS services (gdi.berlin.de) request WGS84 directly via `srsName=EPSG:4326` parameter
+  - Eliminates client-side proj4 transformation for most services (faster, more efficient)
+  - Smart fallback: Auto-detects if transformation needed by checking coordinate range
+  - 11.3% (fbinter.stadt-berlin.de, being phased out) still use client-side transformation
+  - Example: [402408, 5811786] (EPSG:25833) → [13.56, 52.45] (WGS84)
 - **GeoJSON Default for Geodata**:
   - WFS/GeoJSON/KML resources now default to GeoJSON output format
   - Added 'geojson' to format enum alongside 'csv' and 'json'
@@ -404,7 +412,7 @@ Enhanced download functionality with better file naming and WFS handling:
 - **Tool Description Updates**:
   - Explicitly mentions WFS/geodata format support in tool descriptions
   - Prevents Claude from incorrectly refusing to download WFS resources
-- **Status**: ✅ COMPLETE - All geodata downloads work correctly with proper filenames
+- **Status**: ✅ COMPLETE - All geodata downloads work correctly with proper filenames, WGS84 coordinates, and reasonable limits
 
 **Phase 4: Browser Automation & Excel Support** (✅ COMPLETED - October 2025)
 

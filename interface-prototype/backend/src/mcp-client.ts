@@ -111,7 +111,7 @@ export class MCPClientManager {
   /**
    * Execute a tool
    */
-  async callTool(name: string, args: any): Promise<any> {
+  async callTool(name: string, args: any, options?: { timeout?: number }): Promise<any> {
     if (!this.client || !this.isConnected) {
       throw new Error('MCP client not connected');
     }
@@ -122,7 +122,7 @@ export class MCPClientManager {
       const result = await this.client.callTool({
         name,
         arguments: args
-      });
+      }, undefined, options);
 
       console.log(`Tool ${name} executed successfully`);
       return result;

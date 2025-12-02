@@ -189,7 +189,9 @@ export class WebSocketHandler {
           }
 
           // Execute tool via MCP client
-          const result = await this.mcpClient.callTool(toolName, toolArgs);
+          // Use extended timeout for download_dataset (5 minutes) to handle WFS datasets
+          const timeout = toolName === 'download_dataset' ? 300000 : undefined;
+          const result = await this.mcpClient.callTool(toolName, toolArgs, timeout ? { timeout } : undefined);
 
           // Extract text from MCP result structure
           let resultText = '';

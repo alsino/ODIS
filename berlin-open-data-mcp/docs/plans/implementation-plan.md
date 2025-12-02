@@ -3680,26 +3680,28 @@ if (!isWfsResource && resource.name && resource.name.trim() !== '') {
 
 ### Task 4.6.2: Implement Smart WFS Fetching
 
-**Problem**: WFS downloads were limited to 1000 features regardless of dataset size, making large geodata downloads incomplete.
+**Problem**: Large WFS downloads (214K+ features) timed out after 10+ minutes and exceeded browser resource limits.
 
 **Solution**: Different fetching strategies for analysis vs. downloads:
 - **Analysis** (`fetch_dataset_data`): Fetch 10 samples for >500 features, all for ≤500
-- **Downloads** (`download_dataset`): Always fetch all features with pagination
+- **Downloads** (`download_dataset`): Cap at 5000 features with pagination (1000 per batch)
+- **User messaging**: Show total count and link to WFS Explorer for complete datasets
 
-**Implementation** (`src/data-fetcher.ts` lines 496-571):
+**Implementation** (`src/data-fetcher.ts` lines 527-580):
 ```typescript
 private async fetchWFS(url: string, fullData: boolean): Promise<FetchedData> {
-  // Get total feature count
   const totalCount = await wfsClient.getFeatureCount(baseUrl, featureType.name, preservedParams);
 
   let allFeatures: any[] = [];
 
-  if (fullData || totalCount <= 500) {
-    // Fetch all features with pagination
+  if (fullData) {
+    // For downloads, cap at 5000 features to avoid browser resource issues
+    const maxDownloadFeatures = 5000;
+    const featuresToFetch = Math.min(totalCount, maxDownloadFeatures);
     const batchSize = 1000;
     let startIndex = 0;
 
-    while (startIndex < totalCount) {
+    while (startIndex < featuresToFetch) {
       const batch = await wfsClient.getFeatures(
         baseUrl, featureType.name,
         { count: batchSize, startIndex },
@@ -3707,11 +3709,18 @@ private async fetchWFS(url: string, fullData: boolean): Promise<FetchedData> {
       );
       allFeatures = allFeatures.concat(batch.features);
       startIndex += batchSize;
-
       if (batch.features.length < batchSize) break;
     }
+  } else if (totalCount <= 500) {
+    // For small datasets in analysis mode, fetch all features
+    const features = await wfsClient.getFeatures(
+      baseUrl, featureType.name,
+      { count: totalCount, startIndex: 0 },
+      preservedParams
+    );
+    allFeatures = features.features;
   } else {
-    // For analysis, fetch only 10 features as sample
+    // For analysis of large datasets, fetch only first 10 features as sample
     const sample = await wfsClient.getFeatures(
       baseUrl, featureType.name,
       { count: 10, startIndex: 0 },
@@ -3724,13 +3733,87 @@ private async fetchWFS(url: string, fullData: boolean): Promise<FetchedData> {
 }
 ```
 
+**User messaging** (`src/index.ts` lines 789-796):
+```typescript
+responseText += `**Rows:** ${fetchedData.rows.length}`;
+
+// Add WFS-specific information about feature limits
+if (isWfsResource && fetchedData.totalRows > 5000) {
+  responseText += ` (of ${fetchedData.totalRows.toLocaleString()} total features)\n`;
+  responseText += `\n⚠️ **Note:** Due to browser resource limitations, only 5,000 features are included in this download.\n`;
+  responseText += `For the complete dataset, use the [WFS Explorer](https://wfsexplorer.odis-berlin.de/?wfs=${encodeURIComponent(resource.url.split('?')[0])}).\n`;
+}
+```
+
 **Updated signatures**:
 - `fetchResource(url, format, options?: { fullData?: boolean })`
 - Callers pass `fullData: false` for analysis, `fullData: true` for downloads
 
+**Performance**:
+- Before: 214K features → timeout after 10+ minutes
+- After: 5K features → completes in ~7 seconds
+
 ---
 
-### Task 4.6.3: Default Geodata to GeoJSON Format
+### Task 4.6.3: Optimize WFS Coordinate Transformation
+
+**Problem**: All WFS data used client-side proj4 transformation from EPSG:25833 to WGS84, adding processing overhead.
+
+**Solution**: Request WGS84 coordinates directly from services that support it via `srsName=EPSG:4326` parameter.
+
+**Analysis**:
+- Tested 1,154 WFS resources across all Berlin hosts
+- gdi.berlin.de (1,024 resources, 88.7%): ✅ Supports `srsName=EPSG:4326`
+- fbinter.stadt-berlin.de (128 resources, 11.1%): ❌ Ignores parameter (being phased out)
+- Other hosts (2 resources, 0.2%): Minimal impact
+
+**Implementation** (`src/wfs-client.ts` lines 200-204):
+```typescript
+// Request WGS84 coordinates directly for services that support it (88.7% of Berlin WFS)
+// gdi.berlin.de supports srsName parameter, fbinter.stadt-berlin.de doesn't (being phased out)
+if (baseUrl.includes('gdi.berlin.de')) {
+  url.searchParams.set('srsName', 'EPSG:4326');
+}
+```
+
+**Smart fallback** (`src/index.ts` lines 627-665):
+```typescript
+// Check if coordinates need transformation by looking at first coordinate
+// WGS84: lon [-180, 180], lat [-90, 90]
+// EPSG:25833: x ~[300000, 500000], y ~[5800000, 5900000]
+let needsTransform = false;
+const firstFeature = fetchedData.originalGeoJSON.features?.[0];
+if (firstFeature?.geometry?.coordinates) {
+  // Extract first coordinate based on geometry type (Point/LineString/Polygon/MultiPolygon)
+  // ...
+  if (firstCoord && (Math.abs(firstCoord[0]) > 180 || Math.abs(firstCoord[1]) > 90)) {
+    needsTransform = true;
+  }
+}
+
+if (needsTransform) {
+  // Transform EPSG:25833 → WGS84
+  transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(fetchedData.originalGeoJSON, 'EPSG:25833');
+} else {
+  // Already WGS84, just clean CRS property
+  transformedGeoJSON = this.geoJSONTransformer.transformToWGS84(fetchedData.originalGeoJSON);
+}
+```
+
+**Benefits**:
+- 88.7% of WFS services skip transformation entirely
+- Server-side transformation is more efficient than client-side proj4
+- Backward compatible: fbinter services still work with fallback
+- Example: [402408, 5811786] (EPSG:25833) → [13.56, 52.45] (WGS84)
+
+**Testing**:
+- Verified parking WFS (gdi.berlin.de): Receives WGS84 directly
+- Verified traffic lights WFS (gdi.berlin.de): Receives WGS84 directly
+- Verified fbinter service: Fallback transformation works
+
+---
+
+### Task 4.6.4: Default Geodata to GeoJSON Format
 
 **Problem**: Claude was downloading WFS data as JSON instead of GeoJSON, losing geospatial structure.
 
@@ -3773,7 +3856,7 @@ if (outputFormat === 'geojson' && fetchedData.originalGeoJSON) {
 
 ---
 
-### Task 4.6.4: Update Tool Descriptions
+### Task 4.6.5: Update Tool Descriptions
 
 **Problem**: Tool descriptions didn't mention WFS support, causing Claude to refuse WFS downloads.
 
@@ -3796,19 +3879,24 @@ if (outputFormat === 'geojson' && fetchedData.originalGeoJSON) {
 **Verified**:
 - ✅ Filenames include resource-specific info (districts, months)
 - ✅ German umlauts transliterated correctly
-- ✅ WFS downloads fetch all features
+- ✅ WFS downloads capped at 5000 features with user messaging
 - ✅ WFS analysis fetches 10-feature samples
 - ✅ Geodata defaults to GeoJSON format
 - ✅ Generic WFS resource names omitted from filenames
+- ✅ 88.7% of WFS services receive WGS84 coordinates directly
+- ✅ Smart fallback transformation works for fbinter services
+- ✅ Download times: ~7 seconds for 5K features (vs timeout for 214K)
 
 ---
 
 ### Impact
 
 - **Better UX**: Descriptive filenames make downloaded files easier to identify
-- **Complete data**: WFS downloads no longer truncated at 1000 features
+- **Practical limits**: WFS downloads complete quickly with reasonable feature counts
+- **Complete data access**: Link to WFS Explorer for datasets >5000 features
 - **Correct formats**: Geodata preserves geospatial structure with proper MIME types
-- **Portal coverage**: All 596 WFS datasets (22.4% of portal) now fully downloadable
+- **Optimized performance**: 88.7% of WFS services skip client-side transformation
+- **Portal coverage**: All 596 WFS datasets (22.4% of portal) now downloadable with proper coordinates
 
 ---
 

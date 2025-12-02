@@ -524,13 +524,15 @@ export class DataFetcher {
 
       let allFeatures: any[] = [];
 
-      if (fullData || totalCount <= 500) {
-        // Fetch all features with pagination
+      if (fullData) {
+        // For downloads, cap at 5000 features to avoid browser resource issues
+        const maxDownloadFeatures = 5000;
+        const featuresToFetch = Math.min(totalCount, maxDownloadFeatures);
         const batchSize = 1000;
         let startIndex = 0;
 
-        while (startIndex < totalCount) {
-          console.error(`[DataFetcher] Fetching features ${startIndex} to ${Math.min(startIndex + batchSize, totalCount)}...`);
+        while (startIndex < featuresToFetch) {
+          console.error(`[DataFetcher] Fetching features ${startIndex} to ${Math.min(startIndex + batchSize, featuresToFetch)}...`);
 
           const batch = await wfsClient.getFeatures(
             baseUrl,
@@ -548,6 +550,19 @@ export class DataFetcher {
           }
         }
 
+        console.error(`[DataFetcher] Received ${allFeatures.length} features (limit: ${maxDownloadFeatures})`);
+      } else if (totalCount <= 500) {
+        // For small datasets in analysis mode, fetch all features
+        console.error(`[DataFetcher] Small dataset (${totalCount} features), fetching all...`);
+
+        const features = await wfsClient.getFeatures(
+          baseUrl,
+          featureType.name,
+          { count: totalCount, startIndex: 0 },
+          preservedParams
+        );
+
+        allFeatures = features.features;
         console.error(`[DataFetcher] Received ${allFeatures.length} total features`);
       } else {
         // For analysis of large datasets, fetch only first 10 features as sample
