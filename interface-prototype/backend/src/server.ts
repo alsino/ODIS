@@ -28,11 +28,6 @@ if (!ANTHROPIC_API_KEY) {
   process.exit(1);
 }
 
-if (!DATAWRAPPER_API_KEY) {
-  console.error('Error: DATAWRAPPER_API_KEY environment variable is required');
-  process.exit(1);
-}
-
 async function main() {
   try {
     console.log('Starting Interface Prototype Backend...');
@@ -44,15 +39,27 @@ async function main() {
     const berlinMcpClient = new MCPClientManager({ serverPath: berlinMCPPath });
     await berlinMcpClient.connect();
 
-    // Initialize Datawrapper MCP client
-    const datawrapperMCPPath = path.resolve(__dirname, '../../../datawrapper-mcp/dist/index.js');
-    console.log(`Using Datawrapper MCP server at: ${datawrapperMCPPath}`);
+    // Initialize Datawrapper MCP client (optional)
+    let datawrapperMcpClient: MCPClientManager | undefined;
+    if (DATAWRAPPER_API_KEY) {
+      try {
+        const datawrapperMCPPath = path.resolve(__dirname, '../../../datawrapper-mcp/dist/index.js');
+        console.log(`Using Datawrapper MCP server at: ${datawrapperMCPPath}`);
 
-    const datawrapperMcpClient = new MCPClientManager({
-      serverPath: datawrapperMCPPath,
-      env: { DATAWRAPPER_API_TOKEN: DATAWRAPPER_API_KEY! }
-    });
-    await datawrapperMcpClient.connect();
+        datawrapperMcpClient = new MCPClientManager({
+          serverPath: datawrapperMCPPath,
+          env: { DATAWRAPPER_API_TOKEN: DATAWRAPPER_API_KEY }
+        });
+        await datawrapperMcpClient.connect();
+        console.log('Datawrapper MCP client connected successfully');
+      } catch (error) {
+        console.error('Failed to initialize Datawrapper MCP client:', error);
+        console.warn('Continuing without visualization features');
+        datawrapperMcpClient = undefined;
+      }
+    } else {
+      console.warn('DATAWRAPPER_API_KEY not set - visualization features disabled');
+    }
 
     // Initialize Claude client
     const claudeClient = new ClaudeClient(ANTHROPIC_API_KEY!);
@@ -168,14 +175,18 @@ async function main() {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`WebSocket server listening on ws://localhost:${PORT}/ws`);
       console.log(`Connected to Berlin MCP server with ${berlinMcpClient.getTools().length} tools`);
-      console.log(`Connected to Datawrapper MCP server with ${datawrapperMcpClient.getTools().length} tools`);
+      if (datawrapperMcpClient) {
+        console.log(`Connected to Datawrapper MCP server with ${datawrapperMcpClient.getTools().length} tools`);
+      }
     });
 
     // Graceful shutdown
     process.on('SIGINT', async () => {
       console.log('\nShutting down...');
       await berlinMcpClient.disconnect();
-      await datawrapperMcpClient.disconnect();
+      if (datawrapperMcpClient) {
+        await datawrapperMcpClient.disconnect();
+      }
       server.close(() => {
         console.log('Server closed');
         process.exit(0);
