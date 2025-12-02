@@ -149,8 +149,8 @@ export class BerlinOpenDataMCPServer {
               },
               format: {
                 type: 'string',
-                description: 'Output format: "csv" or "json". If not specified, uses resource format.',
-                enum: ['csv', 'json'],
+                description: 'Output format: "csv", "json", or "geojson". Use "geojson" for geodata (WFS/GeoJSON/KML). If not specified, geodata defaults to GeoJSON, other data defaults to original format.',
+                enum: ['csv', 'json', 'geojson'],
               },
             },
             required: ['dataset_id'],
@@ -574,7 +574,7 @@ export class BerlinOpenDataMCPServer {
             const { dataset_id, resource_id, format: requestedFormat } = args as {
               dataset_id: string;
               resource_id?: string;
-              format?: 'csv' | 'json';
+              format?: 'csv' | 'json' | 'geojson';
             };
 
             // Get dataset to find resources
@@ -677,7 +677,20 @@ export class BerlinOpenDataMCPServer {
             }
 
             // Determine output format
-            const outputFormat = requestedFormat || (resource.format.toLowerCase() === 'csv' ? 'csv' : 'json');
+            // For geodata (WFS, GeoJSON, KML), default to 'geojson' unless explicitly requested otherwise
+            let outputFormat: string;
+            if (requestedFormat) {
+              outputFormat = requestedFormat;
+            } else {
+              const resourceFormat = resource.format.toUpperCase();
+              if (resourceFormat === 'CSV') {
+                outputFormat = 'csv';
+              } else if (['WFS', 'GEOJSON', 'KML'].includes(resourceFormat)) {
+                outputFormat = 'geojson';
+              } else {
+                outputFormat = 'json';
+              }
+            }
 
             // Generate file content
             let fileContent: string;
@@ -685,7 +698,7 @@ export class BerlinOpenDataMCPServer {
             let fileExtension: string;
 
             // Special handling for GeoJSON - use already-transformed GeoJSON
-            if (outputFormat === 'json' && fetchedData.originalGeoJSON) {
+            if (outputFormat === 'geojson' && fetchedData.originalGeoJSON) {
               // GeoJSON already transformed to WGS84 earlier (see coordinate transformation above)
               fileContent = JSON.stringify(fetchedData.originalGeoJSON, null, 2);
               mimeType = 'application/geo+json';
