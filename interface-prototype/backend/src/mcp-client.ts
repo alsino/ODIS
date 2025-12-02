@@ -37,7 +37,7 @@ export class MCPClientManager {
       // Spawn the MCP server as a child process
       this.process = spawn('node', [this.config.serverPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env }
+        env: { ...process.env, ...this.config.env }
       });
 
       // Log server errors
@@ -54,7 +54,8 @@ export class MCPClientManager {
       // Create transport using stdio
       this.transport = new StdioClientTransport({
         command: 'node',
-        args: [this.config.serverPath]
+        args: [this.config.serverPath],
+        env: { ...process.env, ...this.config.env } as Record<string, string>
       });
 
       // Create and connect MCP client

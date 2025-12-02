@@ -77,6 +77,7 @@ export interface ConversationMessage {
 export interface MCPConfig {
   serverPath: string;
   serverArgs?: string[];
+  env?: Record<string, string>;
 }
 
 // Tool execution result

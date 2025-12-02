@@ -4,6 +4,7 @@ dist/
 *.log
 .DS_Store
 CLAUDE.md
+charts-log.json
 
 # Exclude legacy docs
 docs/legacy/

@@ -47,7 +47,20 @@ User: "How many bike repair stations are in each Bezirk?"
 Code execution notes:
 - The LAST EXPRESSION in your code becomes the result
 - DO NOT use console.log() - it returns undefined instead of your data
-- End your code with the value you want returned (e.g., an object, array, or number)`;
+- End your code with the value you want returned (e.g., an object, array, or number)
+
+Visualization with create_visualization:
+- IMPORTANT: The data you visualize MUST match the aggregation level you're discussing with the user
+- If you're analyzing and showing yearly totals in your text, create a chart with yearly data (not monthly)
+- Before creating a visualization, use execute_code to prepare the data at the correct aggregation level
+- For time series with many points (>20), aggregate to yearly or quarterly for readability
+- When a visualization tool returns a [CHART:...] marker with embedded iframe, ALWAYS include it in your response
+- Copy the entire [CHART:chartId]<iframe...></iframe>[/CHART] block into your response text
+- Example workflow:
+  1. Analyze data and show yearly table
+  2. execute_code to create yearly aggregates: [{year: "2019", impressions: 274944}, ...]
+  3. create_visualization with the yearly aggregates
+  4. Include the [CHART:...] block in your response`;
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });

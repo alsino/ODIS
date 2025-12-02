@@ -21,9 +21,15 @@ const __dirname = path.dirname(__filename);
 // Configuration
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const DATAWRAPPER_API_KEY = process.env.DATAWRAPPER_API_KEY;
 
 if (!ANTHROPIC_API_KEY) {
   console.error('Error: ANTHROPIC_API_KEY environment variable is required');
+  process.exit(1);
+}
+
+if (!DATAWRAPPER_API_KEY) {
+  console.error('Error: DATAWRAPPER_API_KEY environment variable is required');
   process.exit(1);
 }
 
@@ -31,12 +37,22 @@ async function main() {
   try {
     console.log('Starting Interface Prototype Backend...');
 
-    // Initialize MCP client
+    // Initialize Berlin MCP client
     const berlinMCPPath = findBerlinMCPPath();
     console.log(`Using Berlin MCP server at: ${berlinMCPPath}`);
 
-    const mcpClient = new MCPClientManager({ serverPath: berlinMCPPath });
-    await mcpClient.connect();
+    const berlinMcpClient = new MCPClientManager({ serverPath: berlinMCPPath });
+    await berlinMcpClient.connect();
+
+    // Initialize Datawrapper MCP client
+    const datawrapperMCPPath = path.resolve(__dirname, '../../../datawrapper-mcp/dist/index.js');
+    console.log(`Using Datawrapper MCP server at: ${datawrapperMCPPath}`);
+
+    const datawrapperMcpClient = new MCPClientManager({
+      serverPath: datawrapperMCPPath,
+      env: { DATAWRAPPER_API_TOKEN: DATAWRAPPER_API_KEY! }
+    });
+    await datawrapperMcpClient.connect();
 
     // Initialize Claude client
     const claudeClient = new ClaudeClient(ANTHROPIC_API_KEY!);
@@ -49,8 +65,8 @@ async function main() {
     // Create WebSocket server
     const wss = new WebSocketServer({ server, path: '/ws' });
 
-    // Create WebSocket handler
-    const wsHandler = new WebSocketHandler(mcpClient, claudeClient);
+    // Create WebSocket handler with both MCP clients
+    const wsHandler = new WebSocketHandler(berlinMcpClient, claudeClient, datawrapperMcpClient);
 
     // Handle WebSocket connections
     wss.on('connection', (ws) => {
@@ -151,13 +167,15 @@ async function main() {
     server.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`WebSocket server listening on ws://localhost:${PORT}/ws`);
-      console.log(`Connected to Berlin MCP server with ${mcpClient.getTools().length} tools`);
+      console.log(`Connected to Berlin MCP server with ${berlinMcpClient.getTools().length} tools`);
+      console.log(`Connected to Datawrapper MCP server with ${datawrapperMcpClient.getTools().length} tools`);
     });
 
     // Graceful shutdown
     process.on('SIGINT', async () => {
       console.log('\nShutting down...');
-      await mcpClient.disconnect();
+      await berlinMcpClient.disconnect();
+      await datawrapperMcpClient.disconnect();
       server.close(() => {
         console.log('Server closed');
         process.exit(0);

@@ -13,8 +13,9 @@ export class WebSocketHandler {
   private fetchedDatasets: Map<WebSocket, Map<string, any[]>> = new Map();
 
   constructor(
-    private mcpClient: MCPClientManager,
-    private claudeClient: ClaudeClient
+    private berlinMcpClient: MCPClientManager,
+    private claudeClient: ClaudeClient,
+    private datawrapperMcpClient?: MCPClientManager
   ) {
     this.codeExecutor = new CodeExecutor();
   }
@@ -80,8 +81,10 @@ export class WebSocketHandler {
     const history = this.conversationHistory.get(ws) || [];
 
     try {
-      // Get available tools from MCP
-      const mcpTools = this.mcpClient.getTools();
+      // Get available tools from both MCP clients
+      const berlinTools = this.berlinMcpClient.getTools();
+      const datawrapperTools = this.datawrapperMcpClient?.getTools() || [];
+      const mcpTools = [...berlinTools, ...datawrapperTools];
 
       // Add code execution tool
       const codeExecutionTool = {
@@ -188,10 +191,19 @@ export class WebSocketHandler {
             }
           }
 
-          // Execute tool via MCP client
+          // Route tool call to appropriate MCP client
+          // Datawrapper tools: create_visualization
+          // Berlin tools: search_datasets, fetch_dataset_data, download_dataset
+          const isDatawrapperTool = toolName === 'create_visualization';
+          const mcpClient = isDatawrapperTool ? this.datawrapperMcpClient : this.berlinMcpClient;
+
+          if (!mcpClient) {
+            throw new Error(`MCP client not available for tool: ${toolName}`);
+          }
+
           // Use extended timeout for download_dataset (5 minutes) to handle WFS datasets
           const timeout = toolName === 'download_dataset' ? 300000 : undefined;
-          const result = await this.mcpClient.callTool(toolName, toolArgs, timeout ? { timeout } : undefined);
+          const result = await mcpClient.callTool(toolName, toolArgs, timeout ? { timeout } : undefined);
 
           // Extract text from MCP result structure
           let resultText = '';
@@ -250,6 +262,12 @@ export class WebSocketHandler {
             return {
               content: [{ type: 'text', text: messageBeforeDownload.trim() }]
             };
+          }
+
+          // Check if the result contains a chart embed - but don't strip it, pass it through
+          // The chart will be rendered inline in the message
+          if (resultText.includes('[CHART:')) {
+            console.log('[WebSocket] Chart marker found in tool result');
           }
 
           return result;

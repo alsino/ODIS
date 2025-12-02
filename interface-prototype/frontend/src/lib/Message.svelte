@@ -9,10 +9,75 @@
 
   let htmlContent = '';
 
-  // Parse markdown to HTML and add target="_blank" to external links
+  // Parse markdown to HTML, handle [CHART:...] markers, and add target="_blank" to external links
   $: {
+    // Check if content contains chart markers (debug)
+    if (content.includes('[CHART:')) {
+      console.log('[Message.svelte] Content contains CHART marker');
+      console.log('[Message.svelte] Raw content:', content.substring(0, 500));
+    }
+
+    // Parse markdown first
     let html = marked.parse(content);
-    // Add target="_blank" to external links after parsing
+
+    if (content.includes('[CHART:')) {
+      console.log('[Message.svelte] HTML after markdown parse:', html.substring(0, 500));
+    }
+
+    // Extract and replace [CHART:...] markers with embedded iframes
+    // Try multiple patterns to catch the chart markers
+    const patterns = [
+      // Pattern 1: Already escaped HTML entities
+      /\[CHART:([^\]]+)\]\s*&lt;iframe([^&]*)&gt;.*?&lt;\/iframe&gt;\s*\[\/CHART\]/gs,
+      // Pattern 2: Normal HTML
+      /\[CHART:([^\]]+)\]\s*<iframe([^>]*)>.*?<\/iframe>\s*\[\/CHART\]/gs,
+      // Pattern 3: Within <p> tags
+      /<p>\[CHART:([^\]]+)\]\s*&lt;iframe([^&]*)&gt;.*?&lt;\/iframe&gt;\s*\[\/CHART\]<\/p>/gs,
+      // Pattern 4: Split across elements
+      /\[CHART:([^\]]+)\][\s\S]*?<iframe[^>]*>.*?<\/iframe>[\s\S]*?\[\/CHART\]/gs,
+    ];
+
+    let matched = false;
+    for (const pattern of patterns) {
+      if (pattern.test(html)) {
+        console.log('[Message.svelte] Matched pattern:', pattern);
+        matched = true;
+        html = html.replace(pattern, (match, chartId, ...rest) => {
+          console.log('[Message.svelte] Replacing chart marker for:', chartId);
+          console.log('[Message.svelte] Full match:', match);
+
+          // Extract iframe from the match
+          let iframeMatch = match.match(/(<iframe[^>]*>.*?<\/iframe>|&lt;iframe[^&]*&gt;.*?&lt;\/iframe&gt;)/s);
+          if (!iframeMatch) {
+            console.error('[Message.svelte] Could not extract iframe from match');
+            return match;
+          }
+
+          let iframe = iframeMatch[1];
+
+          // Decode HTML entities if present
+          if (iframe.includes('&lt;')) {
+            iframe = iframe
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'")
+              .replace(/&amp;/g, '&');
+          }
+
+          console.log('[Message.svelte] Final iframe:', iframe);
+          return `<div class="chart-embed">${iframe}</div>`;
+        });
+        break;
+      }
+    }
+
+    if (content.includes('[CHART:') && !matched) {
+      console.warn('[Message.svelte] Chart marker found but no pattern matched!');
+      console.log('[Message.svelte] HTML to match against:', html);
+    }
+
+    // Add target="_blank" to external links
     htmlContent = html.replace(
       /<a href="(https?:\/\/[^"]+)"([^>]*)>/g,
       '<a href="$1"$2 target="_blank" rel="noopener noreferrer">'
@@ -188,5 +253,20 @@
 
   .message-content :global(td) {
     color: #1f2937;
+  }
+
+  /* Chart embed styling */
+  .message-content :global(.chart-embed) {
+    margin: 1.5rem 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  }
+
+  .message-content :global(.chart-embed iframe) {
+    width: 100%;
+    min-height: 400px;
+    border: none;
+    display: block;
   }
 </style>
