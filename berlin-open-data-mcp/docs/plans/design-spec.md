@@ -83,8 +83,10 @@ The system should handle both exploratory ("What data exists about traffic?") an
 #### Category 3: Data Fetching & Processing (new)
 
 **`fetch_dataset_data`**
-- Fetch actual data from a dataset resource with automatic format handling (CSV/JSON → tabular)
+- Fetch actual data from a dataset resource with automatic format handling (CSV/JSON/Excel/WFS/GeoJSON/KML → tabular)
 - Returns: Minimal preview (first 10 rows) + basic column info (names and types only)
+- Supports: CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats
+- WFS behavior: For datasets ≤500 features, fetches all; for >500 features, fetches 10-feature sample
 - Parameters:
   - dataset_id (required)
   - resource_id (optional - picks first if not specified, get from get_dataset_details)
@@ -94,10 +96,14 @@ The system should handle both exploratory ("What data exists about traffic?") an
 **`download_dataset`**
 - Download a dataset as a file to user's computer (triggers browser download dialog)
 - Returns: File content with special download marker for browser
+- Supports: CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats
+- WFS downloads: Automatically fetches all features with pagination (1000 per batch), converts to GeoJSON
+- Geodata defaults: WFS/GeoJSON/KML resources default to GeoJSON output format unless explicitly requested otherwise
+- Filename generation: Includes resource-specific information (e.g., district names, time periods); omits generic WFS resource names; transliterates German umlauts (ä→ae, ö→oe, ü→ue, ß→ss)
 - Parameters:
   - dataset_id (required)
   - resource_id (optional - picks first data resource if not specified)
-  - format (optional) - "csv" or "json", defaults to resource format
+  - format (optional) - "csv", "json", or "geojson"; defaults intelligently based on resource type
 - Use case: "Download the traffic data" or "Lade die Zugriffsstatistik herunter"
 - Note: Distinct from fetch_dataset_data which displays data in chat
 
@@ -123,7 +129,7 @@ All tools return markdown-formatted text optimized for LLM consumption, includin
 
 When `fetch_dataset_data` is called, the server will:
 
-1. Download the resource (CSV, JSON, or other tabular format)
+1. Download the resource (CSV, JSON, Excel, WFS, GeoJSON, KML, or other format)
 2. Parse and normalize to tabular structure
 3. Generate minimal metadata:
    - Total row count
@@ -131,6 +137,7 @@ When `fetch_dataset_data` is called, the server will:
 4. Return first 10 rows as preview
 5. For small datasets (≤500 rows), allow full_data flag to return everything
 6. For large datasets (>500 rows), refuse full_data and suggest manual download
+7. For WFS datasets: fetch all features if ≤500, fetch 10-feature sample if >500 (unless full_data=true for download)
 
 ### Format Handling
 
@@ -138,11 +145,24 @@ When `fetch_dataset_data` is called, the server will:
 
 **JSON**: Detect structure (array of objects, nested), flatten to tabular if possible
 
-**Excel/XLS**: Convert to CSV-like structure (requires library like xlsx) - deferred for now
+**Excel/XLS/XLSX**: ✅ Convert to CSV-like structure using xlsx library (545 datasets, 20.6% of portal)
+
+**GeoJSON**: ✅ Convert features to tabular format with geometry columns (39 datasets, 1.5% of portal)
+- Each feature becomes a table row
+- Feature properties become regular columns
+- Geometry stored as: geometry_type, geometry_coordinates, feature_id
+- Coordinate transformation: EPSG:25833 → WGS84 for downloads
+
+**KML**: ✅ Convert to GeoJSON, then to tabular format (39 datasets, 1.5% of portal)
+
+**WFS (Web Feature Service)**: ✅ Query via OGC WFS 2.0.0 protocol (596 datasets, 22.4% of portal)
+- GetCapabilities to discover feature types
+- GetFeature to retrieve data as GeoJSON
+- Pagination support (1000 features per batch)
+- Smart fetching: 10 samples for analysis of large datasets, all features for downloads
+- Parameter preservation (e.g., nodeId for specific services)
 
 **Other formats**: Return metadata with download URL, graceful error message
-
-**GeoJSON**: Deferred to future phase - will require spatial data handling
 
 ### Why This Approach
 
@@ -357,13 +377,34 @@ Addresses user need to save downloaded data locally:
   - Interface-prototype backend detects marker in tool results
   - Frontend triggers browser download using Blob API
   - Smart resource selection (prefers data formats over HTML/docs)
-  - CSV and JSON output formats
+  - CSV, JSON, and GeoJSON output formats
   - Automatic filename generation from dataset title
 - **Tool Disambiguation**: Updated descriptions to prevent confusion:
   - `fetch_dataset_data`: "VIEW dataset content in chat" (keywords: zeig mir, analysiere)
   - `download_dataset`: "DOWNLOAD as file" (keywords: herunterladen, auf meinem Computer)
 - **Impact**: Enables complete workflow: discover → fetch → analyze → download
 - **Status**: ✅ COMPLETE - Tested with real datasets, browser download dialog working
+
+**Phase 4.6: Download Improvements** (✅ COMPLETED - December 2025)
+
+Enhanced download functionality with better file naming and WFS handling:
+- **Filename Improvements**:
+  - Includes resource-specific information (district names, time periods, etc.)
+  - Transliterates German umlauts (ä→ae, ö→oe, ü→ue, ß→ss) for compatibility
+  - Omits generic WFS resource names (e.g., "API-Endpunkt des WFS-Service")
+  - Examples: `liste-der-haeufigen-vornamen-2023-friedrichshain-kreuzberg.csv`, `parken-im-strassenraum-wfs.geojson`
+- **WFS Smart Fetching**:
+  - Analysis (fetch_dataset_data): Fetches 10 samples for >500 features, all features for ≤500
+  - Downloads (download_dataset): Always fetches all features with pagination (1000 per batch)
+  - Fixes issue where WFS downloads were limited to 1000 features
+- **GeoJSON Default for Geodata**:
+  - WFS/GeoJSON/KML resources now default to GeoJSON output format
+  - Added 'geojson' to format enum alongside 'csv' and 'json'
+  - Preserves geospatial structure with proper MIME type (application/geo+json)
+- **Tool Description Updates**:
+  - Explicitly mentions WFS/geodata format support in tool descriptions
+  - Prevents Claude from incorrectly refusing to download WFS resources
+- **Status**: ✅ COMPLETE - All geodata downloads work correctly with proper filenames
 
 **Phase 4: Browser Automation & Excel Support** (✅ COMPLETED - October 2025)
 

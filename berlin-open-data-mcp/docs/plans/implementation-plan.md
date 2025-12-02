@@ -601,7 +601,11 @@ export class DataFetcher {
   private readonly MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50MB limit
   private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
 
-  async fetchResource(url: string, format: string): Promise<FetchedData> {
+  async fetchResource(url: string, format: string, options?: { fullData?: boolean }): Promise<FetchedData> {
+    // Note: As of December 2025, this accepts an options parameter for smart WFS fetching
+    // - fullData=false (default): Fetches 10 samples for >500 features (analysis)
+    // - fullData=true: Fetches all features with pagination (downloads)
+    // See Phase 4.6 in design-spec.md for details
     try {
       // Download the resource
       const response = await fetch(url, {
@@ -2751,7 +2755,12 @@ case 'download_dataset': {
     fileExtension = 'json';
   }
 
-  // Generate filename from dataset title
+  // Generate filename from dataset title and resource name
+  // Note: As of December 2025, this has been enhanced to:
+  // - Include resource-specific information (districts, time periods)
+  // - Transliterate German umlauts (ä→ae, ö→oe, ü→ue, ß→ss)
+  // - Omit generic WFS resource names
+  // See Phase 4.6 in design-spec.md for details
   const safeFilename = dataset.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -3614,6 +3623,192 @@ Check Railway logs for:
 - `MCP session initialized with ID: <uuid>` (session created)
 - `Received POST request to /mcp` (requests received)
 - `MCP session <uuid> closed` (cleanup working)
+
+---
+
+## Phase 4.6: Download Improvements (December 2025)
+
+### Overview
+
+Phase 4.6 enhanced the download functionality with improvements to file naming, WFS data fetching, and geodata format handling based on user feedback.
+
+### Task 4.6.1: Enhance Filename Generation
+
+**Problem**: Downloaded files had generic names that didn't include resource-specific information (e.g., district names, time periods).
+
+**Solution**: Enhanced filename generation to:
+1. Include resource-specific information from resource names
+2. Filter out duplicate tokens between dataset and resource names
+3. Transliterate German umlauts for cross-platform compatibility
+4. Skip generic WFS resource names
+
+**Implementation** (`src/index.ts` lines 720-780):
+```typescript
+// Helper function to transliterate German umlauts
+const transliterateGerman = (text: string): string => {
+  return text
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss');
+};
+
+// Generate filename from dataset title and resource name
+const datasetPart = transliterateGerman(dataset.title.toLowerCase())
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+let safeFilename = datasetPart;
+
+// Skip resource name for WFS resources (they typically have generic names)
+const isWfsResource = resource.format.toUpperCase() === 'WFS';
+
+if (!isWfsResource && resource.name && resource.name.trim() !== '') {
+  // Extract unique tokens from resource name
+  // Filters out tokens already in dataset name
+  // Example: "Vornamen 2023 Friedrichshain-Kreuzberg"
+  //          → adds only "friedrichshain-kreuzberg"
+}
+```
+
+**Examples**:
+- `liste-der-haeufigen-vornamen-2023-friedrichshain-kreuzberg.csv`
+- `steuereinnahmen-des-landes-berlin-2024-fuer-januar.csv`
+- `parken-im-strassenraum-wfs.geojson`
+
+---
+
+### Task 4.6.2: Implement Smart WFS Fetching
+
+**Problem**: WFS downloads were limited to 1000 features regardless of dataset size, making large geodata downloads incomplete.
+
+**Solution**: Different fetching strategies for analysis vs. downloads:
+- **Analysis** (`fetch_dataset_data`): Fetch 10 samples for >500 features, all for ≤500
+- **Downloads** (`download_dataset`): Always fetch all features with pagination
+
+**Implementation** (`src/data-fetcher.ts` lines 496-571):
+```typescript
+private async fetchWFS(url: string, fullData: boolean): Promise<FetchedData> {
+  // Get total feature count
+  const totalCount = await wfsClient.getFeatureCount(baseUrl, featureType.name, preservedParams);
+
+  let allFeatures: any[] = [];
+
+  if (fullData || totalCount <= 500) {
+    // Fetch all features with pagination
+    const batchSize = 1000;
+    let startIndex = 0;
+
+    while (startIndex < totalCount) {
+      const batch = await wfsClient.getFeatures(
+        baseUrl, featureType.name,
+        { count: batchSize, startIndex },
+        preservedParams
+      );
+      allFeatures = allFeatures.concat(batch.features);
+      startIndex += batchSize;
+
+      if (batch.features.length < batchSize) break;
+    }
+  } else {
+    // For analysis, fetch only 10 features as sample
+    const sample = await wfsClient.getFeatures(
+      baseUrl, featureType.name,
+      { count: 10, startIndex: 0 },
+      preservedParams
+    );
+    allFeatures = sample.features;
+  }
+
+  return geojson;
+}
+```
+
+**Updated signatures**:
+- `fetchResource(url, format, options?: { fullData?: boolean })`
+- Callers pass `fullData: false` for analysis, `fullData: true` for downloads
+
+---
+
+### Task 4.6.3: Default Geodata to GeoJSON Format
+
+**Problem**: Claude was downloading WFS data as JSON instead of GeoJSON, losing geospatial structure.
+
+**Solution**:
+1. Added 'geojson' to format enum
+2. Updated format detection to default geodata to GeoJSON
+3. Updated tool descriptions to mention WFS support
+
+**Implementation** (`src/index.ts`):
+```typescript
+// Tool schema
+format: {
+  type: 'string',
+  description: 'Output format: "csv", "json", or "geojson". Use "geojson" for geodata (WFS/GeoJSON/KML).',
+  enum: ['csv', 'json', 'geojson'],
+}
+
+// Format determination
+let outputFormat: string;
+if (requestedFormat) {
+  outputFormat = requestedFormat;
+} else {
+  const resourceFormat = resource.format.toUpperCase();
+  if (resourceFormat === 'CSV') {
+    outputFormat = 'csv';
+  } else if (['WFS', 'GEOJSON', 'KML'].includes(resourceFormat)) {
+    outputFormat = 'geojson';  // Default for geodata
+  } else {
+    outputFormat = 'json';
+  }
+}
+
+// Output handling
+if (outputFormat === 'geojson' && fetchedData.originalGeoJSON) {
+  fileContent = JSON.stringify(fetchedData.originalGeoJSON, null, 2);
+  mimeType = 'application/geo+json';
+  fileExtension = 'geojson';
+}
+```
+
+---
+
+### Task 4.6.4: Update Tool Descriptions
+
+**Problem**: Tool descriptions didn't mention WFS support, causing Claude to refuse WFS downloads.
+
+**Solution**: Updated both tool descriptions to explicitly list supported formats.
+
+**Changes**:
+- `fetch_dataset_data`: Added "Supports CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats"
+- `download_dataset`: Added "Supports..." and "WFS data is automatically converted to GeoJSON"
+
+---
+
+### Testing
+
+**Test datasets**:
+1. Vornamen 2023 (multiple CSV files per district) - filename generation
+2. Steuereinnahmen 2024 (monthly CSV files) - filename generation
+3. Parken im Straßenraum WFS (large geodata) - WFS pagination
+4. Leistungsberichte (PDF files per university) - filename generation
+
+**Verified**:
+- ✅ Filenames include resource-specific info (districts, months)
+- ✅ German umlauts transliterated correctly
+- ✅ WFS downloads fetch all features
+- ✅ WFS analysis fetches 10-feature samples
+- ✅ Geodata defaults to GeoJSON format
+- ✅ Generic WFS resource names omitted from filenames
+
+---
+
+### Impact
+
+- **Better UX**: Descriptive filenames make downloaded files easier to identify
+- **Complete data**: WFS downloads no longer truncated at 1000 features
+- **Correct formats**: Geodata preserves geospatial structure with proper MIME types
+- **Portal coverage**: All 596 WFS datasets (22.4% of portal) now fully downloadable
 
 ---
 
