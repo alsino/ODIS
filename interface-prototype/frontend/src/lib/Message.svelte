@@ -11,10 +11,12 @@
   marked.use({
     renderer: {
       link(href, title, text) {
-        const isExternal = href.startsWith('http://') || href.startsWith('https://');
+        // Ensure href is a string
+        const hrefStr = String(href || '');
+        const isExternal = hrefStr.startsWith('http://') || hrefStr.startsWith('https://');
         const target = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
         const titleAttr = title ? ` title="${title}"` : '';
-        return `<a href="${href}"${titleAttr}${target}>${text}</a>`;
+        return `<a href="${hrefStr}"${titleAttr}${target}>${text}</a>`;
       }
     }
   });
