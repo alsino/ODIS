@@ -717,12 +717,41 @@ export class BerlinOpenDataMCPServer {
               fileExtension = 'json';
             }
 
-            // Generate filename from dataset title
-            const safeFilename = dataset.title
+            // Generate filename from dataset title and resource name
+            const datasetPart = dataset.title
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')
-              .replace(/^-+|-+$/g, '')
-              .substring(0, 50);
+              .replace(/^-+|-+$/g, '');
+
+            // Add resource name if it provides additional context
+            let safeFilename = datasetPart;
+            if (resource.name && resource.name.trim() !== '') {
+              const resourceName = resource.name
+                .toLowerCase()
+                .replace(/\(csv\)|\(json\)|\(xlsx?\)|\(geojson\)/gi, '') // Remove format indicators
+                .trim();
+
+              if (resourceName !== '' && resourceName !== dataset.title.toLowerCase()) {
+                const resourcePart = resourceName
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/^-+|-+$/g, '');
+
+                // Extract tokens from both parts to find unique resource tokens
+                const datasetTokens = new Set(datasetPart.split('-').filter(t => t.length > 2));
+                const resourceTokens = resourcePart.split('-').filter(t => t.length > 0);
+
+                // Keep only resource tokens that add new information
+                const uniqueTokens = resourceTokens.filter(token =>
+                  !datasetTokens.has(token) || token.length <= 2
+                );
+
+                if (uniqueTokens.length > 0) {
+                  safeFilename = `${datasetPart}-${uniqueTokens.join('-')}`;
+                }
+              }
+            }
+
+            safeFilename = safeFilename.substring(0, 100);
             const filename = `${safeFilename}.${fileExtension}`;
 
             const fileSizeKB = (fileContent.length / 1024).toFixed(2);
