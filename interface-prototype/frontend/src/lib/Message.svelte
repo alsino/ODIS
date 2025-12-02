@@ -7,22 +7,17 @@
   export let role = 'user'; // 'user' or 'assistant'
   export let content = '';
 
-  // Configure marked to open external links in new tab
-  marked.use({
-    renderer: {
-      link(href, title, text) {
-        // Ensure href is a string
-        const hrefStr = String(href || '');
-        const isExternal = hrefStr.startsWith('http://') || hrefStr.startsWith('https://');
-        const target = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
-        const titleAttr = title ? ` title="${title}"` : '';
-        return `<a href="${hrefStr}"${titleAttr}${target}>${text}</a>`;
-      }
-    }
-  });
+  let htmlContent = '';
 
-  // Parse markdown to HTML
-  $: htmlContent = marked.parse(content);
+  // Parse markdown to HTML and add target="_blank" to external links
+  $: {
+    let html = marked.parse(content);
+    // Add target="_blank" to external links after parsing
+    htmlContent = html.replace(
+      /<a href="(https?:\/\/[^"]+)"([^>]*)>/g,
+      '<a href="$1"$2 target="_blank" rel="noopener noreferrer">'
+    );
+  }
 </script>
 
 <div class="message {role}">
