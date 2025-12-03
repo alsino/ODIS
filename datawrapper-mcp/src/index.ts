@@ -53,7 +53,7 @@ const CHART_TYPE_MAP: Record<string, string> = {
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON).',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). IMPORTANT: For maps, if the user\'s intent is unclear (e.g., "create a map"), ask clarifying questions first: Do they want to show locations (locator map), compare quantities across regions (choropleth), or visualize data at specific points (symbol map)? Understanding their goal helps create the most appropriate visualization.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -78,7 +78,7 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       chart_type: {
         type: 'string',
         enum: ['bar', 'line', 'map'],
-        description: 'Type of visualization to create'
+        description: 'Type of visualization to create. For maps, the appropriate map type (locator, symbol, or choropleth) will be auto-detected based on the GeoJSON structure and properties.'
       },
       title: {
         type: 'string',
