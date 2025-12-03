@@ -183,10 +183,18 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     // Prepare and upload data
     let dataString: string;
     let rowCount: number;
+    let sampleFeature: any = null;
 
     if (chart_type === 'map') {
-      dataString = chartBuilder.processGeoJSON(data as GeoJSON);
-      rowCount = (data as GeoJSON).features.length;
+      const geojson = data as GeoJSON;
+      rowCount = geojson.features.length;
+
+      // Get sample feature before stripping (for preview)
+      sampleFeature = chartBuilder.getSampleFeature(geojson);
+
+      // Strip unnecessary properties to reduce token usage
+      const strippedGeoJSON = chartBuilder.stripGeoJSONProperties(geojson, config.mapType!);
+      dataString = chartBuilder.processGeoJSON(strippedGeoJSON);
     } else {
       const dataArray = data as Array<Record<string, any>>;
       dataString = chartBuilder.formatForDatawrapper(dataArray);
@@ -221,15 +229,26 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     });
 
     // Format response
-    const responseText = `✅ Chart created successfully!
+    let responseText = `✅ Chart created successfully!
 
 [CHART:${publicId}]
 ${embedCode}
 [/CHART]
 
 📊 **Chart URL**: ${publicUrl}
-📝 **Embed code**: \`${embedCode}\`
 ✏️ **Edit**: ${editUrl}`;
+
+    // Add sample feature preview for maps
+    if (chart_type === 'map' && sampleFeature) {
+      responseText += `
+
+📍 **Map type**: ${config.mapType}
+📦 **Features**: ${rowCount}
+🔍 **Sample feature**:
+\`\`\`json
+${JSON.stringify(sampleFeature, null, 2)}
+\`\`\``;
+    }
 
     return {
       content: [

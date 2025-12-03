@@ -237,6 +237,66 @@ export class ChartBuilder {
   }
 
   /**
+   * Strip unnecessary properties from GeoJSON to reduce token usage
+   */
+  stripGeoJSONProperties(geojson: GeoJSON, mapType: string): GeoJSON {
+    const strippedFeatures = geojson.features.map(feature => {
+      if (!feature.properties) {
+        return feature;
+      }
+
+      let keptProperties: Record<string, any> = {};
+
+      if (mapType === 'locator-map') {
+        // Locator map: Keep only name/label properties
+        const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
+        for (const key of nameKeys) {
+          if (feature.properties[key]) {
+            keptProperties.name = feature.properties[key];
+            break;
+          }
+        }
+      } else if (mapType === 'd3-maps-symbols' || mapType === 'd3-maps-choropleth') {
+        // Symbol/Choropleth: Keep numeric properties + name
+        const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
+        for (const key of nameKeys) {
+          if (feature.properties[key]) {
+            keptProperties.name = feature.properties[key];
+            break;
+          }
+        }
+
+        // Keep all numeric properties
+        for (const [key, value] of Object.entries(feature.properties)) {
+          if (typeof value === 'number') {
+            keptProperties[key] = value;
+          }
+        }
+      }
+
+      return {
+        ...feature,
+        properties: keptProperties
+      };
+    });
+
+    return {
+      type: 'FeatureCollection',
+      features: strippedFeatures
+    };
+  }
+
+  /**
+   * Get a sample feature from GeoJSON for preview
+   */
+  getSampleFeature(geojson: GeoJSON): any {
+    if (geojson.features.length === 0) {
+      return null;
+    }
+    return geojson.features[0];
+  }
+
+  /**
    * Convert data to CSV format for Datawrapper
    */
   formatForDatawrapper(data: Array<Record<string, any>>): string {
