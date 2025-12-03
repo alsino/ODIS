@@ -53,7 +53,7 @@ const CHART_TYPE_MAP: Record<string, string> = {
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). IMPORTANT: For maps, you must determine the map_type by asking the user what they want to visualize: (1) Show specific locations? Use "locator-map". (2) Visualize numeric data at point locations? Use "d3-maps-symbols". (3) Compare data across regions with colored areas? Use "d3-maps-choropleth". Always clarify the user\'s goal before creating a map.',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). **CRITICAL FOR MAPS**: You MUST NOT call this tool for maps without first asking the user which type of map they want. Present these three options to the user and wait for their choice: (1) "locator-map" - show where locations are on a map, (2) "d3-maps-symbols" - visualize quantities at specific locations with sized markers, (3) "d3-maps-choropleth" - compare values across regions with color-coded areas. NEVER infer map_type from context alone - always get explicit user confirmation of which map type they want.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -83,7 +83,7 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       map_type: {
         type: 'string',
         enum: ['locator-map', 'd3-maps-symbols', 'd3-maps-choropleth'],
-        description: 'Required when chart_type is "map". Specify: "locator-map" to show locations/markers, "d3-maps-symbols" to visualize numeric data at point locations, or "d3-maps-choropleth" to show data across regions with color fills. Ask the user to clarify their visualization goal if unclear.'
+        description: 'REQUIRED when chart_type is "map" (you must ask the user first). Choose: "locator-map" for showing locations, "d3-maps-symbols" for visualizing numeric data at points, or "d3-maps-choropleth" for comparing data across regions.'
       },
       title: {
         type: 'string',
@@ -129,7 +129,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
 
     // Validate map_type is provided for maps
     if (chart_type === 'map' && !map_type) {
-      throw new Error('map_type is required when chart_type is "map". Please specify "locator-map", "d3-maps-symbols", or "d3-maps-choropleth".');
+      throw new Error('map_type is required when chart_type is "map". You must ask the user which type of map they want:\n\n1. "locator-map" - Show where locations are on a map\n2. "d3-maps-symbols" - Visualize quantities at locations with sized markers\n3. "d3-maps-choropleth" - Compare values across regions with color-coded areas\n\nPresent these options to the user and use their choice for the map_type parameter.');
     }
 
     // Validate data
