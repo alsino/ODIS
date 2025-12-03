@@ -93,7 +93,7 @@ Create a data visualization using the Datawrapper API.
 {
   data: Array<Record<string, any>> | GeoJSON;  // Required: Array of data objects or GeoJSON
   chart_type: 'bar' | 'line' | 'map';          // Required: Type of visualization
-  map_type?: 'locator-map' | 'd3-maps-symbols' | 'd3-maps-choropleth'; // Required when chart_type is 'map'
+  map_type?: 'd3-maps-symbols' | 'd3-maps-choropleth'; // Required when chart_type is 'map'
   title?: string;                              // Optional: Chart title (auto-generated if omitted)
   description?: string;                        // Optional: Chart description/byline
   source_dataset_id?: string;                  // Optional: Berlin dataset ID for tracking
@@ -101,9 +101,10 @@ Create a data visualization using the Datawrapper API.
 ```
 
 **Map Types** (when `chart_type` is "map"):
-- `locator-map`: Show specific locations with markers (e.g., "where are the Christmas markets?")
-- `d3-maps-symbols`: Visualize numeric data at point locations (e.g., "show visitor counts at each location")
+- `d3-maps-symbols`: Show point locations on a map (works with or without numeric data for marker sizing)
 - `d3-maps-choropleth`: Compare data across regions with color fills (e.g., "show population density by district")
+
+**Note on Locator Maps**: Datawrapper's `locator-map` type is not currently supported because it requires a different data format (markers array instead of GeoJSON). For showing point locations, use `d3-maps-symbols` which accepts GeoJSON and serves the same purpose. See "Future Enhancements" section for details on implementing locator-map support if needed.
 
 **Example Usage**:
 ```javascript
@@ -119,7 +120,7 @@ Create a data visualization using the Datawrapper API.
   source_dataset_id: "einwohnerzahl-berlin"
 }
 
-// Map from GeoJSON - Locator map
+// Symbol map - Show point locations (with optional numeric data)
 {
   data: {
     type: "FeatureCollection",
@@ -127,23 +128,7 @@ Create a data visualization using the Datawrapper API.
       {
         type: "Feature",
         geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        properties: { name: "Location A" }
-      }
-    ]
-  },
-  chart_type: "map",
-  map_type: "locator-map"
-}
-
-// Map from GeoJSON - Symbol map with numeric data
-{
-  data: {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        properties: { name: "Location A", visitors: 100 }
+        properties: { name: "Christmas Market A", visitors: 100 }
       }
     ]
   },
@@ -224,9 +209,8 @@ Create a data visualization using the Datawrapper API.
 ### Maps (GeoJSON)
 
 **Map Type Selection** (Claude determines through conversation):
-- **Locator map** (`locator-map`): User wants to show specific locations
-- **Symbol map** (`d3-maps-symbols`): User wants to visualize numeric data at point locations
-- **Choropleth map** (`d3-maps-choropleth`): User wants to compare data across regions
+- **Symbol map** (`d3-maps-symbols`): User wants to show point locations (with or without numeric data visualization)
+- **Choropleth map** (`d3-maps-choropleth`): User wants to compare data across regions with color fills
 
 **Validation**:
 - Check for `type: "FeatureCollection"` with `features` array
@@ -237,7 +221,7 @@ Create a data visualization using the Datawrapper API.
 - **Bounds**: Calculated dynamically from GeoJSON coordinates (min/max lat/lon)
 - **View**: Center and zoom set based on calculated bounding box
 - **Properties**: Stripped to essential data only (name + numeric values) to reduce token usage
-- **Markers**: Point geometries rendered as markers (locator/symbol maps)
+- **Markers**: Point geometries rendered as markers (symbol maps)
 - **Polygons**: Rendered as colored regions (choropleth maps)
 - **Tooltips**: Use `properties` object for popup content
 
@@ -512,6 +496,57 @@ Maps require GeoJSON FeatureCollection format.
 - Multiple layers
 - Custom basemaps
 - Interactive filters
+
+### Phase 6: Locator Map Support
+
+**Why Not Currently Supported**:
+Datawrapper's `locator-map` type requires a different data format than symbol and choropleth maps:
+- **Symbol/Choropleth maps**: Accept GeoJSON via `/charts/{id}/data` endpoint
+- **Locator maps**: Require custom `markers` array format, not GeoJSON
+
+**Current Workaround**:
+Use `d3-maps-symbols` for showing point locations - it works with GeoJSON and serves the same basic purpose.
+
+**How to Implement** (if needed in future):
+
+1. **Add GeoJSON to Markers Conversion** in `chart-builder.ts`:
+```typescript
+convertGeoJSONToMarkers(geojson: GeoJSON): { markers: Array<any> } {
+  const markers = geojson.features.map(feature => {
+    const [lon, lat] = feature.geometry.coordinates;
+    return {
+      type: 'point',
+      title: feature.properties?.name || 'Location',
+      coordinates: [lon, lat],
+      tooltip: { text: feature.properties?.name || '' },
+      markerColor: '#2A7FFF'
+    };
+  });
+  return { markers };
+}
+```
+
+2. **Handle Locator Maps Differently** in `index.ts`:
+```typescript
+if (map_type === 'locator-map') {
+  const markersData = chartBuilder.convertGeoJSONToMarkers(geojson);
+  dataString = JSON.stringify(markersData);
+} else {
+  // Symbol and choropleth use GeoJSON
+  dataString = chartBuilder.processGeoJSON(strippedGeoJSON);
+}
+```
+
+3. **Update Type Definitions** in `types.ts`:
+```typescript
+export type MapType = 'locator-map' | 'd3-maps-symbols' | 'd3-maps-choropleth';
+```
+
+4. **Update Tool Schema** to include `'locator-map'` in enum
+
+**References**:
+- [Datawrapper: Adding Point Markers](https://developer.datawrapper.de/docs/adding-markers)
+- [Datawrapper: Creating a Locator Map](https://developer.datawrapper.de/docs/creating-a-locator-map)
 
 ---
 

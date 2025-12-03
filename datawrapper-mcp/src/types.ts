@@ -2,7 +2,7 @@
 // ABOUTME: Includes interfaces for chart types, API responses, and configuration
 
 export type ChartType = 'bar' | 'line' | 'map';
-export type MapType = 'd3-maps-choropleth' | 'd3-maps-symbols' | 'locator-map';
+export type MapType = 'd3-maps-choropleth' | 'd3-maps-symbols';
 
 export interface CreateVisualizationParams {
   data: Array<Record<string, any>> | GeoJSON;

@@ -209,6 +209,7 @@ export class ChartBuilder {
 
   /**
    * Strip unnecessary properties from GeoJSON to reduce token usage
+   * Keeps only name and numeric properties for symbol and choropleth maps
    */
   stripGeoJSONProperties(geojson: GeoJSON, mapType: string): GeoJSON {
     const strippedFeatures = geojson.features.map(feature => {
@@ -218,30 +219,19 @@ export class ChartBuilder {
 
       let keptProperties: Record<string, any> = {};
 
-      if (mapType === 'locator-map') {
-        // Locator map: Keep only name/label properties
-        const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
-        for (const key of nameKeys) {
-          if (feature.properties[key]) {
-            keptProperties.name = feature.properties[key];
-            break;
-          }
+      // Keep name/label property
+      const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
+      for (const key of nameKeys) {
+        if (feature.properties[key]) {
+          keptProperties.name = feature.properties[key];
+          break;
         }
-      } else if (mapType === 'd3-maps-symbols' || mapType === 'd3-maps-choropleth') {
-        // Symbol/Choropleth: Keep numeric properties + name
-        const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
-        for (const key of nameKeys) {
-          if (feature.properties[key]) {
-            keptProperties.name = feature.properties[key];
-            break;
-          }
-        }
+      }
 
-        // Keep all numeric properties
-        for (const [key, value] of Object.entries(feature.properties)) {
-          if (typeof value === 'number') {
-            keptProperties[key] = value;
-          }
+      // Keep all numeric properties for data visualization
+      for (const [key, value] of Object.entries(feature.properties)) {
+        if (typeof value === 'number') {
+          keptProperties[key] = value;
         }
       }
 
