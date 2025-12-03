@@ -132,10 +132,12 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     // Get Datawrapper chart type
     const dwChartType = CHART_TYPE_MAP[chart_type];
 
-    // Create initial chart metadata with shadcn-inspired styling
+    // Create initial chart metadata with clean, modern styling
     const metadata: any = {
       visualize: {
-        'base-color': '#3b82f6'
+        'base-color': '#EAB308',  // Warm yellow/gold color
+        'thick': false,  // Moderate bar thickness for cleaner look
+        'value-label-format': '0,0.[00]'  // Clean number formatting
       }
     };
 
@@ -145,7 +147,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
 
     if (description) {
       metadata.describe = {
-        byline: description
+        intro: description  // Use intro for subtitle/description
       };
     }
 

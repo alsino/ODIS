@@ -257,7 +257,7 @@
 
   /* Chart embed styling */
   .message-content :global(.chart-embed) {
-    margin: 0;
+    margin: 2rem;
     padding: 0;
     overflow: visible;
   }
