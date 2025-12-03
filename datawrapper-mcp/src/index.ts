@@ -135,7 +135,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     // Create initial chart metadata with clean, modern styling
     const metadata: any = {
       visualize: {
-        'base-color': '#EAB308',  // Warm yellow/gold color
+        'base-color': '#2A7FFF',
         'thick': false,  // Moderate bar thickness for cleaner look
         'value-label-format': '0,0.[00]'  // Clean number formatting
       }
