@@ -54,10 +54,13 @@ The Datawrapper MCP server enables automatic visualization of Berlin open data b
 - Smart defaults engine
 - Functions:
   - `inferChartConfig(data, chartType)`: Generate optimal configuration
-  - `generateTitle(data, datasetId)`: Create descriptive titles
-  - `detectAxes(data)`: Identify X/Y columns
-  - `formatForDatawrapper(data)`: Convert to Datawrapper format
+  - `generateTitle(data)`: Create descriptive titles
+  - `detectColumnTypes(data)`: Identify column types (string/number/date)
+  - `formatForDatawrapper(data)`: Convert to Datawrapper CSV format
   - `processGeoJSON(geojson)`: Handle map data
+  - `stripGeoJSONProperties(geojson, mapType)`: Remove unnecessary properties to reduce tokens
+  - `calculateBoundingBox(geojson)`: Calculate min/max coordinates for map view
+  - `getSampleFeature(geojson)`: Get one feature for preview
 
 #### 4. Chart Logger (`src/chart-logger.ts`)
 - Maintains append-only JSON log
@@ -88,13 +91,19 @@ Create a data visualization using the Datawrapper API.
 **Parameters**:
 ```typescript
 {
-  data: Array<Record<string, any>>;  // Required: Array of data objects
-  chart_type: 'bar' | 'line' | 'map'; // Required: Type of visualization
-  title?: string;                     // Optional: Chart title (auto-generated if omitted)
-  description?: string;               // Optional: Chart description/byline
-  source_dataset_id?: string;         // Optional: Berlin dataset ID for tracking
+  data: Array<Record<string, any>> | GeoJSON;  // Required: Array of data objects or GeoJSON
+  chart_type: 'bar' | 'line' | 'map';          // Required: Type of visualization
+  map_type?: 'locator-map' | 'd3-maps-symbols' | 'd3-maps-choropleth'; // Required when chart_type is 'map'
+  title?: string;                              // Optional: Chart title (auto-generated if omitted)
+  description?: string;                        // Optional: Chart description/byline
+  source_dataset_id?: string;                  // Optional: Berlin dataset ID for tracking
 }
 ```
+
+**Map Types** (when `chart_type` is "map"):
+- `locator-map`: Show specific locations with markers (e.g., "where are the Christmas markets?")
+- `d3-maps-symbols`: Visualize numeric data at point locations (e.g., "show visitor counts at each location")
+- `d3-maps-choropleth`: Compare data across regions with color fills (e.g., "show population density by district")
 
 **Example Usage**:
 ```javascript
@@ -110,7 +119,7 @@ Create a data visualization using the Datawrapper API.
   source_dataset_id: "einwohnerzahl-berlin"
 }
 
-// Map from GeoJSON
+// Map from GeoJSON - Locator map
 {
   data: {
     type: "FeatureCollection",
@@ -118,11 +127,28 @@ Create a data visualization using the Datawrapper API.
       {
         type: "Feature",
         geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        properties: { name: "Location A", value: 100 }
+        properties: { name: "Location A" }
       }
     ]
   },
-  chart_type: "map"
+  chart_type: "map",
+  map_type: "locator-map"
+}
+
+// Map from GeoJSON - Symbol map with numeric data
+{
+  data: {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [13.4, 52.5] },
+        properties: { name: "Location A", visitors: 100 }
+      }
+    ]
+  },
+  chart_type: "map",
+  map_type: "d3-maps-symbols"
 }
 ```
 
@@ -140,13 +166,14 @@ Create a data visualization using the Datawrapper API.
 ```
 
 **Workflow**:
-1. Validate input data and chart type
-2. Apply smart defaults (title, axes, labels)
-3. Create chart via Datawrapper API
-4. Upload formatted data
-5. Publish chart publicly
-6. Log to charts-log.json
-7. Return iframe embed + URLs
+1. For maps: Claude asks user about visualization intent and determines map_type
+2. Validate input data, chart type, and map_type (if applicable)
+3. Apply smart defaults (title, axes, labels, bounding box)
+4. Create chart via Datawrapper API
+5. Upload formatted data (with stripped GeoJSON properties for maps)
+6. Publish chart publicly
+7. Log to charts-log.json
+8. Return iframe embed + URLs + sample feature (for maps)
 
 ---
 
@@ -196,20 +223,32 @@ Create a data visualization using the Datawrapper API.
 
 ### Maps (GeoJSON)
 
-**Detection**:
+**Map Type Selection** (Claude determines through conversation):
+- **Locator map** (`locator-map`): User wants to show specific locations
+- **Symbol map** (`d3-maps-symbols`): User wants to visualize numeric data at point locations
+- **Choropleth map** (`d3-maps-choropleth`): User wants to compare data across regions
+
+**Validation**:
 - Check for `type: "FeatureCollection"` with `features` array
 - Validate `geometry` objects in features
+- Require `map_type` parameter
 
 **Configuration**:
-- **Bounds**: Default to Berlin coordinates `[13.0882, 52.3382, 13.7611, 52.6755]`
-- **Markers**: Point geometries rendered as markers
-- **Polygons**: Rendered as filled shapes
+- **Bounds**: Calculated dynamically from GeoJSON coordinates (min/max lat/lon)
+- **View**: Center and zoom set based on calculated bounding box
+- **Properties**: Stripped to essential data only (name + numeric values) to reduce token usage
+- **Markers**: Point geometries rendered as markers (locator/symbol maps)
+- **Polygons**: Rendered as colored regions (choropleth maps)
 - **Tooltips**: Use `properties` object for popup content
-- **Choropleth**: If numeric property exists, use for color scale
 
 **Example**:
 ```javascript
-// Input: Parking locations with counts
+// User: "Show me parking locations with number of spaces"
+// Claude asks: "Do you want to see the locations, or visualize the space counts?"
+// User: "Visualize the counts"
+// Claude determines: map_type = "d3-maps-symbols"
+
+// Input GeoJSON:
 {
   type: "FeatureCollection",
   features: [
@@ -220,7 +259,16 @@ Create a data visualization using the Datawrapper API.
   ]
 }
 
-// Map shows markers with tooltips: "Parking A: 50 spaces"
+// Stripped GeoJSON (sent to Datawrapper):
+{
+  type: "FeatureCollection",
+  features: [
+    {
+      geometry: { type: "Point", coordinates: [13.4, 52.5] },
+      properties: { name: "Parking A", spaces: 50 }  // Keeps name + numeric properties
+    }
+  ]
+}
 ```
 
 ---

@@ -800,58 +800,89 @@ export class ChartBuilder {
 
 ### Task 3.3: Add Map Support
 
-**Update `buildMapConfig` in `src/chart-builder.ts`**:
+**Add map utility functions to `src/chart-builder.ts`**:
 ```typescript
 /**
- * Build map configuration for GeoJSON data
+ * Calculate bounding box from GeoJSON features
  */
-private buildMapConfig(data: any, title: string, description?: string): ChartConfig {
-  // Detect if points or polygons
-  const firstFeature = data.features[0];
-  const geometryType = firstFeature.geometry.type;
+private calculateBoundingBox(geojson: GeoJSON): { minLon: number; maxLon: number; minLat: number; maxLat: number } {
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
 
-  let mapType = 'd3-maps-symbols'; // For points
-  if (geometryType.includes('Polygon')) {
-    mapType = 'd3-maps-choropleth'; // For polygons
+  for (const feature of geojson.features) {
+    const coords = this.extractCoordinates(feature.geometry);
+    for (const [lon, lat] of coords) {
+      minLon = Math.min(minLon, lon);
+      maxLon = Math.max(maxLon, lon);
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+    }
   }
 
-  // Check if numeric property exists for choropleth
-  const properties = firstFeature.properties || {};
-  const numericProp = Object.keys(properties).find(key => typeof properties[key] === 'number');
+  return { minLon, maxLon, minLat, maxLat };
+}
 
-  return {
-    type: mapType,
-    title,
-    metadata: {
-      describe: {
-        byline: description,
-      },
-      visualize: {
-        'map-bounds': {
-          west: 13.0882,
-          south: 52.3382,
-          east: 13.7611,
-          north: 52.6755,
-        },
-        ...(numericProp && {
-          'map-key-attr': numericProp, // Use numeric property for choropleth color scale
-        }),
-      },
-    },
-  };
+/**
+ * Strip unnecessary properties from GeoJSON to reduce token usage
+ */
+stripGeoJSONProperties(geojson: GeoJSON, mapType: string): GeoJSON {
+  const strippedFeatures = geojson.features.map(feature => {
+    if (!feature.properties) return feature;
+
+    let keptProperties: Record<string, any> = {};
+
+    if (mapType === 'locator-map') {
+      // Keep only name/label
+      const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
+      for (const key of nameKeys) {
+        if (feature.properties[key]) {
+          keptProperties.name = feature.properties[key];
+          break;
+        }
+      }
+    } else {
+      // Keep name + all numeric properties
+      const nameKeys = ['name', 'title', 'label', 'Name', 'Title'];
+      for (const key of nameKeys) {
+        if (feature.properties[key]) {
+          keptProperties.name = feature.properties[key];
+          break;
+        }
+      }
+      for (const [key, value] of Object.entries(feature.properties)) {
+        if (typeof value === 'number') {
+          keptProperties[key] = value;
+        }
+      }
+    }
+
+    return { ...feature, properties: keptProperties };
+  });
+
+  return { type: 'FeatureCollection', features: strippedFeatures };
+}
+
+/**
+ * Get a sample feature for preview
+ */
+getSampleFeature(geojson: GeoJSON): any {
+  return geojson.features.length > 0 ? geojson.features[0] : null;
 }
 ```
 
+**Note**: Map type is now determined by the `map_type` parameter (provided by Claude through conversation with user), not auto-detected from data structure.
+
 **Commit**:
 ```bash
-git add src/chart-builder.ts src/utils.ts
-git commit -m "Add chart builder with smart defaults
+git add src/chart-builder.ts
+git commit -m "Add map support with dynamic bounding box and property stripping
 
-- Implement column type detection and axis inference
-- Add bar and line chart configuration builders
-- Add map configuration for GeoJSON data
-- Include data validation and error messages
-- Add utility functions for CSV conversion and label formatting
+- Calculate bounding box from GeoJSON coordinates
+- Strip unnecessary properties to reduce token usage
+- Add sample feature extraction for preview
+- Remove auto-detection logic (map_type now explicit parameter)
 "
 ```
 
