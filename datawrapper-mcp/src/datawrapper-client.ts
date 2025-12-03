@@ -95,7 +95,7 @@ export class DatawrapperClient {
    * Get embed code for a published chart
    */
   getEmbedCode(publicId: string, width: number = 600, height: number = 400): string {
-    return `<iframe src="https://datawrapper.dwcdn.net/${publicId}/" width="${width}" height="${height}" frameborder="0"></iframe>`;
+    return `<iframe src="https://datawrapper.dwcdn.net/${publicId}/" scrolling="no" width="${width}" height="${height}" frameborder="0" style="border:none;" allowfullscreen></iframe>`;
   }
 
   /**

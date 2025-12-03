@@ -132,9 +132,11 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     // Get Datawrapper chart type
     const dwChartType = CHART_TYPE_MAP[chart_type];
 
-    // Create chart metadata
+    // Create initial chart metadata with shadcn-inspired styling
     const metadata: any = {
-      visualize: {}
+      visualize: {
+        'base-color': '#3b82f6'
+      }
     };
 
     if (config.title) {
