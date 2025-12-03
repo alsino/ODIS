@@ -62,4 +62,11 @@ export interface ChartConfig {
   xLabel?: string;
   yLabel?: string;
   series?: string[];
+  mapType?: 'd3-maps-choropleth' | 'd3-maps-symbols' | 'locator-map';
+  bbox?: {
+    minLon: number;
+    maxLon: number;
+    minLat: number;
+    maxLat: number;
+  };
 }

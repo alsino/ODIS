@@ -45,10 +45,9 @@ const server = new Server(
 );
 
 // Map chart types to Datawrapper chart type identifiers
-const CHART_TYPE_MAP: Record<ChartType, string> = {
+const CHART_TYPE_MAP: Record<string, string> = {
   bar: 'd3-bars-stacked',
-  line: 'd3-lines',
-  map: 'd3-maps-symbols'
+  line: 'd3-lines'
 };
 
 // Tool definitions
@@ -130,7 +129,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     const config = chartBuilder.inferChartConfig(data, chart_type, title);
 
     // Get Datawrapper chart type
-    const dwChartType = CHART_TYPE_MAP[chart_type];
+    const dwChartType = chart_type === 'map' ? config.mapType! : CHART_TYPE_MAP[chart_type];
 
     // Create initial chart metadata with clean, modern styling
     const metadata: any = {
@@ -158,10 +157,27 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
           x: config.xAxis
         };
       }
+    } else if (chart_type === 'map' && config.bbox) {
+      // Set map view based on calculated bounding box
+      const { minLon, maxLon, minLat, maxLat } = config.bbox;
+      const centerLon = (minLon + maxLon) / 2;
+      const centerLat = (minLat + maxLat) / 2;
+
+      metadata.visualize.view = {
+        center: [centerLon, centerLat],
+        zoom: 10,
+        fit: {
+          top: [centerLon, maxLat],
+          right: [maxLon, centerLat],
+          bottom: [centerLon, minLat],
+          left: [minLon, centerLat]
+        }
+      };
     }
 
     // Create chart
-    console.error(`Creating ${chart_type} chart...`);
+    const chartTypeLabel = chart_type === 'map' ? `${config.mapType} map` : `${chart_type} chart`;
+    console.error(`Creating ${chartTypeLabel}...`);
     const chart = await datawrapperClient.createChart(dwChartType, metadata);
 
     // Prepare and upload data

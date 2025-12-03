@@ -153,10 +153,87 @@ export class ChartBuilder {
     }
 
     const title = userTitle || 'Map Visualization';
+    const mapType = this.detectMapType(geojson);
+    const bbox = this.calculateBoundingBox(geojson);
 
     return {
-      title
+      title,
+      mapType,
+      bbox
     };
+  }
+
+  /**
+   * Detect appropriate map type from GeoJSON
+   */
+  private detectMapType(geojson: GeoJSON): 'd3-maps-choropleth' | 'd3-maps-symbols' | 'locator-map' {
+    if (geojson.features.length === 0) {
+      return 'locator-map';
+    }
+
+    const firstFeature = geojson.features[0];
+    const geometryType = firstFeature.geometry.type;
+    const hasNumericProperties = firstFeature.properties &&
+      Object.values(firstFeature.properties).some(val => typeof val === 'number');
+
+    // Choropleth: Polygon/MultiPolygon with numeric properties
+    if ((geometryType === 'Polygon' || geometryType === 'MultiPolygon') && hasNumericProperties) {
+      return 'd3-maps-choropleth';
+    }
+
+    // Symbol map: Point with numeric properties
+    if (geometryType === 'Point' && hasNumericProperties) {
+      return 'd3-maps-symbols';
+    }
+
+    // Locator map: Points without numeric properties, or any other geometry
+    return 'locator-map';
+  }
+
+  /**
+   * Calculate bounding box from GeoJSON features
+   */
+  private calculateBoundingBox(geojson: GeoJSON): { minLon: number; maxLon: number; minLat: number; maxLat: number } {
+    let minLon = Infinity;
+    let maxLon = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+
+    for (const feature of geojson.features) {
+      const coords = this.extractCoordinates(feature.geometry);
+
+      for (const [lon, lat] of coords) {
+        minLon = Math.min(minLon, lon);
+        maxLon = Math.max(maxLon, lon);
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+      }
+    }
+
+    return { minLon, maxLon, minLat, maxLat };
+  }
+
+  /**
+   * Extract all coordinates from a geometry object
+   */
+  private extractCoordinates(geometry: any): Array<[number, number]> {
+    const coords: Array<[number, number]> = [];
+
+    const flatten = (arr: any): void => {
+      if (Array.isArray(arr)) {
+        if (arr.length === 2 && typeof arr[0] === 'number' && typeof arr[1] === 'number') {
+          coords.push([arr[0], arr[1]]);
+        } else {
+          arr.forEach(flatten);
+        }
+      }
+    };
+
+    if (geometry.coordinates) {
+      flatten(geometry.coordinates);
+    }
+
+    return coords;
   }
 
   /**
