@@ -53,7 +53,7 @@ const CHART_TYPE_MAP: Record<string, string> = {
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). IMPORTANT: For maps, if the user\'s intent is unclear (e.g., "create a map"), ask clarifying questions first: Do they want to show locations (locator map), compare quantities across regions (choropleth), or visualize data at specific points (symbol map)? Understanding their goal helps create the most appropriate visualization.',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). IMPORTANT: For maps, you must determine the map_type by asking the user what they want to visualize: (1) Show specific locations? Use "locator-map". (2) Visualize numeric data at point locations? Use "d3-maps-symbols". (3) Compare data across regions with colored areas? Use "d3-maps-choropleth". Always clarify the user\'s goal before creating a map.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -78,7 +78,12 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       chart_type: {
         type: 'string',
         enum: ['bar', 'line', 'map'],
-        description: 'Type of visualization to create. For maps, the appropriate map type (locator, symbol, or choropleth) will be auto-detected based on the GeoJSON structure and properties.'
+        description: 'Type of visualization to create'
+      },
+      map_type: {
+        type: 'string',
+        enum: ['locator-map', 'd3-maps-symbols', 'd3-maps-choropleth'],
+        description: 'Required when chart_type is "map". Specify: "locator-map" to show locations/markers, "d3-maps-symbols" to visualize numeric data at point locations, or "d3-maps-choropleth" to show data across regions with color fills. Ask the user to clarify their visualization goal if unclear.'
       },
       title: {
         type: 'string',
@@ -120,7 +125,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  */
 async function handleCreateVisualization(params: CreateVisualizationParams) {
   try {
-    const { data, chart_type, title, description, source_dataset_id } = params;
+    const { data, chart_type, map_type, title, description, source_dataset_id } = params;
+
+    // Validate map_type is provided for maps
+    if (chart_type === 'map' && !map_type) {
+      throw new Error('map_type is required when chart_type is "map". Please specify "locator-map", "d3-maps-symbols", or "d3-maps-choropleth".');
+    }
 
     // Validate data
     chartBuilder.validateData(data, chart_type);
@@ -129,7 +139,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     const config = chartBuilder.inferChartConfig(data, chart_type, title);
 
     // Get Datawrapper chart type
-    const dwChartType = chart_type === 'map' ? config.mapType! : CHART_TYPE_MAP[chart_type];
+    const dwChartType = chart_type === 'map' ? map_type! : CHART_TYPE_MAP[chart_type];
 
     // Create initial chart metadata with clean, modern styling
     const metadata: any = {
@@ -176,7 +186,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     }
 
     // Create chart
-    const chartTypeLabel = chart_type === 'map' ? `${config.mapType} map` : `${chart_type} chart`;
+    const chartTypeLabel = chart_type === 'map' ? `${map_type} map` : `${chart_type} chart`;
     console.error(`Creating ${chartTypeLabel}...`);
     const chart = await datawrapperClient.createChart(dwChartType, metadata);
 
@@ -193,7 +203,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
       sampleFeature = chartBuilder.getSampleFeature(geojson);
 
       // Strip unnecessary properties to reduce token usage
-      const strippedGeoJSON = chartBuilder.stripGeoJSONProperties(geojson, config.mapType!);
+      const strippedGeoJSON = chartBuilder.stripGeoJSONProperties(geojson, map_type!);
       dataString = chartBuilder.processGeoJSON(strippedGeoJSON);
     } else {
       const dataArray = data as Array<Record<string, any>>;
@@ -242,7 +252,7 @@ ${embedCode}
     if (chart_type === 'map' && sampleFeature) {
       responseText += `
 
-📍 **Map type**: ${config.mapType}
+📍 **Map type**: ${map_type}
 📦 **Features**: ${rowCount}
 🔍 **Sample feature**:
 \`\`\`json

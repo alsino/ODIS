@@ -2,10 +2,12 @@
 // ABOUTME: Includes interfaces for chart types, API responses, and configuration
 
 export type ChartType = 'bar' | 'line' | 'map';
+export type MapType = 'd3-maps-choropleth' | 'd3-maps-symbols' | 'locator-map';
 
 export interface CreateVisualizationParams {
   data: Array<Record<string, any>> | GeoJSON;
   chart_type: ChartType;
+  map_type?: MapType;
   title?: string;
   description?: string;
   source_dataset_id?: string;
@@ -62,7 +64,6 @@ export interface ChartConfig {
   xLabel?: string;
   yLabel?: string;
   series?: string[];
-  mapType?: 'd3-maps-choropleth' | 'd3-maps-symbols' | 'locator-map';
   bbox?: {
     minLon: number;
     maxLon: number;

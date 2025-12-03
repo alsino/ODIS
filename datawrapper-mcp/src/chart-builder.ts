@@ -153,41 +153,12 @@ export class ChartBuilder {
     }
 
     const title = userTitle || 'Map Visualization';
-    const mapType = this.detectMapType(geojson);
     const bbox = this.calculateBoundingBox(geojson);
 
     return {
       title,
-      mapType,
       bbox
     };
-  }
-
-  /**
-   * Detect appropriate map type from GeoJSON
-   */
-  private detectMapType(geojson: GeoJSON): 'd3-maps-choropleth' | 'd3-maps-symbols' | 'locator-map' {
-    if (geojson.features.length === 0) {
-      return 'locator-map';
-    }
-
-    const firstFeature = geojson.features[0];
-    const geometryType = firstFeature.geometry.type;
-    const hasNumericProperties = firstFeature.properties &&
-      Object.values(firstFeature.properties).some(val => typeof val === 'number');
-
-    // Choropleth: Polygon/MultiPolygon with numeric properties
-    if ((geometryType === 'Polygon' || geometryType === 'MultiPolygon') && hasNumericProperties) {
-      return 'd3-maps-choropleth';
-    }
-
-    // Symbol map: Point with numeric properties
-    if (geometryType === 'Point' && hasNumericProperties) {
-      return 'd3-maps-symbols';
-    }
-
-    // Locator map: Points without numeric properties, or any other geometry
-    return 'locator-map';
   }
 
   /**
