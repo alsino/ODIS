@@ -147,7 +147,11 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
         'base-color': '#2A7FFF',
         'thick': false,  // Moderate bar thickness for cleaner look
         'value-label-format': '0,0.[00]'  // Clean number formatting
-      }
+      },
+      publish: chart_type === 'map' ? {
+        'embed-width': 600,
+        'embed-height': 600  // Square aspect ratio for maps to avoid cropping
+      } : undefined
     };
 
     if (config.title) {
@@ -170,6 +174,9 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     } else if (chart_type === 'map' && map_type === 'd3-maps-symbols' && config.basemap) {
       // Set basemap for symbol maps
       metadata.visualize.basemap = config.basemap;
+      // Prevent edge cropping
+      metadata.visualize['map-type'] = 'map-symbol';
+      metadata.visualize['fitcontent'] = false;  // Show full basemap, don't crop
     }
 
     // Create chart
@@ -212,7 +219,9 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
 
     // Get chart URLs
     const publicId = publishedChart.publicId || chart.id;
-    const embedCode = datawrapperClient.getEmbedCode(publicId);
+    const embedCode = chart_type === 'map'
+      ? datawrapperClient.getEmbedCode(publicId, 600, 600)  // Square for maps
+      : datawrapperClient.getEmbedCode(publicId);
     const publicUrl = datawrapperClient.getPublicUrl(publicId);
     const editUrl = datawrapperClient.getEditUrl(chart.id);
 
