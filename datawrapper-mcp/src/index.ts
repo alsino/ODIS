@@ -201,32 +201,6 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     console.error(`Uploading data (${rowCount} rows)...`);
     await datawrapperClient.uploadData(chart.id, dataString);
 
-    // Update map view after data upload
-    if (chart_type === 'map' && config.bbox) {
-      console.error('Setting map view to data extent...');
-      const { minLon, maxLon, minLat, maxLat } = config.bbox;
-      const centerLon = (minLon + maxLon) / 2;
-      const centerLat = (minLat + maxLat) / 2;
-
-      const viewMetadata = {
-        visualize: {
-          ...metadata.visualize,
-          view: {
-            center: [centerLon, centerLat],
-            zoom: 10,
-            fit: {
-              top: [centerLon, maxLat],
-              right: [maxLon, centerLat],
-              bottom: [centerLon, minLat],
-              left: [minLon, centerLat]
-            }
-          }
-        }
-      };
-
-      await datawrapperClient.updateMetadata(chart.id, viewMetadata);
-    }
-
     // Publish chart
     console.error('Publishing chart...');
     const publishedChart = await datawrapperClient.publishChart(chart.id);

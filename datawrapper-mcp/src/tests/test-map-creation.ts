@@ -104,33 +104,8 @@ async function testMapCreation() {
     await datawrapperClient.uploadData(chart.id, dataString);
     console.log('✅ Data uploaded\n');
 
-    // Step 4: Update metadata with view settings
-    console.log('Step 4: Setting map view to Berlin extent...');
-    const { minLon, maxLon, minLat, maxLat } = config.bbox;
-    const centerLon = (minLon + maxLon) / 2;
-    const centerLat = (minLat + maxLat) / 2;
-
-    const viewMetadata = {
-      visualize: {
-        ...metadata.visualize,
-        view: {
-          center: [centerLon, centerLat],
-          zoom: 10,
-          fit: {
-            top: [centerLon, maxLat],
-            right: [maxLon, centerLat],
-            bottom: [centerLon, minLat],
-            left: [minLon, centerLat]
-          }
-        }
-      }
-    };
-
-    await datawrapperClient.updateMetadata(chart.id, viewMetadata);
-    console.log('✅ Map view updated\n');
-
-    // Step 5: Publish chart
-    console.log('Step 5: Publishing chart...');
+    // Step 4: Publish chart
+    console.log('Step 4: Publishing chart...');
     const publishedChart = await datawrapperClient.publishChart(chart.id);
     const publicId = publishedChart.publicId || chart.id;
     const publicUrl = datawrapperClient.getPublicUrl(publicId);
