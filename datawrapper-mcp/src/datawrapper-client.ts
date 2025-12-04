@@ -111,4 +111,16 @@ export class DatawrapperClient {
   getEditUrl(chartId: string): string {
     return `https://app.datawrapper.de/chart/${chartId}/visualize`;
   }
+
+  /**
+   * Get list of available base maps
+   */
+  async getBasemaps(): Promise<any[]> {
+    try {
+      const response = await this.client.get('/basemaps');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch basemaps: ${error.message}`);
+    }
+  }
 }

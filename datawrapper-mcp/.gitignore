@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 charts-log.json
+basemaps-list.json
 CLAUDE.md
 *.log
 .DS_Store

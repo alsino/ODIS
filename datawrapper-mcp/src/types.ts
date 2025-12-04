@@ -70,4 +70,5 @@ export interface ChartConfig {
     minLat: number;
     maxLat: number;
   };
+  basemap?: string;
 }

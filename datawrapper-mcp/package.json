@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run build && node dist/tests/test-map-creation.js",
+    "test:map": "npm run build && node dist/tests/test-map-creation.js"
   },
   "keywords": [],
   "author": "",

@@ -167,6 +167,9 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
           x: config.xAxis
         };
       }
+    } else if (chart_type === 'map' && map_type === 'd3-maps-symbols' && config.basemap) {
+      // Set basemap for symbol maps
+      metadata.visualize.basemap = config.basemap;
     }
 
     // Create chart
@@ -188,7 +191,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
 
       // Strip unnecessary properties to reduce token usage
       const strippedGeoJSON = chartBuilder.stripGeoJSONProperties(geojson, map_type!);
-      dataString = chartBuilder.processGeoJSON(strippedGeoJSON);
+      dataString = chartBuilder.processGeoJSON(strippedGeoJSON, map_type!);
     } else {
       const dataArray = data as Array<Record<string, any>>;
       dataString = chartBuilder.formatForDatawrapper(dataArray);

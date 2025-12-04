@@ -154,11 +154,39 @@ export class ChartBuilder {
 
     const title = userTitle || 'Map Visualization';
     const bbox = this.calculateBoundingBox(geojson);
+    const basemap = this.selectBasemap(bbox);
 
     return {
       title,
-      bbox
+      bbox,
+      basemap
     };
+  }
+
+  /**
+   * Select appropriate basemap based on data extent
+   */
+  private selectBasemap(bbox: { minLon: number; maxLon: number; minLat: number; maxLat: number }): string {
+    // Berlin city boundaries (approximate)
+    const BERLIN_BOUNDS = {
+      minLon: 13.08,
+      maxLon: 13.76,
+      minLat: 52.34,
+      maxLat: 52.68
+    };
+
+    // Check if data extends beyond Berlin boundaries
+    const withinBerlin = bbox.minLon >= BERLIN_BOUNDS.minLon &&
+                         bbox.maxLon <= BERLIN_BOUNDS.maxLon &&
+                         bbox.minLat >= BERLIN_BOUNDS.minLat &&
+                         bbox.maxLat <= BERLIN_BOUNDS.maxLat;
+
+    if (withinBerlin) {
+      return 'berlin-boroughs';
+    } else {
+      // Data extends beyond Berlin, use metropolitan region
+      return 'berlin-metropolitan-region';
+    }
   }
 
   /**
@@ -286,9 +314,43 @@ export class ChartBuilder {
   /**
    * Process GeoJSON for Datawrapper map
    */
-  processGeoJSON(geojson: GeoJSON): string {
-    // Datawrapper accepts GeoJSON as is
+  processGeoJSON(geojson: GeoJSON, mapType: string): string {
+    // Symbol maps need CSV format with lat/lon columns
+    if (mapType === 'd3-maps-symbols') {
+      return this.convertGeoJSONToCSV(geojson);
+    }
+
+    // Choropleth maps use GeoJSON format
     return JSON.stringify(geojson);
+  }
+
+  /**
+   * Convert GeoJSON to CSV format for symbol maps
+   */
+  private convertGeoJSONToCSV(geojson: GeoJSON): string {
+    const rows: string[] = [];
+
+    // Header row
+    rows.push('name,latitude,longitude');
+
+    // Data rows
+    for (const feature of geojson.features) {
+      if (feature.geometry.type === 'Point') {
+        const coords = feature.geometry.coordinates as [number, number];
+        const name = feature.properties?.name || 'Unnamed';
+        const lon = coords[0];
+        const lat = coords[1];
+
+        // Escape name if it contains commas or quotes
+        const escapedName = name.includes(',') || name.includes('"')
+          ? `"${name.replace(/"/g, '""')}"`
+          : name;
+
+        rows.push(`${escapedName},${lat},${lon}`);
+      }
+    }
+
+    return rows.join('\n');
   }
 
   /**
