@@ -53,7 +53,7 @@ const CHART_TYPE_MAP: Record<string, string> = {
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). **CRITICAL FOR MAPS**: You MUST NOT call this tool for maps without first asking the user which type of map they want. Present these two options to the user and wait for their choice: (1) "d3-maps-symbols" - show point locations on a map (with optional numeric data visualization using marker sizes), (2) "d3-maps-choropleth" - compare values across regions with color-coded areas. NEVER infer map_type from context alone - always get explicit user confirmation of which map type they want.',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). **For maps, map_type is REQUIRED**: If the user has not already specified which type of map they want, ask them ONCE to choose between: (1) "d3-maps-symbols" for point locations, or (2) "d3-maps-choropleth" for region comparison. Once the user has indicated their choice (even if they just say "option 1" or similar), proceed immediately with that choice - do NOT ask again.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -83,7 +83,7 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       map_type: {
         type: 'string',
         enum: ['d3-maps-symbols', 'd3-maps-choropleth'],
-        description: 'REQUIRED when chart_type is "map" (you must ask the user first). Choose: "d3-maps-symbols" for showing point locations (works with or without numeric data), or "d3-maps-choropleth" for comparing data across regions with color fills.'
+        description: 'REQUIRED when chart_type is "map". Choose "d3-maps-symbols" for showing point locations, or "d3-maps-choropleth" for comparing data across regions with color fills.'
       },
       title: {
         type: 'string',
@@ -129,7 +129,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
 
     // Validate map_type is provided for maps
     if (chart_type === 'map' && !map_type) {
-      throw new Error('map_type is required when chart_type is "map". You must ask the user which type of map they want:\n\n1. "d3-maps-symbols" - Show point locations on a map (works with or without numeric data)\n2. "d3-maps-choropleth" - Compare values across regions with color-coded areas\n\nPresent these options to the user and use their choice for the map_type parameter.');
+      throw new Error('map_type is required when chart_type is "map". Ask the user to choose: (1) "d3-maps-symbols" for point locations, or (2) "d3-maps-choropleth" for region comparison.');
     }
 
     // Validate data
@@ -167,22 +167,6 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
           x: config.xAxis
         };
       }
-    } else if (chart_type === 'map' && config.bbox) {
-      // Set map view based on calculated bounding box
-      const { minLon, maxLon, minLat, maxLat } = config.bbox;
-      const centerLon = (minLon + maxLon) / 2;
-      const centerLat = (minLat + maxLat) / 2;
-
-      metadata.visualize.view = {
-        center: [centerLon, centerLat],
-        zoom: 10,
-        fit: {
-          top: [centerLon, maxLat],
-          right: [maxLon, centerLat],
-          bottom: [centerLon, minLat],
-          left: [minLon, centerLat]
-        }
-      };
     }
 
     // Create chart
@@ -213,6 +197,32 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
 
     console.error(`Uploading data (${rowCount} rows)...`);
     await datawrapperClient.uploadData(chart.id, dataString);
+
+    // Update map view after data upload
+    if (chart_type === 'map' && config.bbox) {
+      console.error('Setting map view to data extent...');
+      const { minLon, maxLon, minLat, maxLat } = config.bbox;
+      const centerLon = (minLon + maxLon) / 2;
+      const centerLat = (minLat + maxLat) / 2;
+
+      const viewMetadata = {
+        visualize: {
+          ...metadata.visualize,
+          view: {
+            center: [centerLon, centerLat],
+            zoom: 10,
+            fit: {
+              top: [centerLon, maxLat],
+              right: [maxLon, centerLat],
+              bottom: [centerLon, minLat],
+              left: [minLon, centerLat]
+            }
+          }
+        }
+      };
+
+      await datawrapperClient.updateMetadata(chart.id, viewMetadata);
+    }
 
     // Publish chart
     console.error('Publishing chart...');
