@@ -17,24 +17,9 @@ export class ChartLogger {
    */
   async logChart(entry: ChartLogEntry): Promise<void> {
     try {
-      let entries: ChartLogEntry[] = [];
-
-      // Read existing log if it exists
-      try {
-        const content = await fs.readFile(this.logPath, 'utf-8');
-        entries = JSON.parse(content);
-      } catch (error: any) {
-        // File doesn't exist or is empty, start with empty array
-        if (error.code !== 'ENOENT') {
-          console.error('Error reading log file:', error.message);
-        }
-      }
-
-      // Append new entry
-      entries.push(entry);
-
-      // Write back to file
-      await fs.writeFile(this.logPath, JSON.stringify(entries, null, 2), 'utf-8');
+      // Append as NDJSON (newline-delimited JSON) for better performance
+      const line = JSON.stringify(entry) + '\n';
+      await fs.appendFile(this.logPath, line, 'utf-8');
     } catch (error: any) {
       console.error('Failed to log chart:', error.message);
       // Don't throw - logging failure shouldn't break chart creation
@@ -47,7 +32,10 @@ export class ChartLogger {
   async getCharts(): Promise<ChartLogEntry[]> {
     try {
       const content = await fs.readFile(this.logPath, 'utf-8');
-      return JSON.parse(content);
+
+      // Parse NDJSON format (one JSON object per line)
+      const lines = content.trim().split('\n').filter(line => line.length > 0);
+      return lines.map(line => JSON.parse(line));
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         return [];

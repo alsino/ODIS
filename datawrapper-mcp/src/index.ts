@@ -186,12 +186,17 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
       const geojson = data as GeoJSON;
       rowCount = geojson.features.length;
 
-      // Get sample feature before stripping (for preview)
+      // Get sample feature (for preview)
       sampleFeature = chartBuilder.getSampleFeature(geojson);
 
-      // Strip unnecessary properties to reduce token usage
-      const strippedGeoJSON = chartBuilder.stripGeoJSONProperties(geojson, map_type!);
-      dataString = chartBuilder.processGeoJSON(strippedGeoJSON, map_type!);
+      // For symbol maps, convert directly to CSV (no stripping needed)
+      // For choropleth maps, strip properties first to reduce data size
+      if (map_type === 'd3-maps-symbols') {
+        dataString = chartBuilder.processGeoJSON(geojson, map_type);
+      } else {
+        const strippedGeoJSON = chartBuilder.stripGeoJSONProperties(geojson, map_type!);
+        dataString = chartBuilder.processGeoJSON(strippedGeoJSON, map_type!);
+      }
     } else {
       const dataArray = data as Array<Record<string, any>>;
       dataString = chartBuilder.formatForDatawrapper(dataArray);
@@ -211,8 +216,8 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     const publicUrl = datawrapperClient.getPublicUrl(publicId);
     const editUrl = datawrapperClient.getEditUrl(chart.id);
 
-    // Log chart creation
-    await chartLogger.logChart({
+    // Log chart creation asynchronously (don't wait for it)
+    chartLogger.logChart({
       chartId: chart.id,
       url: publicUrl,
       embedCode,
@@ -223,7 +228,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
       sourceDatasetId: source_dataset_id,
       sourceDatasetUrl: source_dataset_id ? `https://daten.berlin.de/datensaetze/${source_dataset_id}` : undefined,
       dataRowCount: rowCount
-    });
+    }).catch(err => console.error('Background logging failed:', err));
 
     // Format response
     let responseText = `✅ Chart created successfully!
