@@ -15,6 +15,7 @@ import { QueryProcessor } from './query-processor.js';
 import { DataFetcher } from './data-fetcher.js';
 import { DataSampler } from './data-sampler.js';
 import { GeoJSONTransformer } from './geojson-transformer.js';
+import { LORLookupService } from './lor-lookup.js';
 
 export class BerlinOpenDataMCPServer {
   private server: Server;
@@ -23,6 +24,7 @@ export class BerlinOpenDataMCPServer {
   private dataFetcher: DataFetcher;
   private dataSampler: DataSampler;
   private geoJSONTransformer: GeoJSONTransformer;
+  private lorLookup: LORLookupService;
 
   constructor() {
     this.server = new Server(
@@ -43,6 +45,7 @@ export class BerlinOpenDataMCPServer {
     this.dataFetcher = new DataFetcher({ useBrowserAutomation: true });
     this.dataSampler = new DataSampler();
     this.geoJSONTransformer = new GeoJSONTransformer();
+    this.lorLookup = new LORLookupService();
 
     this.setupHandlers();
   }
@@ -532,11 +535,35 @@ export class BerlinOpenDataMCPServer {
             // For small datasets, return preview and instruct to use execute_code
             // The backend caches full data for execute_code to use
             if (!isLarge) {
+              // Enrich data with LOR names if applicable
+              const lorInfo = this.lorLookup.hasLORColumns(fetchedData.columns);
+              let enrichedRows = fetchedData.rows;
+
+              if (this.lorLookup.isLoaded() && (lorInfo.hasBEZ || lorInfo.hasRAUMID)) {
+                enrichedRows = fetchedData.rows.map(row => this.lorLookup.enrichRow(row));
+                console.log('[fetch_dataset_data] Enriched dataset with LOR names');
+              }
+
               responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
-              responseText += `**Columns (${fetchedData.columns.length}):** ${fetchedData.columns.join(', ')}\n\n`;
+
+              // Show enriched columns
+              const displayColumns = enrichedRows.length > 0 ? Object.keys(enrichedRows[0]) : fetchedData.columns;
+              responseText += `**Columns (${displayColumns.length}):** ${displayColumns.join(', ')}\n\n`;
+
+              // Add LOR enrichment note if applicable
+              if (this.lorLookup.isLoaded() && (lorInfo.hasBEZ || lorInfo.hasRAUMID)) {
+                responseText += `**📍 LOR Enrichment:** This dataset has been automatically enriched with Berlin administrative district names.\n`;
+                if (lorInfo.hasBEZ) {
+                  responseText += `- \`BEZIRK_NAME\`: Full bezirk name (e.g., "Marzahn-Hellersdorf")\n`;
+                }
+                if (lorInfo.hasRAUMID) {
+                  responseText += `- \`PLANUNGSRAUM_NAME\`, \`BEZIRKSREGION_NAME\`, \`PROGNOSERAUM_NAME\`: Planning area names\n`;
+                }
+                responseText += `\n`;
+              }
 
               // Return first 3 rows as preview
-              const preview = fetchedData.rows.slice(0, 3);
+              const preview = enrichedRows.slice(0, 3);
               responseText += `## Preview (first 3 rows)\n\n`;
               responseText += `\`\`\`json\n${JSON.stringify(preview, null, 2)}\n\`\`\`\n\n`;
 
@@ -545,10 +572,16 @@ export class BerlinOpenDataMCPServer {
               responseText += `**IMPORTANT:** To perform calculations, aggregations, or filtering:\n`;
               responseText += `- Use \`execute_code\` with \`dataset_id: "${dataset_id}"\`\n`;
               responseText += `- The full data is available as the \`data\` variable (array of ${totalRows} objects)\n`;
-              responseText += `- Example: \`data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + row.einwohner; return acc; }, {})\`\n`;
+
+              if (lorInfo.hasBEZ) {
+                responseText += `- Use \`BEZIRK_NAME\` to filter by bezirk name (e.g., "Marzahn-Hellersdorf")\n`;
+                responseText += `- Example: \`data.filter(row => row.BEZIRK_NAME === "Marzahn-Hellersdorf").reduce((sum, row) => sum + parseInt(row.E_E), 0)\`\n`;
+              } else {
+                responseText += `- Example: \`data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + row.einwohner; return acc; }, {})\`\n`;
+              }
 
               // Return full data in JSON block for backend caching (backend will parse this)
-              responseText += `\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+              responseText += `\n\`\`\`json\n${JSON.stringify(enrichedRows, null, 2)}\n\`\`\`\n`;
 
               return {
                 content: [{ type: 'text', text: responseText }],

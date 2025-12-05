@@ -5,13 +5,9 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import Message from './Message.svelte';
   import Input from './Input.svelte';
-  import ToolActivity from './ToolActivity.svelte';
+  import ToolItem from './ToolItem.svelte';
 
   let messages = [];
-  // Track whether we're currently in a tool-calling phase
-  let inToolPhase = false;
-  // Buffer for intermediate "thinking" text between tool calls
-  let intermediateTextBuffer = '';
   let ws = null;
   let connected = false;
   let waiting = false;
@@ -85,41 +81,35 @@
   }
 
   function handleMessage(data) {
-    // console.log('Received message:', data);
+    // console.log('[Frontend] Received message:', data.type, data);
 
     if (data.type === 'status') {
       console.log('Status:', data.status);
     } else if (data.type === 'tool_call_start') {
-      // Tool execution started - add to the current assistant message
-      // The tool will show with a spinner in the ToolActivity component
-      inToolPhase = true;
-      const newToolCall = {
+      // Tool execution started - append tool item to chronological list
+      const newToolItem = {
+        type: 'tool',
         id: data.toolCallId,
         name: data.toolName,
         args: data.toolArgs,
-        completed: false,
-        introText: intermediateTextBuffer.trim() // Attach buffered thinking text to this tool
+        completed: false
       };
 
-      // Clear the buffer after attaching
-      intermediateTextBuffer = '';
-
-      // Add to the current streaming message immediately
+      // Add to current assistant message
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
-        if (!messages[messages.length - 1].toolCalls) {
-          messages[messages.length - 1].toolCalls = [];
+        if (!messages[messages.length - 1].items) {
+          messages[messages.length - 1].items = [];
         }
-        messages[messages.length - 1].toolCalls = [...messages[messages.length - 1].toolCalls, newToolCall];
+        messages[messages.length - 1].items = [...messages[messages.length - 1].items, newToolItem];
         messages = messages; // Trigger reactivity
       }
     } else if (data.type === 'tool_call_complete') {
-      // Tool execution completed - update the tool call with results
-      // Update the tool in the current assistant message
-      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].toolCalls) {
-        messages[messages.length - 1].toolCalls = messages[messages.length - 1].toolCalls.map(call =>
-          call.id === data.toolCallId
-            ? { ...call, completed: true, result: data.result, isError: data.isError }
-            : call
+      // Tool execution completed - update the tool item
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].items) {
+        messages[messages.length - 1].items = messages[messages.length - 1].items.map(item =>
+          item.type === 'tool' && item.id === data.toolCallId
+            ? { ...item, completed: true, result: data.result, isError: data.isError }
+            : item
         );
         messages = messages; // Trigger reactivity
       }
@@ -127,35 +117,36 @@
       // File download ready - trigger browser download
       triggerDownload(data.filename, data.content, data.mimeType);
     } else if (data.type === 'assistant_message_chunk') {
-      // Streaming chunk - could be intro text, intermediate thinking, OR final response
+      // Streaming text chunk - append to last text item or create new one
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
-        // Append to existing streaming message
-        const toolCalls = messages[messages.length - 1].toolCalls || [];
-        const hasIncompletTools = toolCalls.some(call => !call.completed);
-
-        if (inToolPhase && hasIncompletTools) {
-          // This is intermediate "thinking" text between tool calls
-          // Buffer it so we can attach it to the next tool call
-          intermediateTextBuffer += data.content;
-        } else if (inToolPhase) {
-          // This is the final response after all tools complete
-          messages[messages.length - 1].responseText = (messages[messages.length - 1].responseText || '') + data.content;
-          messages = messages; // Trigger reactivity
-        } else {
-          // This is intro text before any tools
-          messages[messages.length - 1].introText = (messages[messages.length - 1].introText || '') + data.content;
-          messages = messages; // Trigger reactivity
+        const lastMessage = messages[messages.length - 1];
+        if (!lastMessage.items) {
+          lastMessage.items = [];
         }
+
+        const lastItem = lastMessage.items[lastMessage.items.length - 1];
+
+        // If last item is text, append to it; otherwise create new text item
+        if (lastItem && lastItem.type === 'text') {
+          lastItem.content += data.content;
+        } else {
+          lastMessage.items.push({
+            type: 'text',
+            content: data.content
+          });
+        }
+        messages = messages; // Trigger reactivity
       } else {
-        // Start new streaming message
+        // Start new streaming assistant message
         const messageId = `msg-${Date.now()}`;
         const newMessage = {
           role: 'assistant',
           streaming: true,
           id: messageId,
-          introText: inToolPhase ? '' : data.content,
-          toolCalls: [],
-          responseText: inToolPhase ? data.content : ''
+          items: [{
+            type: 'text',
+            content: data.content
+          }]
         };
         messages = [...messages, newMessage];
       }
@@ -166,8 +157,6 @@
           delete messages[messages.length - 1].streaming;
           messages = messages; // Trigger reactivity
         }
-        inToolPhase = false;
-        intermediateTextBuffer = ''; // Clear buffer when conversation ends
         waiting = false;
         showSpacer = false;
       } else {
@@ -176,11 +165,11 @@
         messages = [...messages, {
           role: 'assistant',
           id: messageId,
-          introText: inToolPhase ? '' : data.content,
-          toolCalls: [],
-          responseText: inToolPhase ? data.content : ''
+          items: data.content ? [{
+            type: 'text',
+            content: data.content
+          }] : []
         }];
-        inToolPhase = false;
         waiting = false;
       }
     } else if (data.type === 'error') {
@@ -259,14 +248,14 @@
             <Message role={message.role} content={message.content} />
           </div>
         {:else if message.role === 'assistant'}
-          {#if message.introText}
-            <Message role={message.role} content={message.introText} />
-          {/if}
-          {#if message.toolCalls && message.toolCalls.length > 0}
-            <ToolActivity toolCalls={message.toolCalls} />
-          {/if}
-          {#if message.responseText}
-            <Message role={message.role} content={message.responseText} />
+          {#if message.items}
+            {#each message.items as item, j (item.id || j)}
+              {#if item.type === 'text'}
+                <Message role="assistant" content={item.content} />
+              {:else if item.type === 'tool'}
+                <ToolItem tool={item} />
+              {/if}
+            {/each}
           {/if}
         {/if}
       {/each}

@@ -30,7 +30,10 @@
 -->
 
 <script>
+  import { marked } from 'marked';
+
   export let toolCalls = [];
+  export let streamingThinkingText = '';
 
   let expandedCalls = new Set();
 
@@ -56,11 +59,14 @@
   $: completedCalls = toolCalls.filter(call => call.completed);
 </script>
 
+{#if streamingThinkingText}
+  <div class="streaming-thinking">
+    {@html marked.parse(streamingThinkingText)}
+  </div>
+{/if}
+
 {#if activeCalls.length > 0}
   {#each activeCalls as call}
-    {#if call.introText}
-      <div class="intro-text">{call.introText}</div>
-    {/if}
     <div class="active-tools">
       <div class="active-tool">
         <span class="spinner"></span>
@@ -74,7 +80,9 @@
   <div class="completed-tools">
     {#each completedCalls as call}
       {#if call.introText}
-        <div class="intro-text">{call.introText}</div>
+        <div class="intro-text">
+          {@html marked.parse(call.introText)}
+        </div>
       {/if}
       <div class="tool-item">
         <button
@@ -127,12 +135,46 @@
 {/if}
 
 <style>
+  .streaming-thinking,
   .intro-text {
-    margin: 0.5rem 0;
     padding: 0.75rem 1rem;
-    font-size: 0.9375rem;
-    line-height: 1.6;
-    color: #374151;
+    word-wrap: break-word;
+    line-height: 1.7;
+    font-size: 1rem;
+    color: #1a1a1a;
+  }
+
+  /* Markdown styling - match Message.svelte */
+  .streaming-thinking :global(p),
+  .intro-text :global(p) {
+    margin-top: 0;
+    margin-bottom: 1rem;
+  }
+
+  .streaming-thinking :global(p:last-child),
+  .intro-text :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .streaming-thinking :global(strong),
+  .intro-text :global(strong) {
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .streaming-thinking :global(em),
+  .intro-text :global(em) {
+    font-style: italic;
+  }
+
+  .streaming-thinking :global(code),
+  .intro-text :global(code) {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Courier New', monospace;
+    font-size: 0.875em;
+    color: #1f2937;
   }
 
   .active-tools {
