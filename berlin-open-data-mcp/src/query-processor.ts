@@ -77,7 +77,7 @@ export class QueryProcessor {
     // Without \b: "housing" → "housg" (because "in" matches inside "housing")
     // With \b: "housing" → "housing" ✓
     const cleanQuery = naturalLanguageQuery
-      .replace(/\b(find|search|show|me|list|all|datasets?|about|in|for|the|and)\b/gi, '')
+      .replace(/\b(find|search|show|me|list|all|datasets?|about|in|for|the|and|was|ist|sind|hat|haben|kann|können|wird|werden|der|die|das|den|dem|des|ein|eine|einer|eines|einem|von|vom|zu|zum|zur|bei|mit|auf|aus|nach|vor|über|unter|zwischen|durch|gegen|ohne|um)\b/gi, '')
       .trim()
       .replace(/\s+/g, ' '); // Normalize whitespace
 

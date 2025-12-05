@@ -45,10 +45,22 @@ class QueryExpansionGenerator {
 
   // Words to exclude from analysis (noise words)
   private readonly STOP_WORDS = new Set([
-    'und', 'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einer',
+    // German articles and prepositions
+    'und', 'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einer', 'eines', 'einem',
     'im', 'am', 'um', 'zu', 'zum', 'zur', 'von', 'vom', 'mit', 'bei', 'nach',
     'über', 'unter', 'aus', 'für', 'durch', 'auf', 'an', 'als', 'bis', 'seit',
+    'vor', 'zwischen', 'gegen', 'ohne',
+    // German common verbs
+    'ist', 'sind', 'war', 'waren', 'wird', 'werden', 'wurde', 'wurden',
+    'hat', 'haben', 'hatte', 'hatten', 'kann', 'können', 'konnte', 'konnten',
+    'muss', 'müssen', 'musste', 'mussten', 'soll', 'sollen', 'sollte', 'sollten',
+    'will', 'wollen', 'wollte', 'wollten',
+    // German question words and pronouns
+    'was', 'wer', 'wie', 'wo', 'wann', 'warum', 'welche', 'welcher', 'welches',
+    // English stop words
     'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from',
+    'find', 'search', 'show', 'list', 'about', 'all',
+    // Berlin-specific noise
     'berlin', 'berliner', 'daten', 'data', 'dataset', 'datensatz'
   ]);
 

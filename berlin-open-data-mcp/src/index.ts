@@ -201,8 +201,10 @@ export class BerlinOpenDataMCPServer {
             const searchTerms = this.queryProcessor.extractSearchTerms(query);
 
             // Search for each term separately and combine results
+            // Use higher limit per term to ensure we capture all relevant datasets
+            // Example: "Einwohnerinnen" finds 2024 LOR dataset at position 41
             const searchPromises = searchTerms.map(term =>
-              this.api.searchDatasets({ query: term, limit: limit * 2 })
+              this.api.searchDatasets({ query: term, limit: 100 })
             );
 
             const allResults = await Promise.all(searchPromises);
