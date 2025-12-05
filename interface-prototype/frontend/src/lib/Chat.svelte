@@ -130,9 +130,10 @@
       // Streaming chunk - could be intro text, intermediate thinking, OR final response
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
         // Append to existing streaming message
-        const hasPendingTools = messages[messages.length - 1].toolCalls && messages[messages.length - 1].toolCalls.length > 0;
+        const toolCalls = messages[messages.length - 1].toolCalls || [];
+        const hasIncompletTools = toolCalls.some(call => !call.completed);
 
-        if (inToolPhase && hasPendingTools) {
+        if (inToolPhase && hasIncompletTools) {
           // This is intermediate "thinking" text between tool calls
           // Buffer it so we can attach it to the next tool call
           intermediateTextBuffer += data.content;
