@@ -18,7 +18,11 @@ export class BrowserFetcher {
       console.error('[Browser] Launching headless browser...');
       this.browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-features=DownloadBubble,DownloadBubbleV2' // Disable download UI
+        ],
       });
     }
   }
@@ -31,6 +35,12 @@ export class BrowserFetcher {
       await this.initialize();
 
       page = await this.browser!.newPage();
+
+      // Prevent actual file downloads to disk - we only want to capture the URL and fetch data in memory
+      const client = await page.createCDPSession();
+      await client.send('Page.setDownloadBehavior', {
+        behavior: 'deny'
+      });
 
       // Strategy: Capture the download URL from network traffic, then fetch it directly
       let downloadUrl: string | null = null;
