@@ -466,7 +466,7 @@ export class BerlinOpenDataMCPServer {
               full_data?: boolean;
             };
 
-            const LARGE_DATASET_THRESHOLD = 500;
+            const LARGE_DATASET_THRESHOLD = 1000;
 
             // Get dataset to find resources
             const dataset = await this.api.getDataset(dataset_id);
