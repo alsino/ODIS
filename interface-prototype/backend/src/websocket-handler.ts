@@ -201,8 +201,8 @@ export class WebSocketHandler {
             throw new Error(`MCP client not available for tool: ${toolName}`);
           }
 
-          // Use extended timeout for download_dataset (5 minutes) to handle WFS datasets
-          const timeout = toolName === 'download_dataset' ? 300000 : undefined;
+          // Use extended timeout for dataset operations (5 minutes) to handle WFS datasets and browser automation
+          const timeout = (toolName === 'download_dataset' || toolName === 'fetch_dataset_data') ? 300000 : undefined;
           const result = await mcpClient.callTool(toolName, toolArgs, timeout ? { timeout } : undefined);
 
           // Extract text from MCP result structure
@@ -220,15 +220,26 @@ export class WebSocketHandler {
           // Cache dataset if this was fetch_dataset_data
           if (toolName === 'fetch_dataset_data') {
             const { dataset_id } = toolArgs as { dataset_id: string };
-            // Extract JSON from markdown code block
-            const jsonMatch = resultText.match(/```json\n([\s\S]*?)\n```/);
-            if (jsonMatch && dataset_id) {
+            // Extract JSON from markdown code blocks (finds LAST json block = full data)
+            const jsonMatches = resultText.matchAll(/```json\n([\s\S]*?)\n```/g);
+            const allMatches = Array.from(jsonMatches);
+
+            if (allMatches.length > 0 && dataset_id) {
+              // The last JSON block contains the full dataset
+              const lastMatch = allMatches[allMatches.length - 1];
               try {
-                const parsedData = JSON.parse(jsonMatch[1]);
+                const parsedData = JSON.parse(lastMatch[1]);
                 const datasetCache = this.fetchedDatasets.get(ws);
                 if (datasetCache && Array.isArray(parsedData)) {
                   datasetCache.set(dataset_id, parsedData);
                   console.log('[fetch_dataset_data] Cached', parsedData.length, 'rows for', dataset_id);
+
+                  // STRIP the full data JSON block from result before sending to Claude
+                  // This prevents context overflow while keeping the data cached for execute_code
+                  // Keep the preview (first JSON block), remove the full dataset (last JSON block)
+                  resultText = resultText.substring(0, lastMatch.index) +
+                               resultText.substring(lastMatch.index + lastMatch[0].length);
+                  console.log('[fetch_dataset_data] Stripped full data from result, new length:', resultText.length);
                 }
               } catch (error) {
                 console.error('[fetch_dataset_data] Failed to parse/cache dataset:', error);
@@ -270,7 +281,10 @@ export class WebSocketHandler {
             console.log('[WebSocket] Chart marker found in tool result');
           }
 
-          return result;
+          // Return result with potentially modified text (e.g., stripped full dataset)
+          return {
+            content: [{ type: 'text', text: resultText }]
+          };
         },
         (chunk: string) => {
           // Check if this is a file download

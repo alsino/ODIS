@@ -529,12 +529,27 @@ export class BerlinOpenDataMCPServer {
               };
             }
 
-            // For small datasets, always return full data for accurate analysis
+            // For small datasets, return preview and instruct to use execute_code
+            // The backend caches full data for execute_code to use
             if (!isLarge) {
               responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
-              responseText += `## Full Dataset\n\n`;
               responseText += `**Columns (${fetchedData.columns.length}):** ${fetchedData.columns.join(', ')}\n\n`;
-              responseText += `**Data:**\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+
+              // Return first 3 rows as preview
+              const preview = fetchedData.rows.slice(0, 3);
+              responseText += `## Preview (first 3 rows)\n\n`;
+              responseText += `\`\`\`json\n${JSON.stringify(preview, null, 2)}\n\`\`\`\n\n`;
+
+              responseText += `## Full Dataset Available\n\n`;
+              responseText += `The complete dataset (${totalRows} rows) has been fetched and cached.\n\n`;
+              responseText += `**IMPORTANT:** To perform calculations, aggregations, or filtering:\n`;
+              responseText += `- Use \`execute_code\` with \`dataset_id: "${dataset_id}"\`\n`;
+              responseText += `- The full data is available as the \`data\` variable (array of ${totalRows} objects)\n`;
+              responseText += `- Example: \`data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + row.einwohner; return acc; }, {})\`\n`;
+
+              // Return full data in JSON block for backend caching (backend will parse this)
+              responseText += `\n\`\`\`json\n${JSON.stringify(fetchedData.rows, null, 2)}\n\`\`\`\n`;
+
               return {
                 content: [{ type: 'text', text: responseText }],
               };
