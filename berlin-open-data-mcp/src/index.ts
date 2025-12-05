@@ -286,31 +286,25 @@ export class BerlinOpenDataMCPServer {
               const dataset = item.dataset;
               const titleText = `${dataset.title} ${dataset.name}`;
 
-              // Extract all 4-digit years from title
+              // Extract all 4-digit years from title (2000-2099)
               const years = titleText.match(/\b(20\d{2})\b/g);
 
               if (years && years.length > 0) {
                 // Get the most recent year mentioned
                 const mostRecentYear = Math.max(...years.map(y => parseInt(y)));
 
-                // Calculate recency score: more recent = higher score
-                // Years within last 3 years get significant boost
+                // Calculate recency score based on age
                 const yearsDiff = currentYear - mostRecentYear;
 
                 if (yearsDiff === 0) {
-                  // Current year: +50 points
                   item.matchCount += 50;
                 } else if (yearsDiff === 1) {
-                  // Last year: +40 points
                   item.matchCount += 40;
                 } else if (yearsDiff === 2) {
-                  // 2 years ago: +30 points
                   item.matchCount += 30;
                 } else if (yearsDiff <= 5) {
-                  // 3-5 years ago: +20 points
                   item.matchCount += 20;
                 } else if (yearsDiff <= 10) {
-                  // 6-10 years ago: +10 points
                   item.matchCount += 10;
                 }
                 // Older datasets get no boost
