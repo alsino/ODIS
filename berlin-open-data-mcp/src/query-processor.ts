@@ -14,6 +14,9 @@ export class QueryProcessor {
     // User searches "wohnung" but portal uses "wohnen", "wohnraum", etc.
     "wohnung": ["wohnen", "wohn"],
 
+    // User searches "bevölkerung" but portal uses "einwohner"
+    "bevölkerung": ["einwohner"],
+
     // Additional common user terms
     "immobilie": ["wohnen", "wohn"],
     "rad": ["fahrrad"],
