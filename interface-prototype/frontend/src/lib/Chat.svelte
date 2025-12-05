@@ -83,7 +83,7 @@
   }
 
   function handleMessage(data) {
-    console.log('Received message:', data);
+    // console.log('Received message:', data);
 
     if (data.type === 'status') {
       console.log('Status:', data.status);
