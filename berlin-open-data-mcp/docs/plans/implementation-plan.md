@@ -22,7 +22,16 @@ Based on project requirements and architectural discussions:
 
 ## Query Expansion System Architecture
 
-The MCP server uses a hybrid query expansion system to work around Berlin's CKAN API limitations (no wildcards, stemming, or fuzzy matching).
+The MCP server uses a sophisticated five-tier search strategy to work around Berlin's CKAN API limitations (no wildcards, stemming, or fuzzy matching).
+
+**📖 For complete documentation, see:** `docs/plans/design-spec.md` - Section 2.5: Search Strategy & Query Processing
+
+This section provides a condensed overview. The design spec contains:
+- Full algorithm details with examples
+- ASCII flow diagrams showing data flow
+- Performance characteristics and trade-offs
+- Maintenance guidelines and regeneration schedule
+- Component-by-component technical breakdown
 
 ### How It Works
 
@@ -236,6 +245,39 @@ This creates:
 - `word-stats-candidates.json` - 4,186 candidate words (frequency ≥ 3)
 
 See `ISSUES.md` Issue #3 for complete technical documentation.
+
+### Recent Improvements (December 2025)
+
+**Problem identified:** Search for "Was ist die Bevölkerungszahl von Marzahn-Hellersdorf?" returned irrelevant results and missed the 2024 LOR population dataset.
+
+**Root causes:**
+1. **German stop words not filtered**: Words like "ist", "was", "die" were being expanded into nonsense
+   - Example: "ist" had an expansion entry `["Statistik", "Statistischen", "Liste", ...]` because these words contain "ist"
+   - This polluted search results with 271 unrelated datasets
+2. **Fetch limit too low**: Per-term limit of 40 results missed datasets ranked at position 41+
+   - The 2024 LOR dataset ranked at position 41 in "Einwohnerinnen" search
+   - Never appeared in combined results
+
+**Fixes implemented:**
+1. **Comprehensive German stop word list** added to both:
+   - Query processor: Filters 40+ German stop words before expansion
+   - Expansion generator: Prevents stop words from entering generated expansions
+   - Categories: articles (der, die, das), prepositions (von, mit, bei), verbs (ist, hat, wird), question words (was, wer, wie)
+2. **Regenerated expansions**: Cleaned generated-expansions.ts (264 mappings, removed polluted entries)
+3. **Increased fetch limit**: 40 → 100 results per term to capture lower-ranked but relevant datasets
+
+**Results:**
+- "Bevölkerung" now finds 163 relevant datasets (vs CKAN's 7)
+- 2024 LOR population dataset now ranks #1 (score: 41 = 1 match + 40 recency)
+- 2020 Ortsteile dataset ranks #4 (score: 22 = 2 matches + 20 recency)
+- No more nonsense expansions from stop words
+- Recency boost working as designed
+
+**Commits:**
+- `dbc1086` - Fix search for "Bevölkerung" by mapping to "einwohner" (seed mapping)
+- `e036108` - Add automatic recency boost to search results
+- `72a61d3` - Remove hardcoded year comments from recency boost
+- `b433fe2` - Improve search by filtering German stop words and increasing fetch limit
 
 ---
 

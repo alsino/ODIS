@@ -123,6 +123,387 @@ All tools return markdown-formatted text optimized for LLM consumption, includin
 
 ---
 
+## Section 2.5: Search Strategy & Query Processing
+
+### The Challenge: CKAN's Search Limitations
+
+Berlin's Open Data Portal uses CKAN, which has significant search limitations:
+- **No wildcard support**: Cannot search for `"wohn*"` to find "Wohnung", "Wohngebäude", "Wohnraum"
+- **No stemming**: Searching "Miete" won't find "Mietspiegel" or "Mietpreis"
+- **No fuzzy matching**: Typos or variations require exact matches
+- **Limited relevance ranking**: CKAN's default ranking doesn't prioritize recent datasets
+
+**Example of the problem:**
+- User searches: `"Bevölkerung"` (population)
+- CKAN native search: 7 results (only datasets with exact word "Bevölkerung" in metadata)
+- What we need: 163+ results including "Einwohner", "Einwohnerzahl", "Einwohnerdichte", etc.
+
+### Our Solution: Four-Tier Search Architecture
+
+We implement a sophisticated four-tier strategy that works around CKAN's limitations while ensuring high-quality results:
+
+```
+User Query: "Was ist die Bevölkerungszahl von Marzahn-Hellersdorf?"
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ TIER 1: STOP WORD FILTERING                                     │
+│ Remove noise words: "was", "ist", "die", "von"                  │
+│ Result: "Bevölkerungszahl Marzahn-Hellersdorf"                 │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ TIER 2: QUERY EXPANSION                                          │
+│ Map to portal-native terms using two-level expansion:           │
+│                                                                  │
+│ Step 1 - Seed mappings (manual, curated):                      │
+│   "bevölkerung" → ["einwohner"]                                 │
+│                                                                  │
+│ Step 2 - Generated expansions (data-driven):                   │
+│   "einwohner" → ["Einwohnerinnen", "Kleinräumige einwohnerzahl",│
+│                   "Einwohnerdichte", "Einwohnerentwicklung"]    │
+│                                                                  │
+│ Final terms: ["Einwohnerinnen", "Kleinräumige einwohnerzahl",  │
+│               "Einwohnerdichte", "Einwohnerentwicklung",        │
+│               "Marzahn-Hellersdorf"]                            │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ TIER 3: PARALLEL SEARCH & AGGREGATION                           │
+│ Search CKAN for each expanded term separately (limit: 100/term) │
+│                                                                  │
+│ "Einwohnerinnen" → 100 results                                  │
+│ "Kleinräumige einwohnerzahl" → 76 results                      │
+│ "Einwohnerdichte" → 44 results                                  │
+│ "Einwohnerentwicklung" → 30 results                             │
+│ "Marzahn-Hellersdorf" → 40 results                             │
+│                                                                  │
+│ Deduplicate and count matches:                                  │
+│   Dataset A: matched 2 terms → matchCount = 2                   │
+│   Dataset B: matched 1 term → matchCount = 1                    │
+│                                                                  │
+│ Total: 163 unique datasets found                                │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ TIER 4: LITERAL SEARCH FALLBACK                                 │
+│ Check if top 5 results contain ALL original query terms         │
+│                                                                  │
+│ If NO exact match found:                                         │
+│   - Run additional literal CKAN search with cleaned query       │
+│   - Apply position-based scoring (1st=1000, 2nd=999, etc.)     │
+│   - Add +1000 bonus if dataset title contains query year        │
+│   - Merge with expansion results, preferring literal matches    │
+│                                                                  │
+│ Purpose: Ensures queries like "Einwohner 2024" return 2024      │
+│ dataset first, even if expansion found more term matches in     │
+│ older datasets                                                   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ TIER 5: RECENCY BOOST                                            │
+│ Extract years from dataset titles and boost recent data:        │
+│                                                                  │
+│ Current year (2025):  +50 points                                │
+│ Last year (2024):     +40 points                                │
+│ 2 years ago (2023):   +30 points                                │
+│ 3-5 years ago:        +20 points                                │
+│ 6-10 years ago:       +10 points                                │
+│ Older:                +0 points                                  │
+│                                                                  │
+│ Example:                                                         │
+│   "Einwohner LOR 2024" → matchCount: 1, recency: +40 = 41      │
+│   "Einwohner Ortsteile 2020" → matchCount: 2, recency: +20 = 22│
+│   Winner: 2024 dataset (newer data preferred)                   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ FINAL RANKING                                                    │
+│ Sort by: matchCount + recencyBoost (descending)                 │
+│                                                                  │
+│ Top result: "Einwohnerinnen und Einwohner in Berlin in          │
+│             LOR-Planungsräumen am 31.12.2024"                   │
+│ Score: 1 match + 40 recency = 41                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Component 1: Stop Word Filtering
+
+**Purpose**: Remove meaningless words before expansion to avoid noise
+
+**Implementation**: `src/query-processor.ts` - `extractSearchTerms()`
+
+**Stop word categories:**
+- German articles: der, die, das, den, dem, des, ein, eine, einer, eines, einem
+- German prepositions: von, vom, mit, bei, nach, vor, über, unter, aus, für, durch, auf, an, zu, zum, zur
+- German verbs: ist, sind, war, waren, wird, werden, hat, haben, kann, können, muss, müssen, soll, sollen, will, wollen
+- German question words: was, wer, wie, wo, wann, warum, welche, welcher, welches
+- English words: find, search, show, list, about, all, the, and, or, of, in, on, at, to, for, with, by, from
+- Portal-specific: berlin, berliner, daten, data, dataset, datensatz
+
+**Critical detail**: Uses word boundary regex (`\b`) to avoid partial matches:
+- ❌ Without `\b`: "housing" → "housg" (removes "in" from middle)
+- ✅ With `\b`: "housing" → "housing" (only matches whole word "in")
+
+### Component 2: Query Expansion System
+
+**Purpose**: Map user search terms to portal-native vocabulary that actually exists in dataset metadata
+
+**Architecture**: Two-level expansion for flexibility and data-driven quality
+
+#### Level 1: Seed Mappings (Manual Curation)
+
+**File**: `src/query-processor.ts` - `SEED_MAPPINGS`
+
+**Purpose**: Handle common user terms that don't appear in portal metadata
+
+**Examples:**
+```typescript
+{
+  "miete": ["mietspiegel"],           // Users say "rent", portal uses "rent index"
+  "wohnung": ["wohnen", "wohn"],      // "apartment" → "housing", "residential"
+  "bevölkerung": ["einwohner"],       // "population" → "residents"
+  "immobilie": ["wohnen", "wohn"],    // "real estate" → "housing"
+  "rad": ["fahrrad"],                 // "bike" → "bicycle"
+  "auto": ["kfz"]                     // "car" → "motor vehicle"
+}
+```
+
+**Design principle**: Keep minimal and focused. Only add terms where:
+1. User's natural language differs from portal vocabulary
+2. The mapping is unambiguous and universally correct
+3. No good expansion exists in generated data
+
+#### Level 2: Generated Expansions (Data-Driven)
+
+**File**: `src/generated-expansions.ts` (generated by `scripts/generate-query-expansion.ts`)
+
+**Purpose**: Find compound words and variations that exist in actual portal datasets
+
+**Generation algorithm** (runs offline, regenerate when portal changes):
+
+1. **Analyze all portal datasets** (2,663 datasets as of December 2025)
+   - Extract words from titles, descriptions, tags
+   - Build co-occurrence statistics
+   - Track word frequencies across datasets
+
+2. **Filter candidates** (9,930 unique words → 4,184 significant words)
+   - Minimum frequency: 3 datasets
+   - Minimum length: 3 characters
+   - Exclude stop words (see Component 1)
+
+3. **Process by length** (shortest first)
+   - Sort by: word length ascending, then frequency descending
+   - Example order: "rad" (3 chars) → "wohn" (4 chars) → "wohnen" (6 chars) → "wohngebäude" (11 chars)
+   - Ensures base words processed before compounds
+
+4. **Eliminate redundancy** (skips 1,273 entries)
+   - For each word, check if shorter substring already has expansion
+   - Example: "wohn" → expansion created, "wohnen" → skipped as redundant, "wohngebäude" → skipped as redundant
+   - Result: 20+ "wohn*" variants consolidated to 1 entry
+
+5. **Find compound words**
+   - For each non-redundant base word, scan all candidates
+   - A compound must:
+     - Contain the base word: "wohngebäude" contains "wohn" ✓
+     - Be longer: "wohngebäude" (11) > "wohn" (4) ✓
+     - Not too long: ≤ 30 characters ✓
+     - Co-occur frequently: appears in ≥ 2 datasets together ✓
+
+6. **Filter by co-occurrence ratio** (measures association strength)
+   - Ratio = (appears WITH base) / (total appearances)
+   - Example: "wohngebäude" appears in 41 datasets, WITH "wohn" in 40 → ratio = 40/41 = 0.976
+   - Threshold: ≥ 0.1 (10%)
+   - Filters weak associations: "gebäude" appears in 200 datasets but only with "wohn" in 10 → ratio = 0.05 → discard
+
+7. **Exclude negations**
+   - Remove compounds starting with: nicht, non, ohne, un
+   - Example: "nichtwohngebäude" → discard (opposite meaning)
+
+8. **Rank by frequency** (not PMI)
+   - Why frequency: Common terms are more useful for search
+   - Why not PMI: All compounds have artificially high PMI because they contain the base word
+   - Example for "verkehr": Frequency ranks "Straßenverkehr" (common) over "Verkehrserhebungen" (rare technical term)
+
+9. **Take top 5 compounds**
+   - Balance between coverage and precision
+   - More than 5 adds noise, fewer misses variations
+
+10. **Quality threshold** (skips 2,647 entries)
+    - Must have ≥ 2 distinct terms (base + at least 1 compound)
+    - No self-only expansions
+
+**Output**: 264 high-quality expansion mappings
+
+**Example expansion:**
+```typescript
+{
+  "einwohner": [
+    "Einwohnerinnen",              // 84 datasets
+    "Kleinräumige einwohnerzahl",  // 76 datasets
+    "Einwohnerdichte",             // 44 datasets
+    "Einwohnerentwicklung",        // 30 datasets
+    "Keinräumige einwohnerzahl"    // 14 datasets
+  ]
+}
+```
+
+#### Runtime Merging
+
+**File**: `src/query-processor.ts` - constructor
+
+**Process**: Seed mappings recursively expand through generated mappings
+
+**Example:** User searches "wohnung"
+1. Seed mapping: `"wohnung" → ["wohnen", "wohn"]`
+2. Look up "wohnen" in generated map → NOT FOUND (eliminated as redundant with "wohn")
+   - Fallback: capitalize → `"Wohnen"`
+3. Look up "wohn" in generated map → FOUND: `["Wohngebäude", "Wohn- und nichtwohngebäude", ...]`
+4. Final expansion: `["Wohnen", "Wohngebäude", "Wohn- und nichtwohngebäude", ...]`
+
+### Component 3: Parallel Search & Aggregation
+
+**Purpose**: Execute multiple CKAN searches in parallel and combine results intelligently
+
+**Implementation**: `src/index.ts` - search_berlin_datasets tool
+
+**Algorithm:**
+
+1. **Execute parallel searches**
+   - Each expanded term gets separate CKAN query
+   - Limit: 100 results per term (critical: prevents missing datasets ranked at positions 41-100)
+   - Runs in parallel for performance
+
+2. **Deduplicate by dataset ID**
+   - Same dataset may appear in multiple term searches
+   - Track match count: how many terms matched each dataset
+   - Higher match count = better relevance
+
+3. **Build dataset map**
+   ```typescript
+   Map<datasetId, {
+     dataset: object,
+     matchCount: number,  // How many search terms matched
+     isLiteral: boolean   // Found by literal search (Tier 4)
+   }>
+   ```
+
+**Why 100 results per term?**
+- CKAN's relevance ranking isn't perfect
+- Important datasets can rank at position 41+ for broad terms
+- Example: "Einwohnerinnen" finds 2024 LOR dataset at position 41
+- Previous limit of 40 was missing these datasets
+
+### Component 4: Literal Search Fallback
+
+**Purpose**: Ensure queries with specific terms (especially years) return exact matches first
+
+**When activated**: If top 5 expansion results don't contain ALL user's original key terms
+
+**Algorithm:**
+
+1. **Extract key terms** from original query
+   - Remove English noise words: find, search, show, list, about, etc.
+   - Keep words ≥ 3 characters
+   - Keep 4-digit years (2020, 2024, etc.)
+
+2. **Check top 5 expansion results**
+   - Do any contain ALL key terms?
+   - Search in: title + name + description
+
+3. **If no exact match found:**
+   - Run additional CKAN search with cleaned query
+   - Apply position-based scoring: 1st place = 1000, 2nd = 999, 3rd = 998, etc.
+   - Year bonus: +1000 if dataset title contains query year
+   - Merge with expansion results, preferring literal matches
+
+**Example:** Query "Einwohner 2024"
+- Expansion search finds many "Einwohner" datasets from different years
+- A 2020 dataset with 3 term matches: score = 3
+- The 2024 dataset from literal search: score = 1000 (position) + 1000 (year bonus) = 2000
+- Result: 2024 dataset ranks first ✓
+
+### Component 5: Recency Boost
+
+**Purpose**: Prefer recent datasets when relevance is otherwise equal
+
+**Implementation**: Extract years from dataset titles and add boost to final score
+
+**Boost table:**
+```typescript
+const yearsDiff = currentYear - datasetYear;
+
+if (yearsDiff === 0)      boost = +50;  // Current year
+else if (yearsDiff === 1) boost = +40;  // Last year
+else if (yearsDiff === 2) boost = +30;  // 2 years ago
+else if (yearsDiff <= 5)  boost = +20;  // 3-5 years ago
+else if (yearsDiff <= 10) boost = +10;  // 6-10 years ago
+else                      boost = +0;   // Older datasets
+```
+
+**Year extraction:**
+- Pattern: `\b(20\d{2})\b` (matches 2000-2099)
+- Takes most recent year if multiple found (e.g., "2020-2024" → 2024)
+- Searches in: dataset title + dataset name
+
+**Final scoring:**
+```typescript
+finalScore = matchCount + recencyBoost
+```
+
+**Example comparison:**
+```
+Dataset A: "Einwohner LOR 2024"
+  - matchCount: 1 (matched "Einwohnerinnen")
+  - recency: +40 (last year)
+  - finalScore: 41
+
+Dataset B: "Einwohner Ortsteile 2020"
+  - matchCount: 2 (matched "Einwohnerinnen" + "Kleinräumige einwohnerzahl")
+  - recency: +20 (5 years ago)
+  - finalScore: 22
+
+Winner: Dataset A (41 > 22) - recency outweighs extra term match
+```
+
+**Why these boost values?**
+- Strong enough to prefer recent data within same relevance tier
+- Not so strong that irrelevant new datasets beat relevant old ones
+- Tuned through testing with real portal datasets
+
+### Performance & Trade-offs
+
+**Search latency:**
+- 5 parallel CKAN queries × ~200ms each = ~200ms total (parallel execution)
+- Plus literal fallback if needed: +200ms
+- Total: 200-400ms typical
+
+**Precision vs Recall:**
+- High recall: 163 results for "Bevölkerung" vs CKAN's 7
+- Maintained precision: Top results are highly relevant
+- Recency boost ensures current data surfaces first
+
+**False positives:**
+- Minimal: Co-occurrence filtering (≥10% threshold) prevents weak associations
+- Stop word filtering prevents nonsense expansions
+- Match count scoring rewards datasets matching multiple terms
+
+**Maintenance:**
+- Seed mappings: Manual updates as needed (rare)
+- Generated expansions: Regenerate when portal changes significantly
+- Stop words: Add new ones if found causing issues (rare)
+
+### When to Regenerate Expansions
+
+Run `npm run generate-expansions` when:
+1. Portal adds significant new datasets (>10% growth)
+2. Portal vocabulary changes (new terminology appears)
+3. Search quality degrades (users report missing obvious datasets)
+4. New stop words identified (noise terms creating bad expansions)
+
+**Typical frequency**: Every 3-6 months or when portal hits major milestones
+
+---
+
 ## Section 3: Data Fetching & Processing Strategy
 
 ### Minimal Preview Approach
