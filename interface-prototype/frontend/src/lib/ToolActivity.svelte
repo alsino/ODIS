@@ -5,12 +5,14 @@
   Hybrid tool activity display:
 
   DURING EXECUTION:
+  - Shows Claude's thinking text before each tool (introText)
   - Shows active tools with animated spinner
   - Displays friendly tool name (e.g., "Searching Berlin Datasets...")
   - Multiple tools can be shown simultaneously
 
   AFTER COMPLETION:
-  - Shows collapsible badge: "🔧 Used X tools"
+  - Shows Claude's thinking text before each tool (introText)
+  - Shows collapsible badge: "🔧 Tool Name"
   - Clicking expands to show details for each tool:
     - Tool name and error status
     - Input arguments (JSON)
@@ -22,6 +24,7 @@
     - name: tool name (snake_case from MCP)
     - args: arguments object
     - completed: boolean
+    - introText: Claude's thinking before this tool (optional)
     - result: result text (if completed)
     - isError: boolean (if completed with error)
 -->
@@ -54,19 +57,25 @@
 </script>
 
 {#if activeCalls.length > 0}
-  <div class="active-tools">
-    {#each activeCalls as call}
+  {#each activeCalls as call}
+    {#if call.introText}
+      <div class="intro-text">{call.introText}</div>
+    {/if}
+    <div class="active-tools">
       <div class="active-tool">
         <span class="spinner"></span>
         <span>{formatToolName(call.name)}...</span>
       </div>
-    {/each}
-  </div>
+    </div>
+  {/each}
 {/if}
 
 {#if completedCalls.length > 0}
   <div class="completed-tools">
     {#each completedCalls as call}
+      {#if call.introText}
+        <div class="intro-text">{call.introText}</div>
+      {/if}
       <div class="tool-item">
         <button
           class="tools-badge"
@@ -118,6 +127,14 @@
 {/if}
 
 <style>
+  .intro-text {
+    margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: #374151;
+  }
+
   .active-tools {
     display: flex;
     flex-direction: column;

@@ -10,6 +10,8 @@
   let messages = [];
   // Track whether we're currently in a tool-calling phase
   let inToolPhase = false;
+  // Buffer for intermediate "thinking" text between tool calls
+  let intermediateTextBuffer = '';
   let ws = null;
   let connected = false;
   let waiting = false;
@@ -95,8 +97,12 @@
         id: data.toolCallId,
         name: data.toolName,
         args: data.toolArgs,
-        completed: false
+        completed: false,
+        introText: intermediateTextBuffer.trim() // Attach buffered thinking text to this tool
       };
+
+      // Clear the buffer after attaching
+      intermediateTextBuffer = '';
 
       // Add to the current streaming message immediately
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
@@ -121,18 +127,24 @@
       // File download ready - trigger browser download
       triggerDownload(data.filename, data.content, data.mimeType);
     } else if (data.type === 'assistant_message_chunk') {
-      // Streaming chunk - could be intro text OR final response
+      // Streaming chunk - could be intro text, intermediate thinking, OR final response
       if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
         // Append to existing streaming message
-        // If we're in tool phase, this is final response text. Otherwise, it's intro.
-        if (inToolPhase) {
-          // This is the final response after tools
+        const hasPendingTools = messages[messages.length - 1].toolCalls && messages[messages.length - 1].toolCalls.length > 0;
+
+        if (inToolPhase && hasPendingTools) {
+          // This is intermediate "thinking" text between tool calls
+          // Buffer it so we can attach it to the next tool call
+          intermediateTextBuffer += data.content;
+        } else if (inToolPhase) {
+          // This is the final response after all tools complete
           messages[messages.length - 1].responseText = (messages[messages.length - 1].responseText || '') + data.content;
+          messages = messages; // Trigger reactivity
         } else {
-          // This is intro text before tools
+          // This is intro text before any tools
           messages[messages.length - 1].introText = (messages[messages.length - 1].introText || '') + data.content;
+          messages = messages; // Trigger reactivity
         }
-        messages = messages; // Trigger reactivity
       } else {
         // Start new streaming message
         const messageId = `msg-${Date.now()}`;
@@ -154,6 +166,7 @@
           messages = messages; // Trigger reactivity
         }
         inToolPhase = false;
+        intermediateTextBuffer = ''; // Clear buffer when conversation ends
         waiting = false;
         showSpacer = false;
       } else {
