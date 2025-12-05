@@ -170,8 +170,8 @@ export class BerlinOpenDataMCPServer {
           case 'search_berlin_datasets': {
             const { query, limit = 20 } = args as { query: string; limit?: number };
 
-            // Three-Tier Search Strategy for Optimal Relevance
-            // ================================================
+            // Four-Tier Search Strategy for Optimal Relevance
+            // =================================================
             //
             // TIER 1 - Expansion Search (Broad Coverage):
             //   Expands query terms using portal metadata mappings
@@ -189,7 +189,13 @@ export class BerlinOpenDataMCPServer {
             //   Purpose: Ensure specific queries return exact matches first
             //   Example: "Einwohner 2024" → 2024 dataset ranked #1 (not 2020/2019)
             //
-            // Result: Best of both worlds - broad coverage + precise ranking
+            // TIER 4 - Recency Boost (Temporal Relevance):
+            //   Extracts years from all dataset titles and boosts recent datasets
+            //   Current year: +50, Last year: +40, 2 years ago: +30, etc.
+            //   Purpose: Prefer recent data when no year specified in query
+            //   Example: "Bevölkerung" → 2024 datasets ranked above 2019
+            //
+            // Result: Best of all worlds - broad coverage + precise ranking + temporal relevance
 
             // STEP 1: Expansion Search
             const searchTerms = this.queryProcessor.extractSearchTerms(query);
@@ -272,7 +278,46 @@ export class BerlinOpenDataMCPServer {
               });
             }
 
-            // Sort by match count (literal matches boosted to top)
+            // STEP 4: Apply recency boost to all results
+            // Extract years from dataset titles and boost recent years
+            const currentYear = new Date().getFullYear();
+
+            for (const item of datasetMap.values()) {
+              const dataset = item.dataset;
+              const titleText = `${dataset.title} ${dataset.name}`;
+
+              // Extract all 4-digit years from title
+              const years = titleText.match(/\b(20\d{2})\b/g);
+
+              if (years && years.length > 0) {
+                // Get the most recent year mentioned
+                const mostRecentYear = Math.max(...years.map(y => parseInt(y)));
+
+                // Calculate recency score: more recent = higher score
+                // Years within last 3 years get significant boost
+                const yearsDiff = currentYear - mostRecentYear;
+
+                if (yearsDiff === 0) {
+                  // Current year: +50 points
+                  item.matchCount += 50;
+                } else if (yearsDiff === 1) {
+                  // Last year: +40 points
+                  item.matchCount += 40;
+                } else if (yearsDiff === 2) {
+                  // 2 years ago: +30 points
+                  item.matchCount += 30;
+                } else if (yearsDiff <= 5) {
+                  // 3-5 years ago: +20 points
+                  item.matchCount += 20;
+                } else if (yearsDiff <= 10) {
+                  // 6-10 years ago: +10 points
+                  item.matchCount += 10;
+                }
+                // Older datasets get no boost
+              }
+            }
+
+            // Sort by match count (literal matches + recency boosted to top)
             const combinedResults = Array.from(datasetMap.values())
               .sort((a, b) => b.matchCount - a.matchCount)
               .slice(0, limit)
