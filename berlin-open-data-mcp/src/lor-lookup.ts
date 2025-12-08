@@ -127,7 +127,10 @@ export class LORLookupService {
     // Add full hierarchy if RAUMID exists
     if (row.RAUMID && this.lorMap.has(row.RAUMID)) {
       const hierarchy = this.lorMap.get(row.RAUMID)!;
-      enriched.BEZIRK_NAME = hierarchy.BEZ;
+      // Don't overwrite BEZIRK_NAME if it was already set from BEZ
+      if (!enriched.BEZIRK_NAME) {
+        enriched.BEZIRK_NAME = hierarchy.BEZ;
+      }
       enriched.PROGNOSERAUM_NAME = hierarchy.PGR;
       enriched.BEZIRKSREGION_NAME = hierarchy.BZR;
       enriched.PLANUNGSRAUM_NAME = hierarchy.PLR;
