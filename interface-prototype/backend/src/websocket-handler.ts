@@ -89,7 +89,7 @@ export class WebSocketHandler {
       // Add code execution tool
       const codeExecutionTool = {
         name: 'execute_code',
-        description: 'Execute JavaScript code to analyze a dataset that was previously fetched with fetch_dataset_data. Use this tool immediately after fetch_dataset_data whenever you need to count, aggregate, filter, or calculate statistics. DO NOT try to count or calculate manually - always use this tool for accurate results.',
+        description: 'Execute JavaScript code to perform calculations and analyze datasets. CRITICAL: You MUST use this tool for ANY calculation - additions, sums, counts, averages, percentages, etc. NEVER calculate mentally or manually. Even simple arithmetic like adding two numbers must use this tool. After fetching data with fetch_dataset_data, immediately use this tool for all analysis and calculations.',
         inputSchema: {
           type: 'object' as const,
           properties: {
