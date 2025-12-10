@@ -141,7 +141,7 @@ Visualization with create_visualization:
       console.log('[ClaudeClient] sendMessage: Calling Claude API...');
       const response = await this.client.messages.create({
         model: this.model,
-        max_tokens: 4096,
+        max_tokens: 12000,
         system: this.systemPrompt,
         messages: messages as any,
         tools: claudeTools,
@@ -193,7 +193,7 @@ Visualization with create_visualization:
 
       const stream = await this.client.messages.stream({
         model: this.model,
-        max_tokens: 4096,
+        max_tokens: 12000,
         system: this.systemPrompt,
         messages: messages as any,
         tools: claudeTools,
