@@ -141,14 +141,15 @@ Visualization with create_visualization:
       console.log('[ClaudeClient] sendMessage: Calling Claude API...');
       const response = await this.client.messages.create({
         model: this.model,
-        max_tokens: 12000,
+        max_tokens: 8000,
         system: this.systemPrompt,
         messages: messages as any,
-        tools: claudeTools,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 8000
-        }
+        tools: claudeTools
+        // TODO: Re-enable extended thinking after implementing conversation history management
+        // thinking: {
+        //   type: 'enabled',
+        //   budget_tokens: 8000
+        // }
       });
 
       console.log('[ClaudeClient] sendMessage: API response received, id:', response.id, 'model:', response.model);
@@ -193,14 +194,15 @@ Visualization with create_visualization:
 
       const stream = await this.client.messages.stream({
         model: this.model,
-        max_tokens: 12000,
+        max_tokens: 8000,
         system: this.systemPrompt,
         messages: messages as any,
-        tools: claudeTools,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 8000
-        }
+        tools: claudeTools
+        // TODO: Re-enable extended thinking after implementing conversation history management
+        // thinking: {
+        //   type: 'enabled',
+        //   budget_tokens: 8000
+        // }
       });
 
       let fullText = '';
