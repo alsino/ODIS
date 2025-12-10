@@ -5,7 +5,7 @@ dist/
 .DS_Store
 CLAUDE.md
 charts-log.json
-berlin-open-data-mcp/bugs/bugs.md
+bugs/
 
 # Exclude legacy docs
 docs/legacy/
