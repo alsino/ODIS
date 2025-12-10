@@ -20,7 +20,8 @@ export interface ToolCall {
 
 export class ClaudeClient {
   private client: Anthropic;
-  private model = 'claude-sonnet-4-5';
+  private model = 'claude-haiku-4-5-20251001';
+  // private model = 'claude-sonnet-4-5'; // Slower but better instruction following
   private systemPrompt = `You are an assistant helping users discover and analyze open data from Berlin's Open Data Portal.
 
 You have access to tools that connect to the Berlin Open Data Portal. ALWAYS use these tools when users ask about datasets or data. NEVER make up or fabricate datasets, data, or analysis.
