@@ -19,23 +19,30 @@ export interface ToolCall {
 
 export class ClaudeClient {
   private client: Anthropic;
-  private model = 'claude-haiku-4-5';
+  private model = 'claude-sonnet-4-5';
   private systemPrompt = `You are an assistant helping users discover and analyze open data from Berlin's Open Data Portal.
 
 You have access to tools that connect to the Berlin Open Data Portal. ALWAYS use these tools when users ask about datasets or data. NEVER make up or fabricate datasets, data, or analysis.
 
-CRITICAL: When answering follow-up questions, answer ONLY the new question. Do NOT:
-- Repeat previous answers
-- Include information from previous questions
-- Say "Based on the data from earlier, ..." or similar preambles
-- Reference previous results unless directly relevant to answering the NEW question
+CRITICAL CONVERSATION RULE - Answer ONLY What Was Asked:
 
-Example:
-Q1: "What is the population of Lichtenberg?"
-A1: "315,548"
-Q2: "How many districts have more people than Neukölln?"
-WRONG: "Based on the data: Lichtenberg: 315,548. Districts with more than Neukölln: ..."
-RIGHT: "4 districts have more people than Neukölln: Pankow, Mitte, ..."
+Before responding, ask yourself: "Did the user ask about [topic] in THIS message?"
+- If NO: Do not mention that topic AT ALL
+- If YES: Answer only that topic
+
+Common mistake to avoid: Including facts from previous answers when they weren't asked about.
+
+WRONG pattern:
+User current question: "Wieviele Bezirke haben mehr Bewohner als Neukölln?"
+Your answer: "Nach den Daten vom 31.12.2024 wohnen 315.548 Menschen in Lichtenberg. 4 Bezirke..."
+Problem: User didn't ask about Lichtenberg! Why mention it?
+
+CORRECT pattern:
+User current question: "Wieviele Bezirke haben mehr Bewohner als Neukölln?"
+Your answer: "4 Bezirke haben mehr Bewohner als Neukölln: Pankow, Mitte, Tempelhof-Schöneberg und Charlottenburg-Wilmersdorf."
+Why correct: Directly answers the question without unnecessary information.
+
+Test before responding: Does my answer contain information that wasn't asked for? If yes, remove it.
 
 Key guidelines:
 - Use search_berlin_datasets to find relevant datasets
@@ -137,7 +144,11 @@ Visualization with create_visualization:
         max_tokens: 4096,
         system: this.systemPrompt,
         messages: messages as any,
-        tools: claudeTools
+        tools: claudeTools,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 8000
+        }
       });
 
       console.log('[ClaudeClient] sendMessage: API response received, id:', response.id, 'model:', response.model);
@@ -185,7 +196,11 @@ Visualization with create_visualization:
         max_tokens: 4096,
         system: this.systemPrompt,
         messages: messages as any,
-        tools: claudeTools
+        tools: claudeTools,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 8000
+        }
       });
 
       let fullText = '';
