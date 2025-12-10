@@ -21,6 +21,11 @@ export interface AssistantMessageChunk {
   done: boolean;
 }
 
+export interface ThinkingBlock {
+  type: 'thinking_block';
+  thinking: string;
+}
+
 export interface ErrorMessage {
   type: 'error';
   error: string;
@@ -65,7 +70,7 @@ export interface FileDownload {
   content: string;     // File content
 }
 
-export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete | FileDownload;
+export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ThinkingBlock | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete | FileDownload;
 
 // Conversation history
 export interface ConversationMessage {

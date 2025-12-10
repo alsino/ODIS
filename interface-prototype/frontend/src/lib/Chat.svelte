@@ -85,6 +85,40 @@
 
     if (data.type === 'status') {
       console.log('Status:', data.status);
+    } else if (data.type === 'thinking_block') {
+      // Thinking block received - add to current assistant message
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        const lastMessage = messages[messages.length - 1];
+        if (!lastMessage.items) {
+          lastMessage.items = [];
+        }
+
+        const lastItem = lastMessage.items[lastMessage.items.length - 1];
+
+        // If last item is thinking, append to it; otherwise create new thinking item
+        if (lastItem && lastItem.type === 'thinking') {
+          lastItem.content += data.thinking;
+        } else {
+          lastMessage.items.push({
+            type: 'thinking',
+            content: data.thinking
+          });
+        }
+        messages = messages; // Trigger reactivity
+      } else {
+        // Start new assistant message with thinking
+        const messageId = `msg-${Date.now()}`;
+        const newMessage = {
+          role: 'assistant',
+          streaming: true,
+          id: messageId,
+          items: [{
+            type: 'thinking',
+            content: data.thinking
+          }]
+        };
+        messages = [...messages, newMessage];
+      }
     } else if (data.type === 'tool_call_start') {
       // Tool execution started - append tool item to chronological list
       const newToolItem = {
@@ -118,8 +152,10 @@
       triggerDownload(data.filename, data.content, data.mimeType);
     } else if (data.type === 'assistant_message_chunk') {
       // Streaming text chunk - append to last text item or create new one
-      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].streaming) {
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        // Append to existing assistant message (may contain tools from previous iteration)
         const lastMessage = messages[messages.length - 1];
+        lastMessage.streaming = true; // Mark as streaming
         if (!lastMessage.items) {
           lastMessage.items = [];
         }
@@ -250,7 +286,21 @@
         {:else if message.role === 'assistant'}
           {#if message.items}
             {#each message.items as item, j (item.id || j)}
-              {#if item.type === 'text'}
+              {#if item.type === 'thinking'}
+                <div class="thinking-block">
+                  <div class="thinking-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <span>Claude denkt nach...</span>
+                  </div>
+                  <details>
+                    <summary>Zeige Denkprozess</summary>
+                    <div class="thinking-content">{item.content}</div>
+                  </details>
+                </div>
+              {:else if item.type === 'text'}
                 <Message role="assistant" content={item.content} />
               {:else if item.type === 'tool'}
                 <ToolItem tool={item} />
@@ -414,5 +464,61 @@
     border-top: 1px solid #e5e7eb;
     background: white;
     padding: 1rem;
+  }
+
+  .thinking-block {
+    margin: 0.5rem 0;
+    padding: 0.75rem 1rem;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .thinking-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #6b7280;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+
+  .thinking-header svg {
+    flex-shrink: 0;
+  }
+
+  .thinking-block details {
+    margin-top: 0.5rem;
+  }
+
+  .thinking-block summary {
+    cursor: pointer;
+    color: #3b82f6;
+    font-size: 0.8125rem;
+    padding: 0.25rem 0;
+    list-style: none;
+    user-select: none;
+  }
+
+  .thinking-block summary:hover {
+    color: #2563eb;
+    text-decoration: underline;
+  }
+
+  .thinking-block summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .thinking-content {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 0.375rem;
+    color: #374151;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 </style>

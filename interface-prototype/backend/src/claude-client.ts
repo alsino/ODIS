@@ -9,6 +9,7 @@ export interface ClaudeResponse {
   content: string;
   toolCalls?: ToolCall[];
   stopReason: string | null;
+  fullContent?: any[]; // Full content array including thinking blocks
 }
 
 export interface ToolCall {
@@ -23,6 +24,8 @@ export class ClaudeClient {
   private systemPrompt = `You are an assistant helping users discover and analyze open data from Berlin's Open Data Portal.
 
 You have access to tools that connect to the Berlin Open Data Portal. ALWAYS use these tools when users ask about datasets or data. NEVER make up or fabricate datasets, data, or analysis.
+
+IMPORTANT: Always respond AND think in the same language as the user's question. If the user writes in German, your responses AND your thinking process must be in German. If in English, use English.
 
 CRITICAL CONVERSATION RULE - Answer ONLY What Was Asked:
 
@@ -141,20 +144,20 @@ Visualization with create_visualization:
       console.log('[ClaudeClient] sendMessage: Calling Claude API...');
       const response = await this.client.messages.create({
         model: this.model,
-        max_tokens: 8000,
+        max_tokens: 12000,
         system: this.systemPrompt,
         messages: messages as any,
-        tools: claudeTools
-        // TODO: Re-enable extended thinking after implementing conversation history management
-        // thinking: {
-        //   type: 'enabled',
-        //   budget_tokens: 8000
-        // }
+        tools: claudeTools,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 8000
+        }
       });
 
       console.log('[ClaudeClient] sendMessage: API response received, id:', response.id, 'model:', response.model);
+      console.log('[ClaudeClient] Response content blocks:', response.content.map((block: any) => ({ type: block.type, hasText: !!block.text, hasThinking: !!block.thinking })));
 
-      // Extract text content
+      // Extract text content (excluding thinking blocks for display)
       const textContent = response.content
         .filter((block: any) => block.type === 'text')
         .map((block: any) => block.text)
@@ -172,7 +175,8 @@ Visualization with create_visualization:
       return {
         content: textContent,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        stopReason: response.stop_reason
+        stopReason: response.stop_reason,
+        fullContent: response.content // Preserve full content including thinking blocks
       };
     } catch (error) {
       console.error('Claude API error:', error);
@@ -187,31 +191,37 @@ Visualization with create_visualization:
   async sendMessageStreaming(
     messages: ConversationMessage[],
     tools: Tool[],
-    streamCallback: (chunk: string) => void
+    streamCallback: (chunk: string) => void,
+    thinkingCallback?: (thinking: string) => void
   ): Promise<ClaudeResponse> {
     try {
       const claudeTools = this.transformToolsForClaude(tools);
 
       const stream = await this.client.messages.stream({
         model: this.model,
-        max_tokens: 8000,
+        max_tokens: 12000,
         system: this.systemPrompt,
         messages: messages as any,
-        tools: claudeTools
-        // TODO: Re-enable extended thinking after implementing conversation history management
-        // thinking: {
-        //   type: 'enabled',
-        //   budget_tokens: 8000
-        // }
+        tools: claudeTools,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 8000
+        }
       });
 
       let fullText = '';
       const toolCalls: ToolCall[] = [];
       const toolInputJsonBuffers: Map<number, string> = new Map();
       const blockIndexToToolCallIndex: Map<number, number> = new Map();
+      const fullContentBlocks: any[] = [];
+      const blockIndexToContentBlock: Map<number, any> = new Map();
 
       for await (const event of stream) {
         if (event.type === 'content_block_start') {
+          console.log('[ClaudeClient] content_block_start:', event.index, event.content_block.type);
+          // Store all content blocks for history (including thinking)
+          blockIndexToContentBlock.set(event.index, { ...event.content_block });
+
           if (event.content_block.type === 'tool_use') {
             // Initialize tool call - input will be built from deltas
             const toolCallIndex = toolCalls.length;
@@ -228,12 +238,37 @@ Visualization with create_visualization:
             const chunk = event.delta.text;
             fullText += chunk;
             streamCallback(chunk);
+            // Accumulate text in content block
+            const block = blockIndexToContentBlock.get(event.index);
+            if (block) {
+              block.text = (block.text || '') + chunk;
+            }
           } else if (event.delta.type === 'input_json_delta') {
             // Accumulate JSON input for tool calls
             const currentJson = toolInputJsonBuffers.get(event.index) || '';
             toolInputJsonBuffers.set(event.index, currentJson + event.delta.partial_json);
+          } else if (event.delta.type === 'thinking_delta') {
+            console.log('[ClaudeClient] thinking_delta received, length:', event.delta.thinking.length);
+            // Accumulate thinking and stream it
+            const block = blockIndexToContentBlock.get(event.index);
+            if (block) {
+              block.thinking = (block.thinking || '') + event.delta.thinking;
+            }
+            // Stream thinking chunks if callback provided
+            if (thinkingCallback) {
+              console.log('[ClaudeClient] Calling thinkingCallback');
+              thinkingCallback(event.delta.thinking);
+            } else {
+              console.log('[ClaudeClient] No thinkingCallback provided!');
+            }
           }
         } else if (event.type === 'content_block_stop') {
+          // Finalize content block
+          const block = blockIndexToContentBlock.get(event.index);
+          if (block) {
+            fullContentBlocks.push(block);
+          }
+
           // Parse accumulated JSON input for tool calls
           const jsonBuffer = toolInputJsonBuffers.get(event.index);
           const toolCallIndex = blockIndexToToolCallIndex.get(event.index);
@@ -251,7 +286,8 @@ Visualization with create_visualization:
       return {
         content: fullText,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        stopReason: 'end_turn'
+        stopReason: 'end_turn',
+        fullContent: fullContentBlocks // Preserve full content including thinking blocks
       };
     } catch (error) {
       console.error('Claude API streaming error:', error);
@@ -278,10 +314,28 @@ Visualization with create_visualization:
     tools: Tool[],
     executeToolCallback: (name: string, args: any) => Promise<any>,
     streamCallback?: (chunk: string) => void,
-    toolActivityCallback?: (activity: { type: 'start' | 'complete', toolCallId: string, toolName: string, toolArgs?: any, result?: string, isError?: boolean }) => void
+    toolActivityCallback?: (activity: { type: 'start' | 'complete', toolCallId: string, toolName: string, toolArgs?: any, result?: string, isError?: boolean }) => void,
+    thinkingCallback?: (thinking: string) => void
   ): Promise<{ response: string; messages: ConversationMessage[] }> {
     console.log('[ClaudeClient] sendMessageWithTools called with message:', userMessage);
     console.log('[ClaudeClient] Conversation history length:', conversationHistory.length);
+
+    // Log conversation history for debugging
+    if (conversationHistory.length > 0) {
+      console.log('[ClaudeClient] Last 3 messages in history:');
+      conversationHistory.slice(-3).forEach((msg, idx) => {
+        if (msg.role === 'user') {
+          console.log(`  [${idx}] USER: ${typeof msg.content === 'string' ? msg.content.substring(0, 100) : JSON.stringify(msg.content).substring(0, 100)}`);
+        } else {
+          console.log(`  [${idx}] ASSISTANT: ${Array.isArray(msg.content) ? `${msg.content.length} blocks` : msg.content.substring(0, 100)}`);
+          if (Array.isArray(msg.content)) {
+            msg.content.forEach((block: any, blockIdx: number) => {
+              console.log(`    [${blockIdx}] ${block.type}: ${block.type === 'text' ? block.text?.substring(0, 80) : block.type === 'tool_use' ? block.name : block.type === 'thinking' ? 'thinking...' : ''}`);
+            });
+          }
+        }
+      });
+    }
     console.log('[ClaudeClient] Available tools:', tools.length);
 
     // Add user message to history
@@ -304,40 +358,27 @@ Visualization with create_visualization:
       if (isLikelyFinalResponse && streamCallback) {
         // Try streaming - if we get tool calls, we'll handle them normally
         console.log('[ClaudeClient] Using streaming for likely final response');
-        const response = await this.sendMessageStreaming(messages, tools, streamCallback);
+        const response = await this.sendMessageStreaming(messages, tools, streamCallback, thinkingCallback);
         console.log('[ClaudeClient] Streaming response received, stopReason:', response.stopReason);
 
         if (!response.toolCalls || response.toolCalls.length === 0) {
           finalResponse = response.content;
+
+          // Add final assistant response to history before breaking
+          messages.push({
+            role: 'assistant',
+            content: response.fullContent || [{ type: 'text', text: response.content }]
+          });
+
           break;
         }
 
         // If we got tool calls despite streaming, continue with tool execution
         // Note: intro text was already streamed by sendMessageStreaming
-        // Add assistant's response to history (both text and tool use)
-        const assistantContent: any[] = [];
-
-        // Include intro text if present
-        if (response.content && response.content.trim()) {
-          assistantContent.push({
-            type: 'text',
-            text: response.content
-          });
-        }
-
-        // Add tool use blocks
-        response.toolCalls.forEach(tc => {
-          assistantContent.push({
-            type: 'tool_use',
-            id: tc.id,
-            name: tc.name,
-            input: tc.input
-          });
-        });
-
+        // Add assistant's response to history (including thinking blocks)
         messages.push({
           role: 'assistant',
-          content: assistantContent
+          content: response.fullContent || [] // Use full content including thinking blocks
         });
 
         // Execute tools and collect results
@@ -413,6 +454,17 @@ Visualization with create_visualization:
       const response = await this.sendMessage(messages, tools);
       console.log('[ClaudeClient] Response received, content length:', response.content.length, 'toolCalls:', response.toolCalls?.length || 0);
 
+      // Extract and send thinking blocks if present (non-streaming mode)
+      if (response.fullContent && thinkingCallback) {
+        const thinkingBlocks = response.fullContent.filter((block: any) => block.type === 'thinking');
+        for (const thinkingBlock of thinkingBlocks) {
+          if (thinkingBlock.thinking) {
+            console.log('[ClaudeClient] Sending thinking block from non-streaming response, length:', thinkingBlock.thinking.length);
+            thinkingCallback(thinkingBlock.thinking);
+          }
+        }
+      }
+
       // If no tool calls, we have final response
       if (!response.toolCalls || response.toolCalls.length === 0) {
         finalResponse = response.content;
@@ -420,6 +472,13 @@ Visualization with create_visualization:
         if (streamCallback && response.content) {
           streamCallback(response.content);
         }
+
+        // Add final assistant response to history before breaking
+        messages.push({
+          role: 'assistant',
+          content: response.fullContent || [{ type: 'text', text: response.content }]
+        });
+
         console.log('[ClaudeClient] Final response received, breaking loop');
         break;
       }
@@ -433,30 +492,10 @@ Visualization with create_visualization:
         streamCallback(response.content);
       }
 
-      // Add assistant's response to history (both text and tool use)
-      const assistantContent: any[] = [];
-
-      // Include intro text if present
-      if (response.content && response.content.trim()) {
-        assistantContent.push({
-          type: 'text',
-          text: response.content
-        });
-      }
-
-      // Add tool use blocks
-      response.toolCalls.forEach(tc => {
-        assistantContent.push({
-          type: 'tool_use',
-          id: tc.id,
-          name: tc.name,
-          input: tc.input
-        });
-      });
-
+      // Add assistant's response to history (including thinking blocks)
       messages.push({
         role: 'assistant',
-        content: assistantContent
+        content: response.fullContent || [] // Use full content including thinking blocks
       });
 
       // Execute tools and collect results
@@ -464,6 +503,7 @@ Visualization with create_visualization:
       for (const toolCall of response.toolCalls) {
         try {
           // Notify that tool execution is starting
+          console.log('[ClaudeClient] Calling toolActivityCallback (start):', toolCall.name, toolCall.id);
           toolActivityCallback?.({
             type: 'start',
             toolCallId: toolCall.id,
@@ -487,6 +527,7 @@ Visualization with create_visualization:
           }
 
           // Notify that tool execution completed
+          console.log('[ClaudeClient] Calling toolActivityCallback (complete):', toolCall.name, toolCall.id);
           toolActivityCallback?.({
             type: 'complete',
             toolCallId: toolCall.id,

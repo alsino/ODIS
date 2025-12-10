@@ -340,6 +340,14 @@ export class WebSocketHandler {
               isError: activity.isError
             });
           }
+        },
+        (thinking: string) => {
+          // Forward thinking blocks to frontend for display
+          console.log('[WebSocket] Sending thinking block, length:', thinking.length);
+          this.sendMessage(ws, {
+            type: 'thinking_block',
+            thinking: thinking
+          });
         }
       );
 
