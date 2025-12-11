@@ -2,8 +2,8 @@
 // ABOUTME: Verifies create_visualization tool accepts all chart types and variants
 
 import { describe, it, expect } from 'vitest';
-import { ChartBuilder } from '../src/chart-builder.js';
-import { ChartType, ChartVariant } from '../src/types.js';
+import { ChartBuilder } from '../chart-builder.js';
+import { ChartType, ChartVariant } from '../types.js';
 
 // Test the expected chart types and variants
 const ALL_CHART_TYPES: ChartType[] = [

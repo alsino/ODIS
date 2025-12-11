@@ -2,7 +2,7 @@
 // ABOUTME: Tests data validation, type mapping, and config inference for all chart types
 
 import { describe, it, expect } from 'vitest';
-import { ChartBuilder } from '../src/chart-builder.js';
+import { ChartBuilder } from '../chart-builder.js';
 
 describe('ChartBuilder', () => {
   const builder = new ChartBuilder();
