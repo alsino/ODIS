@@ -3,11 +3,36 @@
 
 <script>
   import { marked } from 'marked';
+  import { onMount } from 'svelte';
 
   export let role = 'user'; // 'user' or 'assistant'
   export let content = '';
 
   let htmlContent = '';
+
+  // Register Datawrapper height listener once globally
+  // This handles the postMessage communication that the embedded script would normally do
+  onMount(() => {
+    const handleDatawrapperMessage = (event) => {
+      if (event.data && event.data['datawrapper-height']) {
+        const heights = event.data['datawrapper-height'];
+        const iframes = document.querySelectorAll('iframe');
+        for (const chartId in heights) {
+          for (const iframe of iframes) {
+            if (iframe.contentWindow === event.source) {
+              iframe.style.height = heights[chartId] + 'px';
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleDatawrapperMessage);
+
+    return () => {
+      window.removeEventListener('message', handleDatawrapperMessage);
+    };
+  });
 
   // Parse markdown to HTML, handle [CHART:...] markers, and add target="_blank" to external links
   $: {
