@@ -26,6 +26,7 @@ function getDefaultVisualizeSettings(chartType: ChartType): Record<string, any> 
         'show-value-labels': true,
         'range-value-labels': 'both',
         'label-first-range': true,
+        'show-color-key': true,  // Show legend for column labels
       };
     case 'dot':
       return {
@@ -194,10 +195,16 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
       metadata.title = config.title;
     }
 
-    if (description) {
-      metadata.describe = {
-        intro: description  // Use intro for subtitle/description
-      };
+    // Add description and source information
+    if (description || source_dataset_id) {
+      metadata.describe = {};
+      if (description) {
+        metadata.describe.intro = description;
+      }
+      if (source_dataset_id) {
+        metadata.describe['source-name'] = 'Berlin Open Data';
+        metadata.describe['source-url'] = `https://daten.berlin.de/datensaetze/${source_dataset_id}`;
+      }
     }
 
     // Add chart-specific configuration
@@ -205,6 +212,17 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
       if (config.xAxis) {
         metadata.axes = {
           x: config.xAxis
+        };
+      }
+    } else if (chart_type === 'scatter') {
+      // Scatter plots need axes.labels for data point labels
+      const dataArray = data as Array<Record<string, any>>;
+      const cols = chartBuilder.analyzeColumns(dataArray);
+      if (cols.categorical.length > 0 && cols.numeric.length >= 2) {
+        metadata.axes = {
+          x: cols.numeric[0],
+          y: cols.numeric[1],
+          labels: cols.categorical[0]  // Use first categorical column for labels
         };
       }
     } else if (chart_type === 'map' && map_type === 'd3-maps-symbols' && config.basemap) {
