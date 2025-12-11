@@ -86,6 +86,7 @@ The system should handle both exploratory ("What data exists about traffic?") an
 - Fetch actual data from a dataset resource with automatic format handling (CSV/JSON/Excel/WFS/GeoJSON/KML → tabular)
 - Returns: Minimal preview (first 10 rows) + basic column info (names and types only)
 - Supports: CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats
+- Does NOT support: ZIP archives (provides direct download URL with helpful error message)
 - WFS behavior: For datasets ≤500 features, fetches all; for >500 features, fetches 10-feature sample
 - Parameters:
   - dataset_id (required)
@@ -97,6 +98,7 @@ The system should handle both exploratory ("What data exists about traffic?") an
 - Download a dataset as a file to user's computer (triggers browser download dialog)
 - Returns: File content with special download marker for browser
 - Supports: CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS formats
+- ZIP handling: Cannot process ZIP archives through MCP; provides direct download URL with extraction tips
 - WFS downloads: Automatically fetches all features with pagination (1000 per batch), converts to GeoJSON
 - Geodata defaults: WFS/GeoJSON/KML resources default to GeoJSON output format unless explicitly requested otherwise
 - Filename generation: Includes resource-specific information (e.g., district names, time periods); omits generic WFS resource names; transliterates German umlauts (ä→ae, ö→oe, ü→ue, ß→ss)

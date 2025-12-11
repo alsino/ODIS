@@ -279,6 +279,42 @@ See `ISSUES.md` Issue #3 for complete technical documentation.
 - `72a61d3` - Remove hardcoded year comments from recency boost
 - `b433fe2` - Improve search by filtering German stop words and increasing fetch limit
 
+#### ZIP Archive Support (11 December 2025)
+
+**Problem identified:** When users tried to fetch or download ZIP files (e.g., from the #kulturgutdigital dataset), the MCP server attempted to parse binary ZIP data as text/JSON, resulting in nonsensical output.
+
+**Root cause:**
+- The data fetcher tried to process all formats as text-based (CSV/JSON/Excel)
+- ZIP files are binary archives that require extraction, not parsing
+- No format detection prevented ZIP files from being handled differently
+
+**Solution implemented:**
+- Added ZIP format detection in both `fetch_dataset_data` and `download_dataset` tools
+- When ZIP format is detected, returns helpful error message with direct download URL
+- Error message explains that ZIP files must be downloaded and extracted manually
+- Updated tool descriptions to clarify ZIP handling
+
+**Implementation details:**
+```typescript
+// In fetch_dataset_data and download_dataset
+if (resource.format?.toUpperCase() === 'ZIP') {
+  return {
+    content: [{
+      type: 'text',
+      text: `❌ Cannot preview ZIP files. ZIP archives must be downloaded directly.\n\n**Direct download URL**: ${resource.url}\n\nZIP files contain compressed data that needs to be extracted first.`
+    }]
+  };
+}
+```
+
+**Impact:**
+- Prevents confusing nonsense output when encountering ZIP files
+- Provides clear guidance to users on how to access ZIP data
+- Maintains clean separation: MCP handles parseable formats, direct downloads for archives
+
+**Commits:**
+- `3ad3278` - Add ZIP file support with direct download URLs
+
 ---
 
 ## Prerequisites
