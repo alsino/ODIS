@@ -211,11 +211,13 @@ export class ChartBuilder {
 
     const title = userTitle || this.generateTitle(dataArray);
 
-    if (chartType === 'bar' || chartType === 'line') {
+    // Charts that need axis configuration
+    if (['bar', 'line', 'column', 'area'].includes(chartType)) {
       return this.inferBarLineConfig(dataArray, chartType, title);
     }
 
-    throw new Error(`Unsupported chart type: ${chartType}`);
+    // Charts that just need a title (pie, donut, scatter, dot, range, arrow, table, election-donut)
+    return { title };
   }
 
   /**
