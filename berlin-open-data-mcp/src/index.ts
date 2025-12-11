@@ -341,6 +341,7 @@ export class BerlinOpenDataMCPServer {
               combinedResults.forEach((dataset, index) => {
                 responseText += `## ${index + 1}. ${dataset.title}\n`;
                 responseText += `**ID**: ${dataset.name}\n`;
+                responseText += `**URL**: https://daten.berlin.de/datensaetze/${dataset.name}\n`;
                 responseText += `**Organization**: ${dataset.organization?.title || 'Unknown'}\n`;
 
                 if (dataset.notes && dataset.notes.length > 0) {
@@ -392,7 +393,8 @@ export class BerlinOpenDataMCPServer {
 
             // Basic information
             details += `## Overview\n`;
-            details += `**ID**: ${dataset.id}\n`;
+            details += `**ID**: ${dataset.name}\n`;
+            details += `**Portal URL**: https://daten.berlin.de/datensaetze/${dataset.name}\n`;
             details += `**Organization**: ${dataset.organization?.title || 'Unknown'}\n`;
 
             if (dataset.metadata_modified) {

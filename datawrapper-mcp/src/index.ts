@@ -95,7 +95,7 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       },
       source_dataset_id: {
         type: 'string',
-        description: 'Optional Berlin dataset ID for tracking'
+        description: 'Optional Berlin dataset ID for tracking (use the dataset "name" field, not the title or UUID - e.g., "berlinopenglamdata")'
       }
     },
     required: ['data', 'chart_type']
