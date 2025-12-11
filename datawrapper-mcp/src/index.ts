@@ -18,7 +18,7 @@ import { CreateVisualizationParams, ChartType, ChartVariant, GeoJSON } from './t
 /**
  * Get default visualize settings for chart types that need them
  */
-function getDefaultVisualizeSettings(chartType: ChartType): Record<string, any> {
+function getDefaultVisualizeSettings(chartType: ChartType, variant?: ChartVariant): Record<string, any> {
   switch (chartType) {
     case 'range':
     case 'arrow':
@@ -33,6 +33,28 @@ function getDefaultVisualizeSettings(chartType: ChartType): Record<string, any> 
         'show-value-labels': true,
         'range-value-labels': 'both',
         'label-first-range': true,
+        'show-color-key': true,
+      };
+    case 'bar':
+    case 'column':
+      // Stacked, grouped, and split charts need a legend to understand the colors
+      if (variant === 'stacked' || variant === 'grouped' || variant === 'split') {
+        return {
+          'show-color-key': true,
+        };
+      }
+      return {};
+    case 'line':
+    case 'area':
+      // Multi-series line/area charts need a legend
+      return {
+        'show-color-key': true,
+      };
+    case 'pie':
+    case 'donut':
+    case 'election-donut':
+      // Pie/donut charts always need a legend
+      return {
         'show-color-key': true,
       };
     default:
@@ -175,7 +197,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     const dwChartType = chart_type === 'map' ? map_type! : chartBuilder.getDatawrapperType(chart_type, variant);
 
     // Get chart-type-specific visualize settings
-    const typeSpecificSettings = getDefaultVisualizeSettings(chart_type);
+    const typeSpecificSettings = getDefaultVisualizeSettings(chart_type, variant);
 
     // Create initial chart metadata with clean, modern styling
     const metadata: any = {
