@@ -4,9 +4,18 @@ MCP server for creating data visualizations using the Datawrapper API. Enables a
 
 ## Features
 
-- **Bar Charts**: Vertical/horizontal bar charts with automatic axis detection
+- **Bar Charts**: Horizontal bars with variants (basic, stacked, split)
+- **Column Charts**: Vertical columns with variants (basic, grouped, stacked)
 - **Line Charts**: Single and multi-series line charts for time-series data
-- **Maps**: GeoJSON visualization with automatic Berlin bounds
+- **Area Charts**: Filled area charts
+- **Scatter Plots**: X/Y scatter plots for correlation analysis
+- **Dot Plots**: Horizontal dot plots with legend
+- **Range Plots**: Show min/max ranges with labeled endpoints
+- **Arrow Plots**: Show change direction between two values
+- **Pie & Donut Charts**: Part-to-whole visualizations
+- **Election Donuts**: Parliament-style seat distribution charts
+- **Tables**: Formatted data tables
+- **Maps**: GeoJSON visualization (symbol maps, choropleth)
 - **Smart Defaults**: Automatic titles, labels, and axes from data structure
 - **Provenance Tracking**: JSON log of created charts with source dataset links
 
@@ -71,13 +80,35 @@ Create a data visualization using Datawrapper.
 
 **Parameters**:
 - `data` (required): Array of objects or GeoJSON FeatureCollection
-- `chart_type` (required): `'bar'`, `'line'`, or `'map'`
+- `chart_type` (required): Type of visualization (see below)
+- `variant` (optional): Chart variant for bar/column charts
+- `map_type` (required for maps): `'d3-maps-symbols'` or `'d3-maps-choropleth'`
 - `title` (optional): Chart title (auto-generated if omitted)
 - `description` (optional): Chart description/byline
 - `source_dataset_id` (optional): Berlin dataset ID for tracking
 
-**Example**:
+**Supported Chart Types**:
+
+| Type | Variants | Description |
+|------|----------|-------------|
+| `bar` | basic, stacked, split | Horizontal bar charts |
+| `column` | basic, grouped, stacked | Vertical column charts |
+| `line` | - | Line charts |
+| `area` | - | Area charts |
+| `scatter` | - | Scatter plots (requires 2+ numeric columns) |
+| `dot` | - | Dot plots with legend |
+| `range` | - | Range plots (requires 2 numeric columns) |
+| `arrow` | - | Arrow plots (requires 2 numeric columns) |
+| `pie` | - | Pie charts |
+| `donut` | - | Donut charts |
+| `election-donut` | - | Election/parliament donut charts |
+| `table` | - | Data tables |
+| `map` | - | GeoJSON maps (requires map_type) |
+
+**Examples**:
+
 ```javascript
+// Basic bar chart
 {
   data: [
     { district: "Mitte", population: 380000 },
@@ -86,12 +117,50 @@ Create a data visualization using Datawrapper.
   chart_type: "bar",
   title: "Population by District"
 }
+
+// Stacked column chart
+{
+  data: [
+    { year: "2020", online: 45, offline: 30 },
+    { year: "2021", online: 55, offline: 25 }
+  ],
+  chart_type: "column",
+  variant: "stacked"
+}
+
+// Range plot (shows salary gap)
+{
+  data: [
+    { category: "Berlin", Women: 52000, Men: 61000 },
+    { category: "Munich", Women: 48000, Men: 58000 }
+  ],
+  chart_type: "range"
+}
+
+// Scatter plot
+{
+  data: [
+    { city: "Berlin", population: 3.6, area: 891 },
+    { city: "Munich", population: 1.5, area: 310 }
+  ],
+  chart_type: "scatter"
+}
+```
+
+## Testing
+
+```bash
+# Run unit tests
+npm test
+
+# Run live API tests (creates actual charts in Datawrapper)
+npm run build && node dist/tests/test-chart-types.js
 ```
 
 ## Documentation
 
 - [Design Specification](docs/plans/design-spec.md) - Complete design and architecture
-- [Implementation Plan](docs/plans/implementation-plan.md) - Step-by-step implementation guide
+- [Implementation Plan](docs/plans/implementation-plan-extended-charts.md) - Extended chart types implementation
 
 ## Project Structure
 
@@ -100,9 +169,13 @@ datawrapper-mcp/
 ├── src/
 │   ├── index.ts              # MCP server entry point
 │   ├── datawrapper-client.ts # Datawrapper API wrapper
-│   ├── chart-builder.ts      # Smart defaults engine
+│   ├── chart-builder.ts      # Smart defaults engine & validation
 │   ├── chart-logger.ts       # Chart provenance logging
 │   └── types.ts              # TypeScript interfaces
+├── src/tests/
+│   ├── chart-builder.test.ts # Unit tests for chart builder
+│   ├── index.test.ts         # Integration tests
+│   └── test-chart-types.ts   # Live API tests
 ├── dist/                     # Compiled JavaScript
 ├── docs/plans/               # Design documents
 ├── charts-log.json          # Created charts log (generated)

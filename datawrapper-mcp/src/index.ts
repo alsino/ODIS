@@ -15,6 +15,30 @@ import { ChartBuilder } from './chart-builder.js';
 import { ChartLogger } from './chart-logger.js';
 import { CreateVisualizationParams, ChartType, ChartVariant, GeoJSON } from './types.js';
 
+/**
+ * Get default visualize settings for chart types that need them
+ */
+function getDefaultVisualizeSettings(chartType: ChartType): Record<string, any> {
+  switch (chartType) {
+    case 'range':
+    case 'arrow':
+      return {
+        'show-value-labels': true,
+        'range-value-labels': 'both',
+        'label-first-range': true,
+      };
+    case 'dot':
+      return {
+        'show-value-labels': true,
+        'range-value-labels': 'both',
+        'label-first-range': true,
+        'show-color-key': true,
+      };
+    default:
+      return {};
+  }
+}
+
 // Load environment variables
 dotenv.config();
 
@@ -149,12 +173,16 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     // Get Datawrapper chart type
     const dwChartType = chart_type === 'map' ? map_type! : chartBuilder.getDatawrapperType(chart_type, variant);
 
+    // Get chart-type-specific visualize settings
+    const typeSpecificSettings = getDefaultVisualizeSettings(chart_type);
+
     // Create initial chart metadata with clean, modern styling
     const metadata: any = {
       visualize: {
         'base-color': '#2A7FFF',
         'thick': false,  // Moderate bar thickness for cleaner look
-        'value-label-format': '0,0.[00]'  // Clean number formatting
+        'value-label-format': '0,0.[00]',  // Clean number formatting
+        ...typeSpecificSettings,  // Add type-specific settings (labels for range/arrow/dot)
       },
       publish: chart_type === 'map' ? {
         'embed-width': 600,
