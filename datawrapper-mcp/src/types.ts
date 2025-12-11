@@ -1,16 +1,44 @@
 // ABOUTME: TypeScript type definitions for Datawrapper MCP server
 // ABOUTME: Includes interfaces for chart types, API responses, and configuration
 
-export type ChartType = 'bar' | 'line' | 'map';
+export type ChartType =
+  | 'bar'
+  | 'column'
+  | 'line'
+  | 'area'
+  | 'scatter'
+  | 'dot'
+  | 'range'
+  | 'arrow'
+  | 'pie'
+  | 'donut'
+  | 'election-donut'
+  | 'table'
+  | 'map';
+
+export type ChartVariant = 'basic' | 'stacked' | 'grouped' | 'split';
+
 export type MapType = 'd3-maps-choropleth' | 'd3-maps-symbols';
 
 export interface CreateVisualizationParams {
   data: Array<Record<string, any>> | GeoJSON;
   chart_type: ChartType;
+  variant?: ChartVariant;
   map_type?: MapType;
   title?: string;
   description?: string;
   source_dataset_id?: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+export interface ColumnAnalysis {
+  categorical: string[];
+  numeric: string[];
+  date: string[];
 }
 
 export interface GeoJSON {

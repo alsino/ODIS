@@ -1,9 +1,200 @@
 // ABOUTME: Chart builder with smart defaults for Datawrapper visualizations
 // ABOUTME: Infers chart configuration from data and generates titles, axes, and labels
 
-import { ChartType, ChartConfig, GeoJSON } from './types.js';
+import { ChartType, ChartVariant, ChartConfig, GeoJSON, ValidationResult, ColumnAnalysis } from './types.js';
+
+// Map our interface to Datawrapper type strings
+const DATAWRAPPER_TYPE_MAP: Record<string, Record<string, string>> = {
+  bar: {
+    basic: 'd3-bars',
+    stacked: 'd3-bars-stacked',
+    split: 'd3-bars-split',
+  },
+  column: {
+    basic: 'column-chart',
+    grouped: 'grouped-column-chart',
+    stacked: 'stacked-column-chart',
+  },
+  line: {
+    basic: 'd3-lines',
+  },
+  area: {
+    basic: 'd3-area',
+  },
+  scatter: {
+    basic: 'd3-scatter-plot',
+  },
+  dot: {
+    basic: 'd3-dot-plot',
+  },
+  range: {
+    basic: 'd3-range-plot',
+  },
+  arrow: {
+    basic: 'd3-arrow-plot',
+  },
+  pie: {
+    basic: 'd3-pies',
+  },
+  donut: {
+    basic: 'd3-donuts',
+  },
+  'election-donut': {
+    basic: 'election-donut-chart',
+  },
+  table: {
+    basic: 'tables',
+  },
+};
 
 export class ChartBuilder {
+  /**
+   * Get Datawrapper type string from our chart_type and variant
+   */
+  getDatawrapperType(chartType: ChartType, variant?: ChartVariant): string {
+    const typeMap = DATAWRAPPER_TYPE_MAP[chartType];
+    if (!typeMap) {
+      throw new Error(`Unknown chart type: ${chartType}`);
+    }
+
+    const v = variant || 'basic';
+    const dwType = typeMap[v];
+    if (!dwType) {
+      throw new Error(`Invalid variant '${v}' for chart type '${chartType}'`);
+    }
+
+    return dwType;
+  }
+
+  /**
+   * Analyze column types in data
+   */
+  analyzeColumns(data: Array<Record<string, any>>): ColumnAnalysis {
+    const result: ColumnAnalysis = { categorical: [], numeric: [], date: [] };
+
+    if (data.length === 0) {
+      return result;
+    }
+
+    const sample = data[0];
+
+    for (const [key, value] of Object.entries(sample)) {
+      if (typeof value === 'number') {
+        result.numeric.push(key);
+      } else if (typeof value === 'string' && !isNaN(Date.parse(value)) && value.includes('-')) {
+        result.date.push(key);
+      } else {
+        result.categorical.push(key);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Validate data against chart type requirements
+   */
+  validateDataForChartType(
+    data: Array<Record<string, any>>,
+    chartType: ChartType,
+    variant?: ChartVariant
+  ): ValidationResult {
+    const cols = this.analyzeColumns(data);
+
+    switch (chartType) {
+      case 'bar':
+      case 'column':
+        if (cols.numeric.length === 0) {
+          return {
+            valid: false,
+            error: `❌ Cannot create ${chartType} chart: No numeric columns found.\nFound: ${cols.categorical.length} categorical columns (${cols.categorical.join(', ')}).\nHint: Data must contain at least one numeric column for visualization.`
+          };
+        }
+        if ((variant === 'stacked' || variant === 'grouped') && cols.numeric.length < 2) {
+          return {
+            valid: false,
+            error: `❌ Cannot create ${variant} ${chartType}: Requires 2+ numeric columns.\nFound: ${cols.numeric.length} numeric column (${cols.numeric.join(', ')}).\nHint: Add more numeric columns, or use 'basic' variant.`
+          };
+        }
+        if (variant === 'split' && cols.numeric.length !== 2) {
+          return {
+            valid: false,
+            error: `❌ Cannot create split ${chartType}: Requires exactly 2 numeric columns.\nFound: ${cols.numeric.length} numeric columns (${cols.numeric.join(', ')}).\nHint: Data should have one column per side of the split.`
+          };
+        }
+        break;
+
+      case 'line':
+      case 'area':
+        if (cols.numeric.length === 0) {
+          return {
+            valid: false,
+            error: `❌ Cannot create ${chartType} chart: No numeric columns found.\nFound: ${cols.categorical.length} categorical columns.\nHint: Data must contain at least one numeric column.`
+          };
+        }
+        break;
+
+      case 'scatter':
+        if (cols.numeric.length < 2) {
+          return {
+            valid: false,
+            error: `❌ Cannot create scatter plot: Requires at least 2 numeric columns.\nFound: ${cols.numeric.length} numeric column(s) (${cols.numeric.join(', ')}), ${cols.categorical.length} categorical column(s) (${cols.categorical.join(', ')}).\nHint: Need two numeric columns for x and y axes.`
+          };
+        }
+        break;
+
+      case 'dot':
+        if (cols.numeric.length === 0) {
+          return {
+            valid: false,
+            error: `❌ Cannot create dot plot: Requires at least 1 numeric column.\nFound: ${cols.categorical.length} categorical columns only.\nHint: Data should have [category, value] structure.`
+          };
+        }
+        break;
+
+      case 'range':
+        if (cols.numeric.length < 2) {
+          return {
+            valid: false,
+            error: `❌ Cannot create range plot: Requires at least 2 numeric columns for start/end values.\nFound: ${cols.numeric.length} numeric column(s).\nHint: Data should have columns like [category, start_value, end_value].`
+          };
+        }
+        break;
+
+      case 'arrow':
+        if (cols.numeric.length < 2) {
+          return {
+            valid: false,
+            error: `❌ Cannot create arrow plot: Requires at least 2 numeric columns for from/to values.\nFound: ${cols.numeric.length} numeric column(s).\nHint: Data should have columns like [category, from_value, to_value].`
+          };
+        }
+        break;
+
+      case 'pie':
+      case 'donut':
+      case 'election-donut':
+        if (cols.numeric.length === 0) {
+          return {
+            valid: false,
+            error: `❌ Cannot create ${chartType}: Requires 1 categorical + 1 numeric column.\nFound: ${cols.categorical.length} categorical, ${cols.numeric.length} numeric.\nHint: Data should have [label, value] structure.`
+          };
+        }
+        if (cols.categorical.length === 0) {
+          return {
+            valid: false,
+            error: `❌ Cannot create ${chartType}: Requires 1 categorical column for labels.\nFound: ${cols.numeric.length} numeric columns only.\nHint: Add a column with category/label names.`
+          };
+        }
+        break;
+
+      case 'table':
+        // Tables accept any data structure
+        break;
+    }
+
+    return { valid: true };
+  }
+
   /**
    * Infer chart configuration from data
    */

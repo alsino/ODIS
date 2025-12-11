@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "test": "npm run build && node dist/tests/test-map-creation.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:map": "npm run build && node dist/tests/test-map-creation.js"
   },
   "keywords": [],
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }
