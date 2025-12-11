@@ -9,12 +9,39 @@ The Datawrapper MCP server enables automatic visualization of Berlin open data b
 1. **Standalone in Claude Desktop**: Users can create charts directly through Claude Desktop by providing data. Charts render inline as embedded iframes.
 2. **Integrated Pipeline**: Works seamlessly with berlin-open-data-mcp in the interface-prototype, enabling conversational data visualization.
 
-### MVP Scope
+### Supported Chart Types
 
-**Chart Types**:
-- Bar charts (vertical/horizontal)
-- Line charts (single/multi-series)
-- Basic maps (GeoJSON visualization)
+**Bar Charts** (horizontal):
+- Basic bar (`d3-bars`)
+- Stacked bar (`d3-bars-stacked`)
+- Split bar (`d3-bars-split`)
+
+**Column Charts** (vertical):
+- Basic column (`column-chart`)
+- Grouped column (`grouped-column-chart`)
+- Stacked column (`stacked-column-chart`)
+
+**Line & Area**:
+- Line chart (`d3-lines`)
+- Area chart (`d3-area`)
+
+**Distribution/Comparison**:
+- Scatter plot (`d3-scatter-plot`)
+- Dot plot (`d3-dot-plot`)
+- Range plot (`d3-range-plot`)
+- Arrow plot (`d3-arrow-plot`)
+
+**Part-to-Whole**:
+- Pie chart (`d3-pies`)
+- Donut chart (`d3-donuts`)
+- Election donut (`election-donut-chart`)
+
+**Data Display**:
+- Table (`tables`)
+
+**Maps**:
+- Symbol map (`d3-maps-symbols`)
+- Choropleth map (`d3-maps-choropleth`)
 
 **Key Features**:
 - Direct JSON data input (array of objects)
@@ -22,13 +49,16 @@ The Datawrapper MCP server enables automatic visualization of Berlin open data b
 - GeoJSON support for maps (aligning with berlin-open-data-mcp WFS output)
 - Automatic chart publishing (all charts publicly accessible)
 - Simple provenance tracking (JSON log with source dataset links)
+- Strict data validation with clear error messages
 
-**Out of Scope for MVP**:
+**Out of Scope**:
 - Chart editing/updating after creation
 - Chart deletion
 - Manual styling/customization
 - Non-GeoJSON map formats
 - Private/draft charts
+- Bullet bars
+- Multiple pies/donuts
 
 ---
 
@@ -71,7 +101,8 @@ The Datawrapper MCP server enables automatic visualization of Berlin open data b
     url: string;
     embedCode: string;
     editUrl: string;
-    chartType: 'bar' | 'line' | 'map';
+    chartType: string;  // Datawrapper type string
+    variant?: string;   // For bar/column variants
     title: string;
     createdAt: string; // ISO timestamp
     sourceDatasetId?: string; // Berlin dataset ID
@@ -92,7 +123,8 @@ Create a data visualization using the Datawrapper API.
 ```typescript
 {
   data: Array<Record<string, any>> | GeoJSON;  // Required: Array of data objects or GeoJSON
-  chart_type: 'bar' | 'line' | 'map';          // Required: Type of visualization
+  chart_type: 'bar' | 'column' | 'line' | 'area' | 'scatter' | 'dot' | 'range' | 'arrow' | 'pie' | 'donut' | 'election-donut' | 'table' | 'map';
+  variant?: 'basic' | 'stacked' | 'grouped' | 'split';  // For bar/column charts
   map_type?: 'd3-maps-symbols' | 'd3-maps-choropleth'; // Required when chart_type is 'map'
   title?: string;                              // Optional: Chart title (auto-generated if omitted)
   description?: string;                        // Optional: Chart description/byline
@@ -100,27 +132,85 @@ Create a data visualization using the Datawrapper API.
 }
 ```
 
+**Variant Options**:
+- `bar`: basic (default), stacked, split
+- `column`: basic (default), grouped, stacked
+
 **Map Types** (when `chart_type` is "map"):
 - `d3-maps-symbols`: Show point locations on a map (works with or without numeric data for marker sizing)
 - `d3-maps-choropleth`: Compare data across regions with color fills (e.g., "show population density by district")
+
+**Datawrapper Type Mapping**:
+
+| chart_type | variant | Datawrapper type |
+|------------|---------|------------------|
+| `bar` | basic | `d3-bars` |
+| `bar` | stacked | `d3-bars-stacked` |
+| `bar` | split | `d3-bars-split` |
+| `column` | basic | `column-chart` |
+| `column` | grouped | `grouped-column-chart` |
+| `column` | stacked | `stacked-column-chart` |
+| `line` | - | `d3-lines` |
+| `area` | - | `d3-area` |
+| `scatter` | - | `d3-scatter-plot` |
+| `dot` | - | `d3-dot-plot` |
+| `range` | - | `d3-range-plot` |
+| `arrow` | - | `d3-arrow-plot` |
+| `pie` | - | `d3-pies` |
+| `donut` | - | `d3-donuts` |
+| `election-donut` | - | `election-donut-chart` |
+| `table` | - | `tables` |
+| `map` | symbols | `d3-maps-symbols` |
+| `map` | choropleth | `d3-maps-choropleth` |
 
 **Note on Locator Maps**: Datawrapper's `locator-map` type is not currently supported because it requires a different data format (markers array instead of GeoJSON). For showing point locations, use `d3-maps-symbols` which accepts GeoJSON and serves the same purpose. See "Future Enhancements" section for details on implementing locator-map support if needed.
 
 **Example Usage**:
 ```javascript
-// Bar chart from district data
+// Basic bar chart
 {
   data: [
     { district: "Mitte", population: 380000 },
-    { district: "Pankow", population: 410000 },
-    { district: "Friedrichshain-Kreuzberg", population: 290000 }
+    { district: "Pankow", population: 410000 }
   ],
   chart_type: "bar",
-  title: "Population by District",
-  source_dataset_id: "einwohnerzahl-berlin"
+  title: "Population by District"
 }
 
-// Symbol map - Show point locations (with optional numeric data)
+// Stacked column chart
+{
+  data: [
+    { year: "2020", male: 1800000, female: 1900000 },
+    { year: "2021", male: 1820000, female: 1910000 }
+  ],
+  chart_type: "column",
+  variant: "stacked",
+  title: "Population by Gender"
+}
+
+// Scatter plot
+{
+  data: [
+    { income: 35000, rent: 800 },
+    { income: 45000, rent: 1100 },
+    { income: 55000, rent: 1400 }
+  ],
+  chart_type: "scatter",
+  title: "Income vs Rent"
+}
+
+// Pie chart
+{
+  data: [
+    { party: "SPD", seats: 36 },
+    { party: "CDU", seats: 30 },
+    { party: "Grüne", seats: 32 }
+  ],
+  chart_type: "pie",
+  title: "Berlin Parliament 2021"
+}
+
+// Symbol map
 {
   data: {
     type: "FeatureCollection",
@@ -151,14 +241,16 @@ Create a data visualization using the Datawrapper API.
 ```
 
 **Workflow**:
-1. For maps: Claude asks user about visualization intent and determines map_type
-2. Validate input data, chart type, and map_type (if applicable)
-3. Apply smart defaults (title, axes, labels, bounding box)
-4. Create chart via Datawrapper API
-5. Upload formatted data (with stripped GeoJSON properties for maps)
-6. Publish chart publicly
-7. Log to charts-log.json
-8. Return iframe embed + URLs + sample feature (for maps)
+1. Claude analyzes data structure + user intent
+2. Claude recommends chart type with reasoning
+3. User confirms or adjusts
+4. Tool validates strictly - if data doesn't match, Claude uses `execute_code` to reshape it
+5. Apply smart defaults (title, axes, labels, bounding box)
+6. Create chart via Datawrapper API
+7. Upload formatted data (with stripped GeoJSON properties for maps)
+8. Publish chart publicly
+9. Log to charts-log.json
+10. Return iframe embed + URLs + sample feature (for maps)
 
 ---
 
@@ -176,7 +268,41 @@ Create a data visualization using the Datawrapper API.
 - Dataset: "Einwohnerzahl nach Bezirken" → Title: "Einwohnerzahl nach Bezirken"
 - Data with column "bezirk" → Title: "Bezirk Overview"
 
-### Bar & Line Charts
+### Data Requirements by Chart Type
+
+Each chart type has specific data requirements. The tool validates strictly and returns clear errors if requirements aren't met.
+
+**Bar/Column Charts**:
+- `basic`: 1 categorical column + 1+ numeric columns
+- `stacked/grouped`: 1 categorical column + 2+ numeric columns (or 1 numeric + 1 grouping column)
+- `split`: 1 categorical column + 2 numeric columns (one per side)
+
+**Line/Area Charts**:
+- 1 categorical/date column + 1+ numeric columns
+
+**Scatter Plot**:
+- 2 numeric columns (x, y)
+- Optional: categorical column for color grouping, numeric column for size
+
+**Dot Plot**:
+- 1 categorical column + 1 numeric column
+
+**Range Plot**:
+- 1 categorical column + 2 numeric columns (start, end values)
+
+**Arrow Plot**:
+- 1 categorical column + 2 numeric columns (from, to values)
+
+**Pie/Donut**:
+- 1 categorical column (labels) + 1 numeric column (values)
+
+**Election Donut**:
+- 1 categorical column (party names) + 1 numeric column (votes/seats)
+
+**Table**:
+- Any columns - renders as-is
+
+### Bar, Column, Line & Area Charts
 
 **Axis Detection**:
 - **X-axis (categorical)**: First column with string/date values
@@ -265,10 +391,56 @@ Create a data visualization using the Datawrapper API.
 - **Empty data**: Return error with clear message
 - **Invalid chart type**: Return error listing valid types
 
-### Bar & Line Charts
+### Validation Error Messages
+
+When data doesn't match chart type requirements, the tool returns clear errors that help Claude know what to fix via `execute_code`.
+
+**Examples**:
+
+```
+❌ Cannot create scatter plot: Requires at least 2 numeric columns.
+Found: 1 numeric column (population), 2 string columns (district, name).
+Hint: Need two numeric columns for x and y axes.
+```
+
+```
+❌ Cannot create range plot: Requires exactly 2 numeric columns for start/end values.
+Found: 1 numeric column (value).
+Hint: Data should have columns like [category, start_value, end_value].
+```
+
+```
+❌ Cannot create pie chart: Requires 1 categorical + 1 numeric column.
+Found: 3 numeric columns (revenue, expenses, profit).
+Hint: Aggregate or select one numeric column for the values.
+```
+
+```
+❌ Cannot create stacked bar: Requires 2+ numeric columns or a grouping column.
+Found: 1 categorical column (district), 1 numeric column (count).
+Hint: Add more numeric columns, or restructure data with a grouping column.
+```
+
+### Bar & Column Charts
 - **Required**: At least one numeric column
 - **Warning**: If >20 categories, suggest grouping or filtering
 - **Error**: All columns are strings (no numeric data)
+- **Variant validation**: stacked/grouped requires 2+ numeric columns
+
+### Scatter Plot
+- **Required**: At least 2 numeric columns
+- **Error**: Less than 2 numeric columns found
+
+### Range & Arrow Plots
+- **Required**: Exactly 2 numeric columns (start/end or from/to)
+- **Error**: Wrong number of numeric columns
+
+### Pie, Donut & Election Donut
+- **Required**: Exactly 1 categorical + 1 numeric column
+- **Error**: Multiple numeric columns (suggest aggregation)
+
+### Table
+- **No validation**: Any data structure accepted
 
 ### Maps
 - **Required**: Valid GeoJSON structure
@@ -484,20 +656,13 @@ Maps require GeoJSON FeatureCollection format.
 - Annotation support (markers, text labels)
 - Chart templates/presets
 
-### Phase 4: Additional Chart Types
-- Pie charts
-- Scatter plots
-- Area charts
-- Stacked bar charts
-- Grouped bar charts
-
-### Phase 5: Advanced Maps
+### Phase 4: Advanced Maps
 - Address geocoding
 - Multiple layers
 - Custom basemaps
 - Interactive filters
 
-### Phase 6: Locator Map Support
+### Phase 5: Locator Map Support
 
 **Why Not Currently Supported**:
 Datawrapper's `locator-map` type requires a different data format than symbol and choropleth maps:
@@ -581,30 +746,41 @@ datawrapper-mcp/
 
 ## Success Metrics
 
-### MVP Completion Criteria
-- ✅ All 3 chart types working (bar, line, map)
+### Completion Criteria
+- ✅ All chart types working (bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, map)
+- ✅ All variants working (basic, stacked, grouped, split)
 - ✅ Smart defaults generate sensible visualizations
 - ✅ Charts render in Claude Desktop
 - ✅ Integration with interface-prototype complete
 - ✅ Chart logging tracks provenance
-- ✅ 3+ real Berlin dataset examples documented
+- ✅ Strict validation with clear error messages
 
 ### Quality Metrics
 - API calls succeed >95% of time
 - Charts generated in <5 seconds
 - Smart defaults produce usable charts without manual intervention in >90% of cases
 - GeoJSON maps render correctly for all Berlin WFS datasets
+- Validation errors provide actionable hints for data reshaping
 
 ---
 
-## Timeline Estimate
+## Implementation Scope
 
-- **Phase 1** (Core Infrastructure): 2-3 days
-- **Phase 2** (Chart Types): 3-4 days
-- **Phase 3** (Integration): 2-3 days
-- **Testing & Documentation**: 2 days
+### Files to Modify
 
-**Total**: ~10-12 days for MVP
+1. **`src/index.ts`** - Update tool schema with new chart types and variants, add type mapping logic
+
+2. **`src/chart-builder.ts`** - Add validation and smart defaults for each chart type:
+   - `inferChartConfig()` - extend for scatter, dot, range, arrow, pie, donut, election-donut, table
+   - `validateDataForChartType()` - strict validation with clear error messages
+   - `formatForDatawrapper()` - extend for new chart types if needed
+
+3. **`src/types.ts`** - Update TypeScript interfaces for new chart types and variants
+
+### No Changes Needed
+
+- `src/datawrapper-client.ts` - already generic (creates any chart type)
+- `src/chart-logger.ts` - already logs any chart type
 
 ---
 
