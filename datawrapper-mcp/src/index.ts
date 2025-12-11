@@ -13,7 +13,7 @@ import * as dotenv from 'dotenv';
 import { DatawrapperClient } from './datawrapper-client.js';
 import { ChartBuilder } from './chart-builder.js';
 import { ChartLogger } from './chart-logger.js';
-import { CreateVisualizationParams, ChartType, GeoJSON } from './types.js';
+import { CreateVisualizationParams, ChartType, ChartVariant, GeoJSON } from './types.js';
 
 // Load environment variables
 dotenv.config();
@@ -44,16 +44,10 @@ const server = new Server(
   }
 );
 
-// Map chart types to Datawrapper chart type identifiers
-const CHART_TYPE_MAP: Record<string, string> = {
-  bar: 'd3-bars-stacked',
-  line: 'd3-lines'
-};
-
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar charts, line charts, and maps (GeoJSON). **For maps, map_type is REQUIRED**: If the user has not already specified which type of map they want, ask them ONCE to choose between: (1) "d3-maps-symbols" for point locations, or (2) "d3-maps-choropleth" for region comparison. Once the user has indicated their choice (even if they just say "option 1" or similar), proceed immediately with that choice - do NOT ask again.',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: Ask once to choose between "d3-maps-symbols" (points) or "d3-maps-choropleth" (regions).',
   inputSchema: {
     type: 'object',
     properties: {
@@ -77,8 +71,13 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       },
       chart_type: {
         type: 'string',
-        enum: ['bar', 'line', 'map'],
+        enum: ['bar', 'column', 'line', 'area', 'scatter', 'dot', 'range', 'arrow', 'pie', 'donut', 'election-donut', 'table', 'map'],
         description: 'Type of visualization to create'
+      },
+      variant: {
+        type: 'string',
+        enum: ['basic', 'stacked', 'grouped', 'split'],
+        description: 'Chart variant. For bar: basic (default), stacked, split. For column: basic (default), grouped, stacked. Other chart types use basic only.'
       },
       map_type: {
         type: 'string',
@@ -125,21 +124,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  */
 async function handleCreateVisualization(params: CreateVisualizationParams) {
   try {
-    const { data, chart_type, map_type, title, description, source_dataset_id } = params;
+    const { data, chart_type, variant, map_type, title, description, source_dataset_id } = params;
 
     // Validate map_type is provided for maps
     if (chart_type === 'map' && !map_type) {
       throw new Error('map_type is required when chart_type is "map". Ask the user to choose: (1) "d3-maps-symbols" for point locations, or (2) "d3-maps-choropleth" for region comparison.');
     }
 
-    // Validate data
-    chartBuilder.validateData(data, chart_type);
+    // Validate data structure for the chart type
+    if (chart_type !== 'map') {
+      const dataArray = data as Array<Record<string, any>>;
+      const validation = chartBuilder.validateDataForChartType(dataArray, chart_type, variant);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+    } else {
+      // For maps, use the existing validation
+      chartBuilder.validateData(data, chart_type);
+    }
 
     // Infer chart configuration
     const config = chartBuilder.inferChartConfig(data, chart_type, title);
 
     // Get Datawrapper chart type
-    const dwChartType = chart_type === 'map' ? map_type! : CHART_TYPE_MAP[chart_type];
+    const dwChartType = chart_type === 'map' ? map_type! : chartBuilder.getDatawrapperType(chart_type, variant);
 
     // Create initial chart metadata with clean, modern styling
     const metadata: any = {
@@ -165,7 +173,7 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     }
 
     // Add chart-specific configuration
-    if (chart_type === 'bar' || chart_type === 'line') {
+    if (['bar', 'column', 'line', 'area'].includes(chart_type)) {
       if (config.xAxis) {
         metadata.axes = {
           x: config.xAxis
@@ -180,7 +188,8 @@ async function handleCreateVisualization(params: CreateVisualizationParams) {
     }
 
     // Create chart
-    const chartTypeLabel = chart_type === 'map' ? `${map_type} map` : `${chart_type} chart`;
+    const variantLabel = variant && variant !== 'basic' ? ` (${variant})` : '';
+    const chartTypeLabel = chart_type === 'map' ? `${map_type} map` : `${chart_type}${variantLabel} chart`;
     console.error(`Creating ${chartTypeLabel}...`);
     const chart = await datawrapperClient.createChart(dwChartType, metadata);
 
