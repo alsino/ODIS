@@ -11,17 +11,25 @@ This repository contains multiple components:
 ### `/berlin-open-data-mcp`
 
 MCP server for natural language discovery and fetching of Berlin's open datasets. Connects to the Berlin Open Data Portal (daten.berlin.de) and enables:
-- Natural language dataset search
+- Natural language dataset search with smart query expansion
 - Data fetching with smart sampling for large datasets
-- CSV, JSON, Excel, and WFS (Web Feature Service) support
+- Format support: CSV, JSON, Excel (XLS/XLSX), GeoJSON, KML, and WFS
 - GeoJSON coordinate transformation (EPSG:25833 → WGS84)
+- ZIP archive detection (provides direct download URLs)
 - Browser automation for JavaScript-rendered downloads
 
 See [berlin-open-data-mcp/README.md](berlin-open-data-mcp/README.md) for details.
 
 ### `/datawrapper-mcp`
 
-*(Planned)* MCP server for creating visualizations using the Datawrapper API. Will enable automatic chart generation from Berlin open data.
+MCP server for creating data visualizations using the Datawrapper API. Enables automatic chart creation from Berlin open data through conversational AI:
+- Bar charts (vertical/horizontal)
+- Line charts (single and multi-series)
+- Maps (GeoJSON visualization with automatic Berlin bounds)
+- Smart defaults for titles, labels, and axes
+- Provenance tracking with source dataset links
+
+See [datawrapper-mcp/README.md](datawrapper-mcp/README.md) for setup and API token configuration.
 
 ### `/interface-prototype`
 
