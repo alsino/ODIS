@@ -13,7 +13,8 @@ import * as dotenv from 'dotenv';
 import { DatawrapperClient } from './datawrapper-client.js';
 import { ChartBuilder } from './chart-builder.js';
 import { ChartLogger } from './chart-logger.js';
-import { CreateVisualizationParams, ChartType, ChartVariant, GeoJSON } from './types.js';
+import { CreateVisualizationParams, ChartType, ChartVariant, GeoJSON, BerlinBasemap } from './types.js';
+import { BasemapMatcher } from './basemap-matcher.js';
 
 /**
  * Get default visualize settings for chart types that need them
@@ -77,6 +78,7 @@ if (!DATAWRAPPER_API_TOKEN) {
 const datawrapperClient = new DatawrapperClient(DATAWRAPPER_API_TOKEN);
 const chartBuilder = new ChartBuilder();
 const chartLogger = new ChartLogger(CHART_LOG_PATH);
+const basemapMatcher = new BasemapMatcher();
 
 // Create MCP server
 const server = new Server(
@@ -94,12 +96,12 @@ const server = new Server(
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: Ask once to choose between "d3-maps-symbols" (points) or "d3-maps-choropleth" (regions).',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: "d3-maps-symbols" (points with GeoJSON) or "d3-maps-choropleth" (regions with tabular data). **For choropleth maps**: provide tabular data with Berlin region identifiers (Bezirke, Prognoseräume, Bezirksregionen, or Planungsräume). If basemap is not specified, the tool will auto-detect and return available options.',
   inputSchema: {
     type: 'object',
     properties: {
       data: {
-        description: 'Array of data objects or GeoJSON FeatureCollection for maps',
+        description: 'Array of data objects. For choropleth maps: tabular data with region IDs/names. For symbol maps: GeoJSON FeatureCollection.',
         oneOf: [
           {
             type: 'array',
@@ -124,12 +126,25 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       variant: {
         type: 'string',
         enum: ['basic', 'stacked', 'grouped', 'split'],
-        description: 'Chart variant. For bar: basic (default), stacked, split. For column: basic (default), grouped, stacked. Other chart types use basic only.'
+        description: 'Chart variant. For bar: basic (default), stacked, split. For column: basic (default), grouped, stacked.'
       },
       map_type: {
         type: 'string',
         enum: ['d3-maps-symbols', 'd3-maps-choropleth'],
-        description: 'REQUIRED when chart_type is "map". Choose "d3-maps-symbols" for showing point locations, or "d3-maps-choropleth" for comparing data across regions with color fills.'
+        description: 'REQUIRED when chart_type is "map". "d3-maps-symbols" for point locations (requires GeoJSON), "d3-maps-choropleth" for region comparison (requires tabular data with Berlin region identifiers).'
+      },
+      basemap: {
+        type: 'string',
+        enum: ['berlin-boroughs', 'berlin-prognoseraume-2021', 'berlin-bezreg-2021', 'berlin-planungsraeume-2021'],
+        description: 'For choropleth maps: explicitly select basemap. If omitted, auto-detects from data and returns options for confirmation.'
+      },
+      region_column: {
+        type: 'string',
+        description: 'For choropleth maps: column name containing region IDs or names. Auto-detected if omitted.'
+      },
+      value_column: {
+        type: 'string',
+        description: 'For choropleth maps: column name containing values to visualize. Auto-detected if omitted.'
       },
       title: {
         type: 'string',
@@ -141,7 +156,7 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
       },
       source_dataset_id: {
         type: 'string',
-        description: 'Optional Berlin dataset ID for tracking (use the dataset "name" field, not the title or UUID - e.g., "berlinopenglamdata")'
+        description: 'Optional Berlin dataset ID for tracking'
       }
     },
     required: ['data', 'chart_type']
