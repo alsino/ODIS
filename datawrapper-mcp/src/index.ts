@@ -487,11 +487,22 @@ async function handleChoroplethMap(params: CreateVisualizationParams) {
   }
 
   // Build metadata for choropleth map
+  const chartTitle = title || `${level.label} Map`;
   const metadata: any = {
-    title: title || `${level.label} Map`,
+    describe: {
+      headline: chartTitle,
+    },
     visualize: {
       basemap: basemap,
       'map-key-attr': keyAttr,
+      tooltip: {
+        body: `<b>{{ ${valueCol} }}</b>`,
+        title: `{{ ${regionCol} }}`,
+        fields: {
+          [regionCol]: regionCol,
+          [valueCol]: valueCol
+        }
+      }
     },
     axes: {
       keys: regionCol,
@@ -503,16 +514,13 @@ async function handleChoroplethMap(params: CreateVisualizationParams) {
     }
   };
 
-  // Add description and source
-  if (description || source_dataset_id) {
-    metadata.describe = {};
-    if (description) {
-      metadata.describe.intro = description;
-    }
-    if (source_dataset_id) {
-      metadata.describe['source-name'] = 'Berlin Open Data';
-      metadata.describe['source-url'] = `https://daten.berlin.de/datensaetze/${source_dataset_id}`;
-    }
+  // Add description and source (append to existing describe object)
+  if (description) {
+    metadata.describe.intro = description;
+  }
+  if (source_dataset_id) {
+    metadata.describe['source-name'] = 'Berlin Open Data';
+    metadata.describe['source-url'] = `https://daten.berlin.de/datensaetze/${source_dataset_id}`;
   }
 
   // Create chart
@@ -541,7 +549,7 @@ async function handleChoroplethMap(params: CreateVisualizationParams) {
     embedCode,
     editUrl,
     chartType: 'map',
-    title: metadata.title,
+    title: chartTitle,
     createdAt: new Date().toISOString(),
     sourceDatasetId: source_dataset_id,
     sourceDatasetUrl: source_dataset_id ? `https://daten.berlin.de/datensaetze/${source_dataset_id}` : undefined,
