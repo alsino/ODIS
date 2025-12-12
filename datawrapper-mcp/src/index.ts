@@ -63,6 +63,48 @@ function getDefaultVisualizeSettings(chartType: ChartType, variant?: ChartVarian
   }
 }
 
+/**
+ * Handle choropleth map detection - returns detection info without creating chart
+ */
+function formatDetectionResponse(detection: import('./types.js').DetectionResult): string {
+  if (!detection.detected) {
+    return `❌ Could not detect Berlin region data.
+
+Please ensure your data contains a column with one of:
+- Bezirk IDs (BEZ_ID) or names (e.g., "Mitte", "Pankow")
+- Prognoseraum IDs (PGR_ID) or names
+- Bezirksregion IDs (BZR_ID) or names
+- Planungsraum IDs (PLR_ID) or names
+
+Found columns: ${Object.keys(detection.totalRows > 0 ? {} : {}).join(', ') || 'none'}`;
+  }
+
+  const primary = detection.primaryLevel!;
+  let response = `✅ Detected Berlin ${primary.label} data
+
+**Detected level:** ${primary.label} (${primary.count} regions)
+**Region column:** ${detection.regionColumn}
+**Value column:** ${detection.valueColumn || 'none found'}
+**Match rate:** ${detection.matchedRows}/${detection.totalRows} rows`;
+
+  if (detection.unmatchedValues && detection.unmatchedValues.length > 0) {
+    response += `\n**Unmatched values:** ${detection.unmatchedValues.join(', ')}`;
+  }
+
+  if (detection.allLevels.length > 1) {
+    response += `\n\n**Available aggregation levels:**`;
+    for (const level of detection.allLevels) {
+      const isCurrent = level.basemap === primary.basemap;
+      response += `\n- ${level.label} (${level.count} regions)${isCurrent ? ' ← detected' : ' - requires aggregation'}`;
+    }
+  }
+
+  response += `\n\n**To create the map**, call again with:
+- \`basemap: "${primary.basemap}"\`${detection.allLevels.length > 1 ? ' (or choose another level)' : ''}`;
+
+  return response;
+}
+
 // Load environment variables
 dotenv.config();
 
