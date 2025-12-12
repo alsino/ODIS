@@ -20,11 +20,41 @@ export type ChartVariant = 'basic' | 'stacked' | 'grouped' | 'split';
 
 export type MapType = 'd3-maps-choropleth' | 'd3-maps-symbols';
 
+export type BerlinBasemap =
+  | 'berlin-boroughs'
+  | 'berlin-prognoseraume-2021'
+  | 'berlin-bezreg-2021'
+  | 'berlin-planungsraeume-2021';
+
+export interface LORLevel {
+  basemap: BerlinBasemap;
+  idColumn: string;        // Column name in data (e.g., 'BEZ_ID')
+  idKey: string;           // Datawrapper key attribute (e.g., 'Gemeinde_s')
+  nameColumn: string;      // Column name for names (e.g., 'BEZ')
+  nameKey: string;         // Datawrapper name key (e.g., 'Gemeinde_n')
+  label: string;           // Human-readable label (e.g., 'Bezirke')
+  count: number;           // Number of regions
+}
+
+export interface DetectionResult {
+  detected: boolean;
+  primaryLevel?: LORLevel;
+  allLevels: LORLevel[];
+  regionColumn: string;
+  valueColumn?: string;
+  matchedRows: number;
+  totalRows: number;
+  unmatchedValues?: string[];
+}
+
 export interface CreateVisualizationParams {
   data: Array<Record<string, any>> | GeoJSON;
   chart_type: ChartType;
   variant?: ChartVariant;
   map_type?: MapType;
+  basemap?: BerlinBasemap;
+  region_column?: string;
+  value_column?: string;
   title?: string;
   description?: string;
   source_dataset_id?: string;
