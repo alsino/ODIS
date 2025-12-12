@@ -228,11 +228,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  */
 async function handleCreateVisualization(params: CreateVisualizationParams) {
   try {
-    const { data, chart_type, variant, map_type, title, description, source_dataset_id } = params;
+    const { data, chart_type, variant, map_type, basemap, region_column, value_column, title, description, source_dataset_id } = params;
 
     // Validate map_type is provided for maps
     if (chart_type === 'map' && !map_type) {
-      throw new Error('map_type is required when chart_type is "map". Ask the user to choose: (1) "d3-maps-symbols" for point locations, or (2) "d3-maps-choropleth" for region comparison.');
+      throw new Error('map_type is required when chart_type is "map". Choose: (1) "d3-maps-symbols" for point locations (requires GeoJSON), or (2) "d3-maps-choropleth" for region comparison (requires tabular data with Berlin region identifiers).');
+    }
+
+    // Handle choropleth maps separately
+    if (chart_type === 'map' && map_type === 'd3-maps-choropleth') {
+      return await handleChoroplethMap(params);
     }
 
     // Validate data structure for the chart type
@@ -416,6 +421,156 @@ ${JSON.stringify(sampleFeature, null, 2)}
       isError: true
     };
   }
+}
+
+/**
+ * Handle choropleth map creation with Berlin basemaps
+ */
+async function handleChoroplethMap(params: CreateVisualizationParams) {
+  const { data, basemap, region_column, value_column, title, description, source_dataset_id } = params;
+
+  // Choropleth maps require tabular data, not GeoJSON
+  if (!Array.isArray(data)) {
+    throw new Error('Choropleth maps require tabular data (array of objects), not GeoJSON. For GeoJSON point data, use map_type: "d3-maps-symbols" instead.');
+  }
+
+  const dataArray = data as Array<Record<string, any>>;
+
+  if (dataArray.length === 0) {
+    throw new Error('Cannot create choropleth map: Data array is empty.');
+  }
+
+  // Detect available LOR levels
+  const detection = basemapMatcher.detectAvailableLevels(dataArray);
+
+  // If no basemap specified, return detection info for user confirmation
+  if (!basemap) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: formatDetectionResponse(detection)
+        }
+      ]
+    };
+  }
+
+  // Validate specified basemap
+  const level = basemapMatcher.getLevelByBasemap(basemap);
+  if (!level) {
+    throw new Error(`Unknown basemap: ${basemap}. Valid options: berlin-boroughs, berlin-prognoseraume-2021, berlin-bezreg-2021, berlin-planungsraeume-2021`);
+  }
+
+  // Determine region column
+  const regionCol = region_column || detection.regionColumn;
+  if (!regionCol) {
+    throw new Error(`Could not detect region column for ${level.label}. Please specify region_column parameter.`);
+  }
+
+  // Determine value column
+  const valueCol = value_column || detection.valueColumn;
+  if (!valueCol) {
+    throw new Error('Choropleth maps require at least one numeric column for visualization. Please specify value_column parameter.');
+  }
+
+  // Check if using IDs or names
+  const usingIds = basemapMatcher.isUsingIds(dataArray, regionCol, level);
+  const keyAttr = usingIds ? level.idKey : level.nameKey;
+
+  // Prepare data - transform region column if needed (BEZ_ID padding)
+  let processedData = dataArray;
+  if (usingIds && basemap === 'berlin-boroughs') {
+    processedData = dataArray.map(row => ({
+      ...row,
+      [regionCol]: basemapMatcher.padBezirkId(String(row[regionCol]))
+    }));
+  }
+
+  // Build metadata for choropleth map
+  const metadata: any = {
+    title: title || `${level.label} Map`,
+    visualize: {
+      basemap: basemap,
+      'map-key-attr': keyAttr,
+    },
+    axes: {
+      keys: regionCol,
+      values: valueCol
+    },
+    publish: {
+      'embed-width': 600,
+      'embed-height': 600
+    }
+  };
+
+  // Add description and source
+  if (description || source_dataset_id) {
+    metadata.describe = {};
+    if (description) {
+      metadata.describe.intro = description;
+    }
+    if (source_dataset_id) {
+      metadata.describe['source-name'] = 'Berlin Open Data';
+      metadata.describe['source-url'] = `https://daten.berlin.de/datensaetze/${source_dataset_id}`;
+    }
+  }
+
+  // Create chart
+  console.error(`Creating choropleth map with ${basemap}...`);
+  const chart = await datawrapperClient.createChart('d3-maps-choropleth', metadata);
+
+  // Convert data to CSV and upload
+  const csvData = chartBuilder.formatForDatawrapper(processedData);
+  console.error(`Uploading data (${processedData.length} rows)...`);
+  await datawrapperClient.uploadData(chart.id, csvData);
+
+  // Publish chart
+  console.error('Publishing chart...');
+  const publishedChart = await datawrapperClient.publishChart(chart.id);
+
+  // Get chart URLs
+  const publicId = publishedChart.publicId || chart.id;
+  const embedCode = datawrapperClient.getEmbedCode(publicId, 600, 600);
+  const publicUrl = datawrapperClient.getPublicUrl(publicId);
+  const editUrl = datawrapperClient.getEditUrl(chart.id);
+
+  // Log chart creation
+  chartLogger.logChart({
+    chartId: chart.id,
+    url: publicUrl,
+    embedCode,
+    editUrl,
+    chartType: 'map',
+    title: metadata.title,
+    createdAt: new Date().toISOString(),
+    sourceDatasetId: source_dataset_id,
+    sourceDatasetUrl: source_dataset_id ? `https://daten.berlin.de/datensaetze/${source_dataset_id}` : undefined,
+    dataRowCount: processedData.length
+  }).catch(err => console.error('Background logging failed:', err));
+
+  // Format response
+  const responseText = `✅ Choropleth map created successfully!
+
+[CHART:${publicId}]
+${embedCode}
+[/CHART]
+
+📊 **Chart URL**: ${publicUrl}
+✏️ **Edit**: ${editUrl}
+
+🗺️ **Basemap**: ${basemap} (${level.label})
+📍 **Region column**: ${regionCol} (using ${usingIds ? 'IDs' : 'names'})
+📈 **Value column**: ${valueCol}
+📦 **Regions**: ${processedData.length}`;
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: responseText
+      }
+    ]
+  };
 }
 
 // Start server
