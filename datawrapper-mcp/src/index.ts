@@ -375,14 +375,13 @@ export class DatawrapperMCPServer {
         dataRowCount: rowCount
       }).catch((err: Error) => console.error('Background logging failed:', err));
 
-      // Format response
-      let responseText = `✅ Chart created successfully!
+      // Format response - URL first for easy access in all clients
+      let responseText = `✅ Chart created: ${publicUrl}
 
 [CHART:${publicId}]
 ${embedCode}
 [/CHART]
 
-📊 **Chart URL**: ${publicUrl}
 ✏️ **Edit**: ${editUrl}`;
 
       if (chart_type === 'map' && sampleFeature) {
@@ -549,16 +548,14 @@ ${JSON.stringify(sampleFeature, null, 2)}
       dataRowCount: processedData.length
     }).catch((err: Error) => console.error('Background logging failed:', err));
 
-    // Format response
-    const responseText = `✅ Choropleth map created successfully!
+    // Format response - URL first for easy access in all clients
+    const responseText = `✅ Choropleth map created: ${publicUrl}
 
 [CHART:${publicId}]
 ${embedCode}
 [/CHART]
 
-📊 **Chart URL**: ${publicUrl}
 ✏️ **Edit**: ${editUrl}
-
 🗺️ **Basemap**: ${basemap} (${level.label})
 📍 **Region column**: ${regionCol} (using ${usingIds ? 'IDs' : 'names'})
 📈 **Value column**: ${valueCol}
