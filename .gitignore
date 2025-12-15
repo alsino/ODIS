@@ -5,6 +5,7 @@ dist/
 .DS_Store
 CLAUDE.md
 JOURNAL.md
+MCP-SERVER-DEPLOYMENT.md
 charts-log.json
 bugs/
 
