@@ -10,6 +10,7 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 import { DatawrapperClient } from './datawrapper-client.js';
 import { ChartBuilder } from './chart-builder.js';
 import { ChartLogger } from './chart-logger.js';
@@ -584,9 +585,13 @@ ${embedCode}
   }
 }
 
-// CLI entry point
-const server = new DatawrapperMCPServer();
-server.run().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+// CLI entry point - only runs when executed directly, not when imported
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+  const server = new DatawrapperMCPServer();
+  server.run().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}
