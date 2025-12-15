@@ -16,6 +16,45 @@ import { DatawrapperMCPServer } from '../../../datawrapper-mcp/dist/index.js';
 import { randomUUID } from 'crypto';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
+/**
+ * Strip full dataset JSON from fetch_dataset_data responses to prevent context overflow.
+ * Keeps the preview (first JSON block), removes the full dataset (last JSON block).
+ * This matches the behavior in websocket-handler.ts
+ */
+function stripFullDataFromResponse(responseBody: any): any {
+  if (!responseBody || typeof responseBody !== 'object') {
+    return responseBody;
+  }
+
+  // Handle JSON-RPC response format
+  if (responseBody.result && responseBody.result.content) {
+    const content = responseBody.result.content;
+    if (Array.isArray(content)) {
+      responseBody.result.content = content.map((item: any) => {
+        if (item.type === 'text' && typeof item.text === 'string') {
+          // Check if this looks like a fetch_dataset_data response with full JSON
+          if (item.text.includes('## Full Dataset Available') || item.text.includes('## Preview (first')) {
+            // Find all JSON blocks
+            const jsonMatches = Array.from(item.text.matchAll(/```json\n[\s\S]*?\n```/g));
+            if (jsonMatches.length > 1) {
+              // Remove the last JSON block (full data), keep preview
+              const lastMatch = jsonMatches[jsonMatches.length - 1] as RegExpMatchArray;
+              if (lastMatch.index !== undefined) {
+                item.text = item.text.substring(0, lastMatch.index) +
+                           item.text.substring(lastMatch.index + lastMatch[0].length);
+                console.log('[/mcp] Stripped full data JSON from response');
+              }
+            }
+          }
+        }
+        return item;
+      });
+    }
+  }
+
+  return responseBody;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -147,6 +186,26 @@ async function main() {
           });
           return;
         }
+
+        // Create a response interceptor to strip full data JSON
+        const originalJson = res.json.bind(res);
+        const originalSend = res.send.bind(res);
+
+        res.json = function(body: any) {
+          return originalJson(stripFullDataFromResponse(body));
+        };
+
+        res.send = function(body: any) {
+          if (typeof body === 'string') {
+            try {
+              const parsed = JSON.parse(body);
+              return originalSend(JSON.stringify(stripFullDataFromResponse(parsed)));
+            } catch {
+              return originalSend(body);
+            }
+          }
+          return originalSend(body);
+        };
 
         await transport.handleRequest(req, res, req.body);
       } catch (error) {
