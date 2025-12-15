@@ -106,7 +106,7 @@ Found columns: ${Object.keys(detection.totalRows > 0 ? {} : {}).join(', ') || 'n
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: "d3-maps-symbols" (points with GeoJSON) or "d3-maps-choropleth" (regions with tabular data). **For choropleth maps**: provide tabular data with Berlin region identifiers (Bezirke, Prognoseräume, Bezirksregionen, or Planungsräume). If basemap is not specified, the tool will auto-detect and return available options. **IMPORTANT: When presenting results to the user, always include the chart URL in your response text so they can view the visualization.**',
+  description: 'Create a data visualization using the Datawrapper API. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: "d3-maps-symbols" (points with GeoJSON) or "d3-maps-choropleth" (regions with tabular data). **For choropleth maps**: provide tabular data with Berlin region identifiers (Bezirke, Prognoseräume, Bezirksregionen, or Planungsräume). If basemap is not specified, the tool will auto-detect and return available options. **IMPORTANT: When presenting results to the user, always include the chart VIEW URL (datawrapper.dwcdn.net) in your response so they can see the visualization. The edit URL is optional.**',
   inputSchema: {
     type: 'object',
     properties: {
@@ -376,13 +376,14 @@ export class DatawrapperMCPServer {
       }).catch((err: Error) => console.error('Background logging failed:', err));
 
       // Format response - URL first for easy access in all clients
-      let responseText = `✅ Chart created: ${publicUrl}
+      let responseText = `✅ Chart created!
+
+👁️ **View**: ${publicUrl}
+✏️ **Edit**: ${editUrl}
 
 [CHART:${publicId}]
 ${embedCode}
-[/CHART]
-
-✏️ **Edit**: ${editUrl}`;
+[/CHART]`;
 
       if (chart_type === 'map' && sampleFeature) {
         responseText += `
@@ -549,13 +550,15 @@ ${JSON.stringify(sampleFeature, null, 2)}
     }).catch((err: Error) => console.error('Background logging failed:', err));
 
     // Format response - URL first for easy access in all clients
-    const responseText = `✅ Choropleth map created: ${publicUrl}
+    const responseText = `✅ Choropleth map created!
+
+👁️ **View**: ${publicUrl}
+✏️ **Edit**: ${editUrl}
 
 [CHART:${publicId}]
 ${embedCode}
 [/CHART]
 
-✏️ **Edit**: ${editUrl}
 🗺️ **Basemap**: ${basemap} (${level.label})
 📍 **Region column**: ${regionCol} (using ${usingIds ? 'IDs' : 'names'})
 📈 **Value column**: ${valueCol}
