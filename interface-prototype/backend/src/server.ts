@@ -188,8 +188,34 @@ async function main() {
         }
 
         // Create a response interceptor to strip full data JSON
+        // The transport uses SSE streaming with res.write(), so we intercept that
+        const originalWrite = res.write.bind(res);
         const originalJson = res.json.bind(res);
         const originalSend = res.send.bind(res);
+
+        res.write = function(chunk: any, ...args: any[]) {
+          if (typeof chunk === 'string' && chunk.includes('data: ')) {
+            // SSE format: "data: {...}\n\n"
+            const lines = chunk.split('\n');
+            const modifiedLines = lines.map((line: string) => {
+              if (line.startsWith('data: ')) {
+                try {
+                  const jsonStr = line.substring(6); // Remove "data: " prefix
+                  if (jsonStr.trim()) {
+                    const parsed = JSON.parse(jsonStr);
+                    const stripped = stripFullDataFromResponse(parsed);
+                    return 'data: ' + JSON.stringify(stripped);
+                  }
+                } catch {
+                  // Not valid JSON, pass through
+                }
+              }
+              return line;
+            });
+            chunk = modifiedLines.join('\n');
+          }
+          return originalWrite(chunk, ...args);
+        } as any;
 
         res.json = function(body: any) {
           return originalJson(stripFullDataFromResponse(body));
