@@ -3,7 +3,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { BerlinBasemap, LORLevel, DetectionResult } from './types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const LOR_LEVELS: LORLevel[] = [
   {
@@ -54,7 +58,8 @@ export class BasemapMatcher {
 
   private loadLORData(): void {
     try {
-      const csvPath = path.resolve(process.cwd(), 'data/LOR_2023_Übersicht-Tabelle 1.csv');
+      // Use __dirname to resolve relative to this module's location (dist/ or src/)
+      const csvPath = path.resolve(__dirname, '../data/LOR_2023_Übersicht-Tabelle 1.csv');
 
       if (!fs.existsSync(csvPath)) {
         console.error(`LOR data file not found at: ${csvPath}`);
