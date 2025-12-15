@@ -12,6 +12,7 @@ import { ClaudeClient } from './claude-client.js';
 import { WebSocketHandler } from './websocket-handler.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { BerlinOpenDataMCPServer } from '../../../berlin-open-data-mcp/dist/index.js';
+import { DatawrapperMCPServer } from '../../../datawrapper-mcp/dist/index.js';
 import { randomUUID } from 'crypto';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
@@ -22,6 +23,7 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const DATAWRAPPER_API_KEY = process.env.DATAWRAPPER_API_KEY;
+const DATAWRAPPER_MCP_AUTH_TOKEN = process.env.DATAWRAPPER_MCP_AUTH_TOKEN;
 
 if (!ANTHROPIC_API_KEY) {
   console.error('Error: ANTHROPIC_API_KEY environment variable is required');
@@ -82,6 +84,7 @@ async function main() {
 
     // Store MCP transports by session ID
     const mcpTransports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+    const datawrapperMcpTransports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
     // Streamable HTTP MCP endpoint (supports GET, POST, DELETE)
     app.all('/mcp', async (req, res) => {
@@ -161,6 +164,118 @@ async function main() {
       }
     });
 
+    // Streamable HTTP MCP endpoint for Datawrapper (with auth)
+    app.all('/datawrapper-mcp', async (req, res) => {
+      console.log(`Received ${req.method} request to /datawrapper-mcp`);
+
+      // Check authentication
+      if (DATAWRAPPER_MCP_AUTH_TOKEN) {
+        const authHeader = req.headers['authorization'];
+        const expectedToken = `Bearer ${DATAWRAPPER_MCP_AUTH_TOKEN}`;
+
+        if (!authHeader || authHeader !== expectedToken) {
+          console.log('Unauthorized request to /datawrapper-mcp');
+          res.status(401).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32001,
+              message: 'Unauthorized: Invalid or missing authentication token',
+            },
+            id: null,
+          });
+          return;
+        }
+      } else {
+        console.warn('Warning: DATAWRAPPER_MCP_AUTH_TOKEN not set - endpoint is unprotected');
+      }
+
+      // Check if DATAWRAPPER_API_KEY is configured
+      if (!DATAWRAPPER_API_KEY) {
+        res.status(503).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32002,
+            message: 'Service unavailable: Datawrapper API not configured',
+          },
+          id: null,
+        });
+        return;
+      }
+
+      try {
+        // Check for existing session ID
+        const sessionId = req.headers['mcp-session-id'] as string;
+        let transport: StreamableHTTPServerTransport | undefined;
+
+        if (sessionId && datawrapperMcpTransports[sessionId]) {
+          // Reuse existing transport
+          transport = datawrapperMcpTransports[sessionId];
+        } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+          // Create new transport for initialization
+          const newTransport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (sid) => {
+              console.log(`Datawrapper MCP session initialized with ID: ${sid}`);
+              datawrapperMcpTransports[sid] = newTransport;
+            }
+          });
+
+          // Clean up on close
+          newTransport.onclose = () => {
+            const sid = newTransport.sessionId;
+            if (sid && datawrapperMcpTransports[sid]) {
+              console.log(`Datawrapper MCP session ${sid} closed`);
+              delete datawrapperMcpTransports[sid];
+            }
+          };
+
+          // Connect to Datawrapper MCP server
+          const mcpServer = new DatawrapperMCPServer(DATAWRAPPER_API_KEY);
+          await mcpServer.connect(newTransport);
+
+          transport = newTransport;
+        } else {
+          // Invalid request
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Bad Request: No valid session ID provided',
+            },
+            id: null,
+          });
+          return;
+        }
+
+        // Handle the request
+        if (!transport) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal error: transport not initialized',
+            },
+            id: null,
+          });
+          return;
+        }
+
+        await transport.handleRequest(req, res, req.body);
+      } catch (error) {
+        console.error('Error handling Datawrapper MCP request:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal server error',
+            },
+            id: null,
+          });
+        }
+      }
+    });
+
     // Serve static files (production build of frontend)
     const frontendDistPath = path.join(__dirname, '../../frontend/dist');
     app.use(express.static(frontendDistPath));
@@ -177,6 +292,10 @@ async function main() {
       console.log(`Connected to Berlin MCP server with ${berlinMcpClient.getTools().length} tools`);
       if (datawrapperMcpClient) {
         console.log(`Connected to Datawrapper MCP server with ${datawrapperMcpClient.getTools().length} tools`);
+      }
+      console.log(`Berlin MCP endpoint available at /mcp`);
+      if (DATAWRAPPER_API_KEY) {
+        console.log(`Datawrapper MCP endpoint available at /datawrapper-mcp${DATAWRAPPER_MCP_AUTH_TOKEN ? ' (auth required)' : ' (no auth)'}`);
       }
     });
 
