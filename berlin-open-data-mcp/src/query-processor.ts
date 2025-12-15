@@ -21,6 +21,7 @@ export class QueryProcessor {
     "immobilie": ["wohnen", "wohn"],
     "rad": ["fahrrad"],
     "auto": ["kfz"],
+    "windkraft": ["windkraftanlagen", "stromeinspeisung"]
   };
 
   // Combined expansion map: merges seed mappings with generated expansions
