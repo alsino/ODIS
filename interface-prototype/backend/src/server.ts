@@ -194,9 +194,19 @@ async function main() {
         const originalSend = res.send.bind(res);
 
         res.write = function(chunk: any, ...args: any[]) {
-          if (typeof chunk === 'string' && chunk.includes('data: ')) {
+          // Convert Buffer to string if needed
+          let chunkStr: string;
+          if (Buffer.isBuffer(chunk)) {
+            chunkStr = chunk.toString('utf-8');
+          } else if (typeof chunk === 'string') {
+            chunkStr = chunk;
+          } else {
+            return originalWrite(chunk, ...args);
+          }
+
+          if (chunkStr.includes('data: ')) {
             // SSE format: "data: {...}\n\n"
-            const lines = chunk.split('\n');
+            const lines = chunkStr.split('\n');
             const modifiedLines = lines.map((line: string) => {
               if (line.startsWith('data: ')) {
                 try {
@@ -212,9 +222,12 @@ async function main() {
               }
               return line;
             });
-            chunk = modifiedLines.join('\n');
+            chunkStr = modifiedLines.join('\n');
           }
-          return originalWrite(chunk, ...args);
+
+          // Convert back to Buffer if original was Buffer
+          const outputChunk = Buffer.isBuffer(chunk) ? Buffer.from(chunkStr, 'utf-8') : chunkStr;
+          return originalWrite(outputChunk, ...args);
         } as any;
 
         res.json = function(body: any) {
