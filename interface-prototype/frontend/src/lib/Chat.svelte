@@ -217,11 +217,16 @@
   let chatContainer;
 
   function handleSend(event) {
-    const userMessage = event.detail.message;
+    const { message: userMessage, file } = event.detail;
+
+    // Build display content - include filename if file attached
+    const displayContent = file
+      ? (userMessage ? `${userMessage}\n\n📎 ${file.name}` : `📎 ${file.name}`)
+      : userMessage;
 
     // Add user message to UI with unique ID
     const messageId = `msg-${Date.now()}`;
-    messages = [...messages, { role: 'user', content: userMessage, id: messageId }];
+    messages = [...messages, { role: 'user', content: displayContent, id: messageId }];
 
     waiting = true;
     error = null;
@@ -249,14 +254,28 @@
 
     // Send to backend
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'user_message',
-        content: userMessage
-      }));
+      if (file) {
+        // Send file upload message
+        ws.send(JSON.stringify({
+          type: 'file_upload',
+          content: userMessage,
+          file: file
+        }));
+      } else {
+        // Send regular user message
+        ws.send(JSON.stringify({
+          type: 'user_message',
+          content: userMessage
+        }));
+      }
     } else {
       error = 'Not connected to server';
       waiting = false;
     }
+  }
+
+  function handleInputError(event) {
+    error = event.detail.message;
   }
 
 
@@ -330,7 +349,7 @@
   </div>
 
   <div class="input-wrapper">
-    <Input on:send={handleSend} disabled={!connected || waiting} />
+    <Input on:send={handleSend} on:error={handleInputError} disabled={!connected || waiting} />
   </div>
 </div>
 

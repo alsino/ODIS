@@ -101,6 +101,31 @@ The interface shows real-time tool execution to give users visibility into the a
 - Frontend displays intro → tools → response in order
 - See `/backend/src/types.ts` for WebSocket message types
 
+## File Upload
+
+Users can upload data files for analysis, similar to Claude Desktop.
+
+**Supported formats:**
+- CSV (`.csv`)
+- JSON (`.json`)
+- GeoJSON (`.geojson`)
+- Excel (`.xlsx`, `.xls`)
+
+**Size limit:** 10 MB
+
+**How it works:**
+1. Click the paperclip icon next to the input field
+2. Select a file (or remove it by clicking ×)
+3. Optionally add a message describing what you want to analyze
+4. Send - the file is parsed and cached server-side
+5. Claude can analyze the data using the `execute_code` tool
+
+**Technical details:**
+- Files are base64-encoded and sent via WebSocket
+- Backend parses files and caches as `upload-{timestamp}-{id}`
+- Parsed data is available to the sandboxed JavaScript executor
+- Data persists for the session (lost on page refresh)
+
 ## Testing
 
 ```bash

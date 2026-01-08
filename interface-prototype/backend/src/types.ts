@@ -70,7 +70,22 @@ export interface FileDownload {
   content: string;     // File content
 }
 
-export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ThinkingBlock | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete | FileDownload;
+/**
+ * Sent when user uploads a file for analysis
+ * Backend will parse and cache the data for execute_code to use
+ */
+export interface FileUpload {
+  type: 'file_upload';
+  content: string;     // User's message text (can be empty)
+  file: {
+    name: string;      // Original filename
+    mimeType: string;  // MIME type
+    data: string;      // Base64-encoded file content
+    size: number;      // Original size in bytes
+  };
+}
+
+export type WebSocketMessage = UserMessage | AssistantMessage | AssistantMessageChunk | ThinkingBlock | ErrorMessage | StatusMessage | ToolCallStart | ToolCallComplete | FileDownload | FileUpload;
 
 // Conversation history
 export interface ConversationMessage {

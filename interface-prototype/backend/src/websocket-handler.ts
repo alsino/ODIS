@@ -4,8 +4,10 @@
 import type { WebSocket } from 'ws';
 import type { MCPClientManager } from './mcp-client.js';
 import type { ClaudeClient } from './claude-client.js';
-import type { ConversationMessage, WebSocketMessage, UserMessage } from './types.js';
+import type { ConversationMessage, WebSocketMessage, UserMessage, FileUpload } from './types.js';
 import { CodeExecutor } from './code-executor.js';
+import * as XLSX from 'xlsx';
+import { parse as parseCSVSync } from 'csv-parse/sync';
 
 export class WebSocketHandler {
   private conversationHistory: Map<WebSocket, ConversationMessage[]> = new Map();
@@ -63,6 +65,8 @@ export class WebSocketHandler {
 
       if (message.type === 'user_message') {
         await this.handleUserMessage(ws, message);
+      } else if (message.type === 'file_upload') {
+        await this.handleFileUpload(ws, message);
       }
     } catch (error) {
       console.error('Error handling message:', error);
@@ -377,5 +381,136 @@ export class WebSocketHandler {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(message));
     }
+  }
+
+  /**
+   * Handle file upload from frontend
+   */
+  private async handleFileUpload(ws: WebSocket, message: FileUpload): Promise<void> {
+    const { content, file } = message;
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+
+    try {
+      // Validate size
+      if (file.size > MAX_SIZE) {
+        throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is 10 MB.`);
+      }
+
+      // Decode and parse file
+      const buffer = Buffer.from(file.data, 'base64');
+      const parsedData = this.parseFile(buffer, file.name);
+
+      if (!Array.isArray(parsedData) || parsedData.length === 0) {
+        throw new Error('File is empty or contains no data rows');
+      }
+
+      // Generate upload ID and cache
+      const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const datasetCache = this.fetchedDatasets.get(ws);
+      if (datasetCache) {
+        datasetCache.set(uploadId, parsedData);
+        console.log(`[file_upload] Cached ${parsedData.length} rows as ${uploadId}`);
+      }
+
+      // Get column names for context
+      const columns = parsedData.length > 0 ? Object.keys(parsedData[0]) : [];
+
+      // Create enhanced message that tells Claude about the upload
+      const enhancedContent = content
+        ? `${content}\n\n[User uploaded file: ${file.name} (${parsedData.length} rows, columns: ${columns.join(', ')}). Data cached as "${uploadId}" - use execute_code with dataset_id="${uploadId}" to analyze it.]`
+        : `[User uploaded file: ${file.name} (${parsedData.length} rows, columns: ${columns.join(', ')}). Data cached as "${uploadId}" - use execute_code with dataset_id="${uploadId}" to analyze it.]`;
+
+      // Process as normal user message
+      await this.handleUserMessage(ws, {
+        type: 'user_message',
+        content: enhancedContent
+      });
+
+    } catch (error) {
+      console.error('[file_upload] Error processing file:', error);
+      this.sendMessage(ws, {
+        type: 'error',
+        error: `Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    }
+  }
+
+  /**
+   * Parse uploaded file based on extension
+   */
+  private parseFile(buffer: Buffer, filename: string): any[] {
+    const ext = filename.split('.').pop()?.toLowerCase();
+
+    switch (ext) {
+      case 'csv':
+        return this.parseCSV(buffer);
+      case 'json':
+      case 'geojson':
+        return this.parseJSON(buffer);
+      case 'xlsx':
+      case 'xls':
+        return this.parseExcel(buffer);
+      default:
+        throw new Error(`Unsupported file format: .${ext}. Supported formats: CSV, JSON, GeoJSON, Excel (.xlsx/.xls)`);
+    }
+  }
+
+  /**
+   * Parse CSV file
+   */
+  private parseCSV(buffer: Buffer): any[] {
+    const text = buffer.toString('utf-8');
+    return parseCSVSync(text, {
+      columns: true,        // Use first row as headers
+      skip_empty_lines: true,
+      trim: true
+    });
+  }
+
+  /**
+   * Parse JSON or GeoJSON file
+   */
+  private parseJSON(buffer: Buffer): any[] {
+    const text = buffer.toString('utf-8');
+    const data = JSON.parse(text);
+
+    // Handle GeoJSON FeatureCollection
+    if (data.type === 'FeatureCollection' && Array.isArray(data.features)) {
+      return data.features.map((f: any) => ({
+        ...f.properties,
+        geometry_type: f.geometry?.type,
+        geometry: f.geometry
+      }));
+    }
+
+    // Handle plain array
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    // Handle object with data property (common API response format)
+    if (data.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+
+    // Handle object with results property
+    if (data.results && Array.isArray(data.results)) {
+      return data.results;
+    }
+
+    throw new Error('JSON must be an array, GeoJSON FeatureCollection, or object with data/results array');
+  }
+
+  /**
+   * Parse Excel file
+   */
+  private parseExcel(buffer: Buffer): any[] {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      throw new Error('Excel file contains no sheets');
+    }
+    const sheet = workbook.Sheets[sheetName];
+    return XLSX.utils.sheet_to_json(sheet);
   }
 }
