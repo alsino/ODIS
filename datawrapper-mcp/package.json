@@ -11,7 +11,8 @@
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:map": "npm run build && node dist/tests/test-map-creation.js"
+    "test:map": "npm run build && node dist/tests/test-map-creation.js",
+    "start:http": "node dist/http-server.js"
   },
   "keywords": [],
   "author": "",
@@ -20,9 +21,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.0",
     "axios": "^1.13.2",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
