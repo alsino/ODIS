@@ -1,4 +1,14 @@
-# Use Node.js 22 base image
+# ABOUTME: Legacy Dockerfile - kept for backward compatibility
+# ABOUTME: For new deployments, use service-specific Dockerfiles
+
+# This monorepo contains multiple services with their own Dockerfiles:
+# - berlin-open-data-mcp/Dockerfile (bod-mcp service)
+# - datawrapper-mcp/Dockerfile (datawrapper-mcp service)
+# - interface-prototype/Dockerfile (interface service)
+#
+# For Railway deployment, configure each service to use its respective Dockerfile.
+
+# Legacy build (builds all components as single service)
 FROM node:22-bookworm-slim
 
 # Install Chrome dependencies
