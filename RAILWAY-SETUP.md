@@ -89,8 +89,8 @@ For each service, go to "Variables" tab and add the required environment variabl
 
 **Important:** For `mcp-interface-prototype`, use the generated Railway domains:
 ```
-BOD_MCP_URL=https://bod-mcp-production.up.railway.app
-DATAWRAPPER_MCP_URL=https://datawrapper-mcp-production.up.railway.app
+BOD_MCP_URL=https://bod-mcp.up.railway.app
+DATAWRAPPER_MCP_URL=https://datawrapper-mcp.up.railway.app
 ```
 
 ### 4. Deploy
