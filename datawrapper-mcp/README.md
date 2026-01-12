@@ -50,6 +50,29 @@ To get a Datawrapper API token:
 2. Navigate to Settings → API Tokens
 3. Create new token with permissions: `chart:read`, `chart:write`, `chart:publish`
 
+### Running the Server
+
+**Stdio mode** (for Claude Desktop integration):
+```bash
+npm start
+```
+
+**HTTP mode** (for remote access):
+```bash
+npm run start:http
+```
+
+The HTTP server exposes:
+- `/mcp` - MCP endpoint (Streamable HTTP transport)
+- `/health` - Health check endpoint
+
+**Environment variables for HTTP mode:**
+- `DATAWRAPPER_API_TOKEN` (required): Your Datawrapper API token
+- `DATAWRAPPER_MCP_AUTH_TOKEN` (optional): If set, requires Bearer auth for `/mcp` endpoint
+- `PORT` (optional): Server port (default: 3002)
+
+**Deployed instance**: https://datawrapper-mcp.up.railway.app
+
 ### Usage with Claude Desktop
 
 Add to your `claude_desktop_config.json`:
@@ -70,7 +93,7 @@ Add to your `claude_desktop_config.json`:
 
 ### Usage with interface-prototype
 
-The server integrates with the berlin-open-data-mcp workflow. See `docs/plans/design-spec.md` for integration details.
+The chat interface connects to datawrapper-mcp via HTTP when `DATAWRAPPER_MCP_URL` is set.
 
 ## MCP Tools
 

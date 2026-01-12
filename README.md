@@ -2,7 +2,7 @@
 
 A collection of MCP (Model Context Protocol) servers and tools for working with Berlin's open data ecosystem.
 
-**Live Demo**: https://odis-production.up.railway.app/
+**Live Demo**: https://interface-prototype.up.railway.app/
 
 ## Structure
 
@@ -41,9 +41,17 @@ Web-based chat interface for exploring Berlin open data through natural language
 
 See [interface-prototype/README.md](interface-prototype/README.md) for setup and usage.
 
-## Using the Berlin Open Data MCP Server
+## Using the MCP Servers
 
-The Berlin Open Data MCP server is available in two ways:
+The MCP servers are deployed independently and can be used in multiple ways:
+
+### Deployed Services
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Berlin Open Data MCP | https://bod-mcp.up.railway.app | Dataset search and fetching |
+| Datawrapper MCP | https://datawrapper-mcp.up.railway.app | Chart creation |
+| Chat Interface | https://interface-prototype.up.railway.app | Web UI combining both |
 
 ### Remote Access (Claude Desktop)
 
@@ -56,7 +64,7 @@ Connect directly from Claude Desktop to access Berlin Open Data tools in any con
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://odis-production.up.railway.app/mcp"
+        "https://bod-mcp.up.railway.app/mcp"
       ]
     }
   }
@@ -75,7 +83,7 @@ Restart Claude Desktop after updating the configuration.
 
 ### Web Chat Interface
 
-Visit https://odis-production.up.railway.app/ for a web-based chat interface with:
+Visit https://interface-prototype.up.railway.app/ for a web-based chat interface with:
 - Real-time tool execution display
 - Conversational data exploration
 - No authentication required

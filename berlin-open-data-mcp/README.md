@@ -104,11 +104,21 @@ User: "Is there correlation between air quality and traffic?"
 
 ### Running the Server
 
+**Stdio mode** (for Claude Desktop integration):
 ```bash
 npm start
 ```
 
-The server communicates via stdio following the MCP protocol.
+**HTTP mode** (for remote access):
+```bash
+npm run start:http
+```
+
+The HTTP server exposes:
+- `/mcp` - MCP endpoint (Streamable HTTP transport)
+- `/health` - Health check endpoint
+
+**Deployed instance**: https://bod-mcp.up.railway.app
 
 ## Geodata Support
 
