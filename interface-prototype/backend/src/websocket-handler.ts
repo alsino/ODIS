@@ -3,6 +3,7 @@
 
 import type { WebSocket } from 'ws';
 import type { MCPClientManager } from './mcp-client.js';
+import type { HTTPMCPClient } from './http-mcp-client.js';
 import type { ClaudeClient } from './claude-client.js';
 import type { ConversationMessage, WebSocketMessage, UserMessage, FileUpload } from './types.js';
 import { CodeExecutor } from './code-executor.js';
@@ -15,9 +16,9 @@ export class WebSocketHandler {
   private fetchedDatasets: Map<WebSocket, Map<string, any[]>> = new Map();
 
   constructor(
-    private berlinMcpClient: MCPClientManager,
+    private berlinMcpClient: MCPClientManager | HTTPMCPClient,
     private claudeClient: ClaudeClient,
-    private datawrapperMcpClient?: MCPClientManager
+    private datawrapperMcpClient?: MCPClientManager | HTTPMCPClient
   ) {
     this.codeExecutor = new CodeExecutor();
   }
