@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:http": "node dist/http-server.js",
     "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/http-server.ts",
     "generate-expansions": "tsx scripts/generate-query-expansion.ts"
   },
   "dependencies": {
@@ -16,6 +18,8 @@
     "@types/geojson": "^7946.0.16",
     "@xmldom/xmldom": "^0.8.11",
     "axios": "^1.12.2",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
     "node-fetch": "^3.3.2",
     "papaparse": "^5.5.3",
     "proj4": "^2.20.2",
@@ -23,6 +27,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^20.0.0",
     "@types/papaparse": "^5.3.16",
     "@types/proj4": "^2.5.6",
