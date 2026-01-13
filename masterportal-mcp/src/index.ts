@@ -11,7 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { SessionManager } from './session-manager.js';
+import { PortalSession, Layer, MapConfig } from './types.js';
 import { DataFetcher } from './data-fetcher.js';
 import { ZipBuilder } from './zip-builder.js';
 import { AddLayerParams, ConfigureMapParams, GeneratePortalParams } from './types.js';
@@ -105,12 +105,17 @@ const GENERATE_PORTAL_TOOL: Tool = {
   },
 };
 
+const DEFAULT_MAP_CONFIG: MapConfig = {
+  title: 'Masterportal',
+  center: [13.4, 52.52], // Berlin center
+  zoom: 10,
+};
+
 export class MasterportalMCPServer {
   private server: Server;
-  private sessionManager: SessionManager;
+  private session: PortalSession;
   private dataFetcher: DataFetcher;
   private zipBuilder: ZipBuilder;
-  private currentSessionId: string = 'default';
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
@@ -128,16 +133,22 @@ export class MasterportalMCPServer {
       }
     );
 
-    this.sessionManager = new SessionManager();
+    // Each server instance has one session (no need for session ID mapping)
+    this.session = {
+      id: 'session',
+      layers: [],
+      mapConfig: { ...DEFAULT_MAP_CONFIG },
+      createdAt: new Date(),
+      lastAccessedAt: new Date(),
+    };
     this.dataFetcher = new DataFetcher();
     this.zipBuilder = new ZipBuilder();
 
     this.setupHandlers();
   }
 
-  setSessionId(sessionId: string): void {
-    console.error(`[DEBUG] setSessionId called: ${sessionId}`);
-    this.currentSessionId = sessionId;
+  setSessionId(_sessionId: string): void {
+    // No longer needed - each server instance owns one session
   }
 
   private setupHandlers(): void {
@@ -164,7 +175,6 @@ export class MasterportalMCPServer {
   }
 
   private async handleAddLayer(params: AddLayerParams) {
-    console.error(`[DEBUG] handleAddLayer called with currentSessionId: ${this.currentSessionId}`);
     try {
       const { id, name, type, data, url, style } = params;
 
@@ -185,18 +195,15 @@ export class MasterportalMCPServer {
         }
       }
 
-      // Add layer to session
-      this.sessionManager.addLayer(this.currentSessionId, {
-        id,
-        name,
-        type,
-        data,
-        url,
-        style,
-        resolvedData,
-      });
+      // Add or replace layer in session
+      const layer: Layer = { id, name, type, data, url, style, resolvedData };
+      const existingIndex = this.session.layers.findIndex(l => l.id === id);
+      if (existingIndex >= 0) {
+        this.session.layers[existingIndex] = layer;
+      } else {
+        this.session.layers.push(layer);
+      }
 
-      const session = this.sessionManager.getSession(this.currentSessionId)!;
       const featureCount = resolvedData?.features?.length || 0;
 
       return {
@@ -208,7 +215,7 @@ export class MasterportalMCPServer {
 Layer ID: ${id}
 Type: ${type}
 Features: ${featureCount}
-Total layers: ${session.layers.length}
+Total layers: ${this.session.layers.length}
 
 Use generate_portal when ready to create the zip package.`,
           },
@@ -226,14 +233,10 @@ Use generate_portal when ready to create the zip package.`,
     try {
       const { title, center, zoom, basemap_url } = params;
 
-      const config: any = { title };
-      if (center) config.center = center as [number, number];
-      if (zoom !== undefined) config.zoom = zoom;
-      if (basemap_url) config.basemapUrl = basemap_url;
-
-      this.sessionManager.updateMapConfig(this.currentSessionId, config);
-
-      const session = this.sessionManager.getSession(this.currentSessionId)!;
+      if (title) this.session.mapConfig.title = title;
+      if (center) this.session.mapConfig.center = center as [number, number];
+      if (zoom !== undefined) this.session.mapConfig.zoom = zoom;
+      if (basemap_url) this.session.mapConfig.basemapUrl = basemap_url;
 
       return {
         content: [
@@ -241,10 +244,10 @@ Use generate_portal when ready to create the zip package.`,
             type: 'text',
             text: `Map configured
 
-Title: ${session.mapConfig.title}
-Center: [${session.mapConfig.center.join(', ')}]
-Zoom: ${session.mapConfig.zoom}
-Basemap: ${session.mapConfig.basemapUrl || 'OpenStreetMap (default)'}
+Title: ${this.session.mapConfig.title}
+Center: [${this.session.mapConfig.center.join(', ')}]
+Zoom: ${this.session.mapConfig.zoom}
+Basemap: ${this.session.mapConfig.basemapUrl || 'OpenStreetMap (default)'}
 
 Use generate_portal when ready to create the zip package.`,
           },
@@ -259,16 +262,12 @@ Use generate_portal when ready to create the zip package.`,
   }
 
   private async handleGeneratePortal(params: GeneratePortalParams) {
-    console.error(`[DEBUG] handleGeneratePortal called with currentSessionId: ${this.currentSessionId}`);
     try {
-      const session = this.sessionManager.getSession(this.currentSessionId);
-      console.error(`[DEBUG] session exists: ${!!session}, layers: ${session?.layers?.length || 0}`);
-
-      if (!session || session.layers.length === 0) {
+      if (this.session.layers.length === 0) {
         throw new Error('No layers added. Use add_layer first to add at least one layer.');
       }
 
-      const download = await this.zipBuilder.buildZip(session, params.filename);
+      const download = await this.zipBuilder.buildZip(this.session, params.filename);
       const downloadUrl = `${this.baseUrl}/downloads/${download.filename}`;
 
       return {
@@ -282,9 +281,9 @@ Filename: ${download.filename}
 Expires: ${download.expiresAt.toISOString()}
 
 Portal details:
-- Title: ${session.mapConfig.title}
-- Layers: ${session.layers.length}
-- Features: ${session.layers.reduce((sum, l) => sum + (l.resolvedData?.features?.length || 0), 0)}
+- Title: ${this.session.mapConfig.title}
+- Layers: ${this.session.layers.length}
+- Features: ${this.session.layers.reduce((sum, l) => sum + (l.resolvedData?.features?.length || 0), 0)}
 
 Extract the zip to any web server to host your Masterportal.`,
           },
@@ -313,7 +312,6 @@ Extract the zip to any web server to host your Masterportal.`,
   }
 
   destroy(): void {
-    this.sessionManager.destroy();
     this.zipBuilder.destroy();
   }
 }
