@@ -356,7 +356,59 @@ Affects ALL searches. This is a fundamental limitation of the CKAN search API th
 
 ## Limitations
 
-### Limitation #1: District Area Data (Bezirksflächen) Not Available
+### Limitation #1: No Cross-Dataset Analysis Support
+
+**Status:** Known limitation (future feature)
+**Severity:** Medium
+**Date discovered:** 2025-01-13
+
+**Description:**
+
+The MCP server does not support combining data from multiple datasets for analysis. Each `fetch_dataset_data` call retrieves a single dataset, and `execute_code` operates only on the most recently fetched dataset.
+
+**Impact:**
+
+Users cannot perform analyses that require joining or combining data from different sources, such as:
+- Population density (requires population dataset + area dataset)
+- Correlations between different metrics (e.g., income vs. education levels)
+- Time-series comparisons across different data sources
+- Any analysis requiring data enrichment from multiple datasets
+
+**Example scenario:**
+
+User: "Berechne die Bevölkerungsdichte pro Bezirk" (Calculate population density per district)
+
+This requires:
+1. Population data (available on portal)
+2. District area data (not on portal, but even if it were...)
+
+Current limitation: Even if both datasets existed, there's no way to load both into `execute_code` simultaneously and join them.
+
+**Current behavior:**
+
+```
+fetch_dataset_data(population_dataset)  → data = population rows
+fetch_dataset_data(area_dataset)        → data = area rows (overwrites population!)
+execute_code(...)                       → only has access to area rows
+```
+
+**Potential future solutions:**
+
+1. **Multi-dataset execute_code:** Allow specifying multiple dataset_ids, expose as `data1`, `data2`, etc.
+2. **Dataset caching:** Keep multiple fetched datasets in memory, accessible by name
+3. **Join tool:** Add a dedicated `join_datasets` tool that combines datasets on a key column
+4. **Session state:** Maintain fetched datasets across the conversation session
+
+**Workaround:**
+
+For now, users must:
+1. Fetch and analyze each dataset separately
+2. Manually combine results outside the system
+3. Or provide one dataset's values directly in the conversation for Claude to use
+
+---
+
+### Limitation #2: District Area Data (Bezirksflächen) Not Available
 
 **Status:** Known limitation
 **Severity:** Medium
