@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="3.18.0"
+VERSION="3.12.0"
 DOWNLOAD_URL="https://www.masterportal.org/fileadmin/content/downloads/examples-${VERSION}.zip"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$SCRIPT_DIR/../runtime"
