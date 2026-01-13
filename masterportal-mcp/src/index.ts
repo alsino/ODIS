@@ -136,6 +136,7 @@ export class MasterportalMCPServer {
   }
 
   setSessionId(sessionId: string): void {
+    console.error(`[DEBUG] setSessionId called: ${sessionId}`);
     this.currentSessionId = sessionId;
   }
 
@@ -163,6 +164,7 @@ export class MasterportalMCPServer {
   }
 
   private async handleAddLayer(params: AddLayerParams) {
+    console.error(`[DEBUG] handleAddLayer called with currentSessionId: ${this.currentSessionId}`);
     try {
       const { id, name, type, data, url, style } = params;
 
@@ -257,8 +259,10 @@ Use generate_portal when ready to create the zip package.`,
   }
 
   private async handleGeneratePortal(params: GeneratePortalParams) {
+    console.error(`[DEBUG] handleGeneratePortal called with currentSessionId: ${this.currentSessionId}`);
     try {
       const session = this.sessionManager.getSession(this.currentSessionId);
+      console.error(`[DEBUG] session exists: ${!!session}, layers: ${session?.layers?.length || 0}`);
 
       if (!session || session.layers.length === 0) {
         throw new Error('No layers added. Use add_layer first to add at least one layer.');
