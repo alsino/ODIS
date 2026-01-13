@@ -30,6 +30,7 @@ fi
 
 # Copy the entire mastercode directory (preserving version folder structure)
 echo "Copying runtime files..."
+mkdir -p "$RUNTIME_DIR"
 rm -rf "$RUNTIME_DIR/mastercode"
 cp -r mastercode "$RUNTIME_DIR/"
 
