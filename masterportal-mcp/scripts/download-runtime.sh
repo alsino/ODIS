@@ -1,47 +1,50 @@
 #!/bin/bash
-# ABOUTME: Downloads and extracts Masterportal v3.3.0 runtime for bundling
+# ABOUTME: Downloads pre-built Masterportal runtime from official website
 # ABOUTME: Run this script to populate the runtime/ directory
 
 set -e
 
-VERSION="v3.3.0"
-DOWNLOAD_URL="https://bitbucket.org/geowerkstatt-hamburg/masterportal/get/${VERSION}.zip"
+VERSION="3.10.0"
+DOWNLOAD_URL="https://www.masterportal.org/fileadmin/content/downloads/examples-${VERSION}.zip"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$SCRIPT_DIR/../runtime"
 TEMP_DIR="$SCRIPT_DIR/../.temp-download"
 
-echo "Downloading Masterportal ${VERSION}..."
+echo "Downloading Masterportal examples ${VERSION}..."
 
 # Create temp directory
 mkdir -p "$TEMP_DIR"
 cd "$TEMP_DIR"
 
-# Download the release
-curl -L -o masterportal.zip "$DOWNLOAD_URL"
+# Download the pre-built examples
+curl -L -o examples.zip "$DOWNLOAD_URL"
 
 # Extract
-unzip -q masterportal.zip
+unzip -q examples.zip
 
-# Find the extracted folder (Bitbucket names it differently)
-EXTRACTED_DIR=$(ls -d geowerkstatt-hamburg-masterportal-* 2>/dev/null | head -1)
-
-if [ -z "$EXTRACTED_DIR" ]; then
-    echo "Error: Could not find extracted Masterportal directory"
+# Find the mastercode folder
+if [ ! -d "mastercode" ]; then
+    echo "Error: Could not find mastercode directory in examples"
     exit 1
 fi
 
-echo "Building Masterportal..."
-cd "$EXTRACTED_DIR"
-npm install
-npm run build
+# Find the version folder inside mastercode
+MASTERCODE_VERSION=$(ls -d mastercode/*/ 2>/dev/null | head -1)
+
+if [ -z "$MASTERCODE_VERSION" ]; then
+    echo "Error: Could not find version folder in mastercode"
+    exit 1
+fi
 
 # Copy built files to runtime directory
 echo "Copying runtime files..."
 mkdir -p "$RUNTIME_DIR/masterportal"
-cp -r dist/mastercode/* "$RUNTIME_DIR/masterportal/"
+cp -r "$MASTERCODE_VERSION"* "$RUNTIME_DIR/masterportal/"
 
 # Cleanup
 cd "$SCRIPT_DIR"
 rm -rf "$TEMP_DIR"
 
 echo "Done! Masterportal runtime installed to: $RUNTIME_DIR/masterportal"
+echo "Contents:"
+ls -la "$RUNTIME_DIR/masterportal/"

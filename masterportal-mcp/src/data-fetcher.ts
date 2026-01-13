@@ -67,9 +67,10 @@ export class DataFetcher {
     }
   }
 
-  parseInlineGeoJSON(data: string): GeoJSON {
+  parseInlineGeoJSON(data: string | object): GeoJSON {
     try {
-      const parsed = JSON.parse(data);
+      // Handle both string and object inputs (MCP passes objects directly)
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
       this.validateGeoJSON(parsed);
       return parsed;
     } catch (error: any) {
