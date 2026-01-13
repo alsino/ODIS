@@ -7,9 +7,15 @@ import express from 'express';
 import { createServer } from 'http';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { MasterportalMCPServer } from './index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DOWNLOADS_DIR = join(__dirname, '..', 'downloads');
 
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -31,18 +37,16 @@ async function main() {
   app.get('/downloads/:filename', (req, res) => {
     const { filename } = req.params;
 
-    // Find the server that created this download (check all sessions)
-    let downloadPath: string | null = null;
-
-    for (const server of Object.values(servers)) {
-      const download = server.getZipBuilder().getDownload(filename);
-      if (download) {
-        downloadPath = download.path;
-        break;
-      }
+    // Security: only allow .zip files and prevent path traversal
+    if (!filename.endsWith('.zip') || filename.includes('..') || filename.includes('/')) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
     }
 
-    if (!downloadPath || !existsSync(downloadPath)) {
+    // Check if file exists in downloads directory
+    const downloadPath = join(DOWNLOADS_DIR, filename);
+
+    if (!existsSync(downloadPath)) {
       res.status(404).json({ error: 'Download not found or expired' });
       return;
     }
