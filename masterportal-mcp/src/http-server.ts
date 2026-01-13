@@ -37,9 +37,17 @@ async function main() {
   const app = express();
   app.use(express.json());
 
-  // Health check endpoint
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'masterportal-mcp' });
+  // Health check endpoint (includes debug headers for diagnosis)
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'masterportal-mcp',
+      debug: {
+        host: req.get('host'),
+        xForwardedHost: req.get('x-forwarded-host'),
+        xForwardedProto: req.get('x-forwarded-proto'),
+      }
+    });
   });
 
   // Downloads endpoint for zip files
