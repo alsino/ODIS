@@ -18,7 +18,15 @@ const __dirname = dirname(__filename);
 const DOWNLOADS_DIR = join(__dirname, '..', 'downloads');
 
 const PORT = process.env.PORT || 3000;
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+// Auto-detect Railway URL, fall back to BASE_URL env var, then localhost
+function getBaseUrl(): string {
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  }
+  return process.env.BASE_URL || `http://localhost:${PORT}`;
+}
+const BASE_URL = getBaseUrl();
 
 // Store transports and servers by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
