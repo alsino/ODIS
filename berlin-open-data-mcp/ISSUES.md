@@ -354,6 +354,81 @@ Affects ALL searches. This is a fundamental limitation of the CKAN search API th
 
 ---
 
+## Client Behavior Issues
+
+### Issue #4: Different MCP Client Behaviors Affect Functionality
+
+**Status:** Open
+**Severity:** Medium
+**Date discovered:** 2025-01-13
+
+**Description:**
+
+Different MCP clients (Claude.ai, Le Chat/Mistral, Claude Desktop) exhibit different behaviors when using the MCP server, causing inconsistent results for the same user queries.
+
+**Observed differences:**
+
+| Behavior | Claude.ai | Le Chat/Mistral | Claude Desktop |
+|----------|-----------|-----------------|----------------|
+| Session persistence | ❌ Creates new session per tool call | ❌ Creates new session per tool call | ✅ Maintains session |
+| Query modification | Searches as-is | Appends current year (e.g., "2026") | Searches as-is |
+| Tool selection | Uses MCP tools | Uses MCP tools, then falls back to web search | Uses MCP tools |
+
+**Issue #4a: Session Not Maintained Between Tool Calls**
+
+**Affected clients:** Claude.ai, Le Chat
+
+**Problem:** When `fetch_dataset_data` caches data in session memory, a subsequent `execute_code` call fails because it runs in a different session with empty cache.
+
+**Example flow:**
+```
+1. fetch_dataset_data → Session A → Caches 542 rows ✓
+2. execute_code      → Session B → "No cached data found" ❌
+```
+
+**Workaround implemented:** Added global cache fallback with 10-minute TTL. When session cache misses, checks global cache.
+
+**Issue #4b: Le Chat Adds Year to Search Queries**
+
+**Affected clients:** Le Chat/Mistral only
+
+**Problem:** Le Chat automatically appends the current year to search queries, even when users don't specify a year. This causes searches to miss datasets when data for that year doesn't exist yet.
+
+**Example:**
+```
+User query: "Was ist die Bevölkerungszahl der einzelnen Berliner Bezirke?"
+
+Claude.ai searched: "Bevölkerung Bezirke Berlin Einwohnerzahl"
+→ Found "Einwohnerinnen und Einwohner in Berlin in LOR-Planungsräumen am 31.12.2024" ✓
+
+Le Chat searched: "Bevölkerungszahl der Berliner Bezirke 2026"
+→ No relevant results (2026 data doesn't exist yet) ❌
+→ Fell back to web search
+```
+
+**Root cause:** Le Chat sees the system date (2026-01-13) and assumes users want current year data. Statistical data typically lags by 1-2 years, so the most recent population data is from 31.12.2024.
+
+**Impact:**
+- Users get inconsistent results depending on which client they use
+- Le Chat users may not find datasets that Claude.ai users find easily
+- Le Chat falls back to web search instead of using the MCP tools
+
+**Potential solutions:**
+
+1. **Year fallback in search:** If searching for year X finds no population/demographic datasets, automatically also search without the year or with X-1
+2. **Query expansion for years:** Add mappings like "2026" → ["2025", "2024"] for demographic searches
+3. **Document client limitations:** Inform users about different client behaviors
+4. **Client-side fix:** Would require Le Chat to change their behavior (not in our control)
+
+**Workaround for users:**
+
+When using Le Chat, explicitly specify the data year or avoid year-specific queries:
+- ❌ "Bevölkerungszahl 2026" (data doesn't exist)
+- ✅ "Bevölkerungszahl 2024" (data exists)
+- ✅ "Bevölkerungszahl" (no year, finds latest)
+
+---
+
 ## Limitations
 
 ### Limitation #1: No Cross-Dataset Analysis Support
