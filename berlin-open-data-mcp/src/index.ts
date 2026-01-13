@@ -170,13 +170,13 @@ export class BerlinOpenDataMCPServer {
         },
         {
           name: 'execute_code',
-          description: 'Execute JavaScript code to analyze cached dataset data. Use this after fetch_dataset_data to perform calculations, aggregations, filtering, or transformations on the data. The full dataset is available as the `data` variable (array of objects).',
+          description: 'REQUIRED for data analysis. After fetch_dataset_data caches data, use this tool to perform calculations, aggregations, filtering, or transformations. Do NOT try to download files directly or write local scripts - use this tool instead. The full dataset is available as the `data` variable.',
           inputSchema: {
             type: 'object',
             properties: {
               code: {
                 type: 'string',
-                description: 'JavaScript code to execute. The dataset is available as `data` (array of row objects). Return the result as the last expression. Example: `data.filter(r => r.bezirk === "Mitte").length`',
+                description: 'JavaScript code to execute. The dataset is available as `data` (array of row objects). Return the result as the last expression. Example: `data.reduce((acc, r) => { acc[r.BEZIRK_NAME] = (acc[r.BEZIRK_NAME] || 0) + parseInt(r.E_E); return acc; }, {})`',
               },
               dataset_id: {
                 type: 'string',
@@ -651,17 +651,17 @@ export class BerlinOpenDataMCPServer {
               responseText += `## Preview (first 3 rows)\n\n`;
               responseText += `\`\`\`json\n${JSON.stringify(preview, null, 2)}\n\`\`\`\n\n`;
 
-              responseText += `## Full Dataset Cached\n\n`;
-              responseText += `The complete dataset (${totalRows} rows) has been cached server-side.\n\n`;
-              responseText += `**To perform calculations, aggregations, or filtering:**\n`;
-              responseText += `Use \`execute_code\` - the full data is available as the \`data\` variable.\n\n`;
+              responseText += `## Data Analysis Available\n\n`;
+              responseText += `**IMPORTANT:** The full dataset (${totalRows} rows) is cached and ready for analysis.\n\n`;
+              responseText += `**To analyze this data, you MUST use the \`execute_code\` tool.**\n`;
+              responseText += `Do NOT download the file or write local scripts - use execute_code instead.\n\n`;
 
-              responseText += `**Example code:**\n`;
+              responseText += `**Example - Sum population per bezirk:**\n`;
               if (lorInfo.hasBEZ) {
-                responseText += `\`\`\`javascript\n// Count rows per bezirk\ndata.reduce((acc, row) => {\n  acc[row.BEZIRK_NAME] = (acc[row.BEZIRK_NAME] || 0) + 1;\n  return acc;\n}, {})\n\`\`\`\n`;
+                responseText += `\`\`\`javascript\ndata.reduce((acc, row) => {\n  acc[row.BEZIRK_NAME] = (acc[row.BEZIRK_NAME] || 0) + parseInt(row.E_E);\n  return acc;\n}, {})\n\`\`\`\n`;
               } else {
                 const firstCol = displayColumns[0];
-                responseText += `\`\`\`javascript\n// Count unique values in first column\ndata.reduce((acc, row) => {\n  acc[row["${firstCol}"]] = (acc[row["${firstCol}"]] || 0) + 1;\n  return acc;\n}, {})\n\`\`\`\n`;
+                responseText += `\`\`\`javascript\ndata.reduce((acc, row) => {\n  acc[row["${firstCol}"]] = (acc[row["${firstCol}"]] || 0) + 1;\n  return acc;\n}, {})\n\`\`\`\n`;
               }
 
               return {
