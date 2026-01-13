@@ -88,6 +88,24 @@ export class HTTPMCPClient {
       console.log(`[${this.config.name}] Tool ${name} executed successfully`);
       return result;
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      // Detect session errors and attempt reconnection once
+      if (errorMsg.includes('session') || errorMsg.includes('Session')) {
+        console.log(`[${this.config.name}] Session error detected, reconnecting...`);
+        try {
+          await this.disconnect();
+          await this.connect();
+          console.log(`[${this.config.name}] Reconnected, retrying tool: ${name}`);
+          const result = await this.client!.callTool({ name, arguments: args }, undefined, options);
+          console.log(`[${this.config.name}] Tool ${name} succeeded after reconnection`);
+          return result;
+        } catch (retryError) {
+          console.error(`[${this.config.name}] Retry failed after reconnection:`, retryError);
+          throw retryError;
+        }
+      }
+
       console.error(`[${this.config.name}] Tool execution failed for ${name}:`, error);
       throw error;
     }
