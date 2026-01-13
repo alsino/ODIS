@@ -18,6 +18,30 @@ import { GeoJSONTransformer } from './geojson-transformer.js';
 import { LORLookupService } from './lor-lookup.js';
 import { CodeExecutor } from './code-executor.js';
 
+// Global cache for datasets - works across sessions (Claude.ai doesn't maintain sessions)
+// This is safe because Berlin Open Data is public data
+interface CachedDataset {
+  data: any[];
+  timestamp: number;
+}
+const globalDatasetCache = new Map<string, CachedDataset>();
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function getFromGlobalCache(datasetId: string): any[] | undefined {
+  const cached = globalDatasetCache.get(datasetId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+  if (cached) {
+    globalDatasetCache.delete(datasetId); // Expired
+  }
+  return undefined;
+}
+
+function setInGlobalCache(datasetId: string, data: any[]): void {
+  globalDatasetCache.set(datasetId, { data, timestamp: Date.now() });
+}
+
 export interface BerlinOpenDataMCPServerOptions {
   sessionCache?: Map<string, any[]>;
 }
@@ -624,8 +648,9 @@ export class BerlinOpenDataMCPServer {
                 console.log('[fetch_dataset_data] Enriched dataset with LOR names');
               }
 
-              // Cache the full data for execute_code
+              // Cache the full data for execute_code (both session and global)
               this.sessionCache.set(dataset_id, enrichedRows);
+              setInGlobalCache(dataset_id, enrichedRows);
               console.log(`[fetch_dataset_data] Cached ${enrichedRows.length} rows for dataset ${dataset_id}`);
 
               responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
@@ -991,12 +1016,14 @@ export class BerlinOpenDataMCPServer {
           case 'execute_code': {
             const { code, dataset_id } = args as { code: string; dataset_id?: string };
 
-            // Find cached data - either by dataset_id or use most recent
+            // Find cached data - check session cache first, then global cache
+            // (Claude.ai doesn't maintain sessions between tool calls, so we need global fallback)
             let data: any[] | undefined;
             let usedDatasetId: string | undefined;
 
             if (dataset_id) {
-              data = this.sessionCache.get(dataset_id);
+              // Try session cache first, then global cache
+              data = this.sessionCache.get(dataset_id) || getFromGlobalCache(dataset_id);
               usedDatasetId = dataset_id;
               if (!data) {
                 return {
@@ -1007,8 +1034,12 @@ export class BerlinOpenDataMCPServer {
                 };
               }
             } else {
-              // Use most recently cached dataset
-              const keys = Array.from(this.sessionCache.keys());
+              // Use most recently cached dataset - check session first, then global
+              let keys = Array.from(this.sessionCache.keys());
+              if (keys.length === 0) {
+                // Fall back to global cache
+                keys = Array.from(globalDatasetCache.keys());
+              }
               if (keys.length === 0) {
                 return {
                   content: [{
@@ -1018,7 +1049,7 @@ export class BerlinOpenDataMCPServer {
                 };
               }
               usedDatasetId = keys[keys.length - 1];
-              data = this.sessionCache.get(usedDatasetId);
+              data = this.sessionCache.get(usedDatasetId) || getFromGlobalCache(usedDatasetId);
             }
 
             if (!data || data.length === 0) {
