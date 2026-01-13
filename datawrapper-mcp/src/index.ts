@@ -106,7 +106,7 @@ Found columns: ${Object.keys(detection.totalRows > 0 ? {} : {}).join(', ') || 'n
 // Tool definitions
 const CREATE_VISUALIZATION_TOOL: Tool = {
   name: 'create_visualization',
-  description: 'Create a data visualization using the Datawrapper API. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: "d3-maps-symbols" (points with GeoJSON) or "d3-maps-choropleth" (regions with tabular data). **For choropleth maps**: provide tabular data with Berlin region identifiers (Bezirke, Prognoseräume, Bezirksregionen, or Planungsräume). If basemap is not specified, the tool will auto-detect and return available options. **IMPORTANT: When presenting results to the user, always include the chart VIEW URL (datawrapper.dwcdn.net) in your response so they can see the visualization. The edit URL is optional.**',
+  description: 'Create a data visualization using the Datawrapper API. The chart is NOT published automatically - use `publish_visualization` after the user approves it. Supports bar, column, line, area, scatter, dot, range, arrow, pie, donut, election-donut, table, and map charts. Use "variant" for bar (basic/stacked/split) and column (basic/grouped/stacked) charts. **For maps, map_type is REQUIRED**: "d3-maps-symbols" (points with GeoJSON) or "d3-maps-choropleth" (regions with tabular data). **For choropleth maps**: provide tabular data with Berlin region identifiers (Bezirke, Prognoseräume, Bezirksregionen, or Planungsräume). If basemap is not specified, the tool will auto-detect and return available options. Returns an edit URL where the user can preview and adjust the chart before publishing.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -173,6 +173,21 @@ const CREATE_VISUALIZATION_TOOL: Tool = {
   }
 };
 
+const PUBLISH_VISUALIZATION_TOOL: Tool = {
+  name: 'publish_visualization',
+  description: 'Publish a previously created visualization to make it publicly viewable. Use this after the user has reviewed and approved the chart in the Datawrapper editor.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      chart_id: {
+        type: 'string',
+        description: 'The chart ID returned from create_visualization'
+      }
+    },
+    required: ['chart_id']
+  }
+};
+
 export class DatawrapperMCPServer {
   private server: Server;
   private datawrapperClient: DatawrapperClient;
@@ -215,7 +230,7 @@ export class DatawrapperMCPServer {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        tools: [CREATE_VISUALIZATION_TOOL]
+        tools: [CREATE_VISUALIZATION_TOOL, PUBLISH_VISUALIZATION_TOOL]
       };
     });
 
@@ -225,6 +240,10 @@ export class DatawrapperMCPServer {
 
       if (name === 'create_visualization') {
         return await this.handleCreateVisualization(args as unknown as CreateVisualizationParams);
+      }
+
+      if (name === 'publish_visualization') {
+        return await this.handlePublishVisualization(args as { chart_id: string });
       }
 
       throw new Error(`Unknown tool: ${name}`);
@@ -349,41 +368,29 @@ export class DatawrapperMCPServer {
       console.error(`Uploading data (${rowCount} rows)...`);
       await this.datawrapperClient.uploadData(chart.id, dataString);
 
-      // Publish chart
-      console.error('Publishing chart...');
-      const publishedChart = await this.datawrapperClient.publishChart(chart.id);
-
-      // Get chart URLs
-      const publicId = publishedChart.publicId || chart.id;
-      const embedCode = chart_type === 'map'
-        ? this.datawrapperClient.getEmbedCode(publicId, 600, 600)
-        : this.datawrapperClient.getEmbedCode(publicId);
-      const publicUrl = this.datawrapperClient.getPublicUrl(publicId);
+      // Get edit URL (chart is not published yet)
       const editUrl = this.datawrapperClient.getEditUrl(chart.id);
 
       // Log chart creation asynchronously
       this.chartLogger.logChart({
         chartId: chart.id,
-        url: publicUrl,
-        embedCode,
         editUrl,
         chartType: chart_type,
         title: config.title,
         createdAt: new Date().toISOString(),
         sourceDatasetId: source_dataset_id,
         sourceDatasetUrl: source_dataset_id ? `https://daten.berlin.de/datensaetze/${source_dataset_id}` : undefined,
-        dataRowCount: rowCount
+        dataRowCount: rowCount,
+        published: false
       }).catch((err: Error) => console.error('Background logging failed:', err));
 
-      // Format response - URL first for easy access in all clients
-      let responseText = `✅ Chart created!
+      // Format response - chart is ready for review but not published
+      let responseText = `✅ Chart created (not yet published)
 
-👁️ **View**: ${publicUrl}
-✏️ **Edit**: ${editUrl}
+✏️ **Edit & Preview**: ${editUrl}
+🆔 **Chart ID**: ${chart.id}
 
-[CHART:${publicId}]
-${embedCode}
-[/CHART]`;
+The chart is ready for review. Use \`publish_visualization\` with the chart ID to publish it.`;
 
       if (chart_type === 'map' && sampleFeature) {
         responseText += `
@@ -525,44 +532,34 @@ ${JSON.stringify(sampleFeature, null, 2)}
     console.error(`Uploading data (${processedData.length} rows)...`);
     await this.datawrapperClient.uploadData(chart.id, csvData);
 
-    // Publish chart
-    console.error('Publishing chart...');
-    const publishedChart = await this.datawrapperClient.publishChart(chart.id);
-
-    // Get chart URLs
-    const publicId = publishedChart.publicId || chart.id;
-    const embedCode = this.datawrapperClient.getEmbedCode(publicId, 600, 600);
-    const publicUrl = this.datawrapperClient.getPublicUrl(publicId);
+    // Get edit URL (chart is not published yet)
     const editUrl = this.datawrapperClient.getEditUrl(chart.id);
 
     // Log chart creation
     this.chartLogger.logChart({
       chartId: chart.id,
-      url: publicUrl,
-      embedCode,
       editUrl,
       chartType: 'map',
       title: chartTitle,
       createdAt: new Date().toISOString(),
       sourceDatasetId: source_dataset_id,
       sourceDatasetUrl: source_dataset_id ? `https://daten.berlin.de/datensaetze/${source_dataset_id}` : undefined,
-      dataRowCount: processedData.length
+      dataRowCount: processedData.length,
+      published: false
     }).catch((err: Error) => console.error('Background logging failed:', err));
 
-    // Format response - URL first for easy access in all clients
-    const responseText = `✅ Choropleth map created!
+    // Format response - chart is ready for review but not published
+    const responseText = `✅ Choropleth map created (not yet published)
 
-👁️ **View**: ${publicUrl}
-✏️ **Edit**: ${editUrl}
-
-[CHART:${publicId}]
-${embedCode}
-[/CHART]
+✏️ **Edit & Preview**: ${editUrl}
+🆔 **Chart ID**: ${chart.id}
 
 🗺️ **Basemap**: ${basemap} (${level.label})
 📍 **Region column**: ${regionCol} (using ${usingIds ? 'IDs' : 'names'})
 📈 **Value column**: ${valueCol}
-📦 **Regions**: ${processedData.length}`;
+📦 **Regions**: ${processedData.length}
+
+The map is ready for review. Use \`publish_visualization\` with the chart ID to publish it.`;
 
     return {
       content: [
@@ -572,6 +569,64 @@ ${embedCode}
         }
       ]
     };
+  }
+
+  private async handlePublishVisualization(params: { chart_id: string }) {
+    try {
+      const { chart_id } = params;
+
+      if (!chart_id) {
+        throw new Error('chart_id is required');
+      }
+
+      console.error(`Publishing chart ${chart_id}...`);
+      const publishedChart = await this.datawrapperClient.publishChart(chart_id);
+
+      const publicId = publishedChart.publicId || chart_id;
+      const publicUrl = this.datawrapperClient.getPublicUrl(publicId);
+      const editUrl = this.datawrapperClient.getEditUrl(chart_id);
+      const embedCode = this.datawrapperClient.getEmbedCode(publicId);
+
+      // Update log entry with published info
+      this.chartLogger.logChart({
+        chartId: chart_id,
+        url: publicUrl,
+        embedCode,
+        editUrl,
+        publishedAt: new Date().toISOString(),
+        published: true
+      }).catch((err: Error) => console.error('Background logging failed:', err));
+
+      const responseText = `✅ Chart published!
+
+👁️ **View**: ${publicUrl}
+✏️ **Edit**: ${editUrl}
+
+[CHART:${publicId}]
+${embedCode}
+[/CHART]`;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText
+          }
+        ]
+      };
+    } catch (error: any) {
+      console.error('Error publishing visualization:', error);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Failed to publish: ${error.message}`
+          }
+        ],
+        isError: true
+      };
+    }
   }
 
   async connect(transport: any) {

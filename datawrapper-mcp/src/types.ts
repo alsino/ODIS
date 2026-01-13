@@ -104,15 +104,17 @@ export interface DatawrapperChart {
 
 export interface ChartLogEntry {
   chartId: string;
-  url: string;
-  embedCode: string;
   editUrl: string;
-  chartType: ChartType;
-  title: string;
-  createdAt: string;
+  chartType?: ChartType;
+  title?: string;
+  createdAt?: string;
   sourceDatasetId?: string;
   sourceDatasetUrl?: string;
-  dataRowCount: number;
+  dataRowCount?: number;
+  published: boolean;
+  url?: string;
+  embedCode?: string;
+  publishedAt?: string;
 }
 
 export interface ChartConfig {
