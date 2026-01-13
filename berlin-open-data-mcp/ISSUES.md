@@ -356,4 +356,65 @@ Affects ALL searches. This is a fundamental limitation of the CKAN search API th
 
 ## Limitations
 
-(Future issues and limitations will be documented here)
+### Limitation #1: District Area Data (Bezirksflächen) Not Available
+
+**Status:** Known limitation
+**Severity:** Medium
+**Date discovered:** 2025-01-13
+
+**Description:**
+
+District-level area data (Bezirksflächen in km²) is not available on the Berlin Open Data Portal (daten.berlin.de). This data is essential for calculating population density (Bevölkerungsdichte) per district.
+
+**Impact:**
+
+- Users cannot calculate population density without manually providing area data
+- Common user request: "Erstelle eine Karte der Bevölkerungsdichte pro Bezirk"
+- Without area data, this request cannot be fulfilled from portal data alone
+
+**What exists on the portal:**
+
+- Block-level data (ISU5 dataset) - contains area per block, but:
+  - WFS service with thousands of features
+  - Only 10 rows sampled for large datasets
+  - Aggregating blocks to districts doesn't give accurate results
+- Geographic polygons (Flächennutzung WFS) - contains shapes, but:
+  - Area must be calculated from geometry
+  - Not suitable for simple tabular analysis
+
+**Where the data actually lives:**
+
+The official district area statistics are published by Amt für Statistik Berlin-Brandenburg:
+- URL: https://www.statistik-berlin-brandenburg.de/a-v-3-j
+- Title: "Flächenerhebung nach Art der tatsächlichen Nutzung" (Area Survey by Type of Actual Land Use)
+- Format: XLSX, PDF
+- Contains: Area per district in hectares, broken down by land use type
+
+**Current mitigation:**
+
+System prompt instructs Claude to:
+1. Inform users that district area data is not on the portal
+2. Provide link to Statistik Berlin-Brandenburg
+3. Offer to perform calculations if user provides the area values
+4. NOT fabricate area values from training data
+
+**Potential future solutions:**
+
+1. **Static reference data:** Embed the 12 district areas directly in MCP server (data changes rarely)
+2. **External fetch:** Add Statistik Berlin-Brandenburg as a data source
+3. **Request portal inclusion:** Ask Berlin to add this dataset to daten.berlin.de
+
+**District areas for reference (2024 data):**
+
+| Bezirk | Fläche (ha) | % of Berlin |
+|--------|-------------|-------------|
+| Treptow-Köpenick | 16,773 | 18.8% |
+| Pankow | 10,315 | 11.6% |
+| Steglitz-Zehlendorf | 10,265 | 11.5% |
+| ... | ... | ... |
+| Friedrichshain-Kreuzberg | 2,040 | 2.3% |
+| **Berlin gesamt** | **89,112** | **100%** |
+
+(Full data available at the Statistik Berlin-Brandenburg link above)
+
+---
