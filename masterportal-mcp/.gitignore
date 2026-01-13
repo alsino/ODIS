@@ -3,3 +3,5 @@ dist/
 downloads/
 .env
 *.log
+runtime/masterportal/
+.temp-download/

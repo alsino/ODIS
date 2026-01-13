@@ -5,13 +5,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build:bod-mcp && npm run build:datawrapper && npm run build:interface",
+    "build": "npm run build:bod-mcp && npm run build:datawrapper && npm run build:masterportal && npm run build:interface",
     "build:bod-mcp": "cd berlin-open-data-mcp && npm install && npm run build",
     "build:datawrapper": "cd datawrapper-mcp && npm install && npm run build",
+    "build:masterportal": "cd masterportal-mcp && npm install && npm run build",
     "build:interface": "cd interface-prototype/frontend && npm install && npm run build && cd ../backend && npm install && npm run build",
     "start": "cd interface-prototype/backend && node dist/server.js",
     "start:bod-mcp": "cd berlin-open-data-mcp && npm run start:http",
     "start:datawrapper": "cd datawrapper-mcp && npm run start:http",
+    "start:masterportal": "cd masterportal-mcp && npm run start:http",
     "start:interface": "cd interface-prototype/backend && node dist/server.js"
   },
   "keywords": ["mcp", "berlin", "open-data", "soda"],

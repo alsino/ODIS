@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+// ABOUTME: HTTP server wrapper for Masterportal MCP
+// ABOUTME: Exposes MCP via HTTP transport plus /downloads endpoint for zip files
+
+import 'dotenv/config';
+import express from 'express';
+import { createServer } from 'http';
+import { randomUUID } from 'crypto';
+import { existsSync } from 'fs';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { MasterportalMCPServer } from './index.js';
+
+const PORT = process.env.PORT || 3000;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+// Store transports and servers by session ID
+const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+const servers: { [sessionId: string]: MasterportalMCPServer } = {};
+
+async function main() {
+  const app = express();
+  app.use(express.json());
+
+  // Health check endpoint
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', service: 'masterportal-mcp' });
+  });
+
+  // Downloads endpoint for zip files
+  app.get('/downloads/:filename', (req, res) => {
+    const { filename } = req.params;
+
+    // Find the server that created this download (check all sessions)
+    let downloadPath: string | null = null;
+
+    for (const server of Object.values(servers)) {
+      const download = server.getZipBuilder().getDownload(filename);
+      if (download) {
+        downloadPath = download.path;
+        break;
+      }
+    }
+
+    if (!downloadPath || !existsSync(downloadPath)) {
+      res.status(404).json({ error: 'Download not found or expired' });
+      return;
+    }
+
+    res.download(downloadPath, filename, (err) => {
+      if (err) {
+        console.error(`Download error for ${filename}:`, err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Download failed' });
+        }
+      }
+    });
+  });
+
+  // MCP endpoint
+  app.all('/mcp', async (req, res) => {
+    console.log(`Received ${req.method} request to /mcp`);
+
+    try {
+      const sessionId = req.headers['mcp-session-id'] as string;
+      let transport: StreamableHTTPServerTransport | undefined;
+
+      if (sessionId && transports[sessionId]) {
+        transport = transports[sessionId];
+      } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+        const newTransport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            console.log(`MCP session initialized: ${sid}`);
+            transports[sid] = newTransport;
+          },
+        });
+
+        newTransport.onclose = () => {
+          const sid = newTransport.sessionId;
+          if (sid) {
+            console.log(`MCP session closed: ${sid}`);
+            delete transports[sid];
+            if (servers[sid]) {
+              servers[sid].destroy();
+              delete servers[sid];
+            }
+          }
+        };
+
+        const mcpServer = new MasterportalMCPServer(BASE_URL);
+
+        // Set session ID after transport is initialized
+        newTransport.sessionId && mcpServer.setSessionId(newTransport.sessionId);
+
+        await mcpServer.connect(newTransport);
+
+        // Store server reference
+        const sid = newTransport.sessionId;
+        if (sid) {
+          servers[sid] = mcpServer;
+          mcpServer.setSessionId(sid);
+        }
+
+        transport = newTransport;
+      } else {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+          id: null,
+        });
+        return;
+      }
+
+      if (!transport) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal error: transport not initialized' },
+          id: null,
+        });
+        return;
+      }
+
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error('Error handling MCP request:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal server error' },
+          id: null,
+        });
+      }
+    }
+  });
+
+  const server = createServer(app);
+  server.listen(PORT, () => {
+    console.log(`Masterportal MCP HTTP server running on port ${PORT}`);
+    console.log(`MCP endpoint: ${BASE_URL}/mcp`);
+    console.log(`Downloads: ${BASE_URL}/downloads/:filename`);
+    console.log(`Health check: ${BASE_URL}/health`);
+  });
+}
+
+main().catch(console.error);
