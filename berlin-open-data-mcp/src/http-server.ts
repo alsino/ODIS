@@ -15,40 +15,6 @@ const PORT = process.env.PORT || 3000;
 // Store MCP transports by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-/**
- * Strip full dataset JSON from fetch_dataset_data responses to prevent context overflow.
- * Keeps the preview (first JSON block), removes the full dataset (last JSON block).
- */
-function stripFullDataFromResponse(responseBody: any): any {
-  if (!responseBody || typeof responseBody !== 'object') {
-    return responseBody;
-  }
-
-  if (responseBody.result && responseBody.result.content) {
-    const content = responseBody.result.content;
-    if (Array.isArray(content)) {
-      responseBody.result.content = content.map((item: any) => {
-        if (item.type === 'text' && typeof item.text === 'string') {
-          if (item.text.includes('## Full Dataset Available') || item.text.includes('## Preview (first')) {
-            const jsonMatches = Array.from(item.text.matchAll(/```json\n[\s\S]*?\n```/g));
-            if (jsonMatches.length > 1) {
-              const lastMatch = jsonMatches[jsonMatches.length - 1] as RegExpMatchArray;
-              if (lastMatch.index !== undefined) {
-                item.text = item.text.substring(0, lastMatch.index) +
-                           item.text.substring(lastMatch.index + lastMatch[0].length);
-                console.log('[bod-mcp] Stripped full data JSON from response');
-              }
-            }
-          }
-        }
-        return item;
-      });
-    }
-  }
-
-  return responseBody;
-}
-
 async function main() {
   const app = express();
   app.use(express.json());
@@ -105,42 +71,6 @@ async function main() {
         });
         return;
       }
-
-      // Intercept response to strip large data
-      const originalWrite = res.write.bind(res);
-      res.write = function(chunk: any, ...args: any[]) {
-        let chunkStr: string;
-        if (Buffer.isBuffer(chunk)) {
-          chunkStr = chunk.toString('utf-8');
-        } else if (typeof chunk === 'string') {
-          chunkStr = chunk;
-        } else {
-          return originalWrite(chunk, ...args);
-        }
-
-        if (chunkStr.includes('data: ')) {
-          const lines = chunkStr.split('\n');
-          const modifiedLines = lines.map((line: string) => {
-            if (line.startsWith('data: ')) {
-              try {
-                const jsonStr = line.substring(6);
-                if (jsonStr.trim()) {
-                  const parsed = JSON.parse(jsonStr);
-                  const stripped = stripFullDataFromResponse(parsed);
-                  return 'data: ' + JSON.stringify(stripped);
-                }
-              } catch {
-                // Not valid JSON, pass through
-              }
-            }
-            return line;
-          });
-          chunkStr = modifiedLines.join('\n');
-        }
-
-        const outputChunk = Buffer.isBuffer(chunk) ? Buffer.from(chunkStr, 'utf-8') : chunkStr;
-        return originalWrite(outputChunk, ...args);
-      } as any;
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
