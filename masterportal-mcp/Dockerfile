@@ -15,6 +15,7 @@ COPY . .
 RUN npm run build
 
 # Download Masterportal runtime (pre-built from official website)
+# Cache bust: v2 - preserving 3_10_0 folder structure
 RUN chmod +x scripts/download-runtime.sh && ./scripts/download-runtime.sh
 
 # Create directories for downloads
