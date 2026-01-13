@@ -10,7 +10,9 @@ export class PortalGenerator {
     const layerElements = session.layers.map((layer) => ({
       id: layer.id,
       name: layer.name,
+      typ: layer.type === 'geojson' ? 'GeoJSON' : 'WFS',
       visibility: true,
+      showInLayerTree: true,
     }));
 
     const config = {
@@ -40,7 +42,9 @@ export class PortalGenerator {
             {
               id: "osm_basemap",
               name: "OpenStreetMap",
+              typ: "WMS",
               visibility: true,
+              showInLayerTree: true,
             },
           ],
         },
