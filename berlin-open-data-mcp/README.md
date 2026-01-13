@@ -94,16 +94,6 @@ User: "Lade die Zugriffsstatistik herunter" / "Download the traffic data"
 → User saves file locally with browser download dialog
 ```
 
-**Multi-dataset analysis:**
-```
-User: "Is there correlation between air quality and traffic?"
-→ Searches for air quality datasets
-→ Searches for traffic datasets
-→ Fetches both datasets
-→ Analyzes correlation
-→ Returns findings
-```
-
 ### Data Caching & Code Execution
 
 The server uses session-based data caching to enable analysis without context overflow:
