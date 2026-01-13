@@ -9,10 +9,4 @@ MCP-SERVER-DEPLOYMENT.md
 charts-log.json
 bugs/
 
-# Exclude legacy docs
-docs/legacy/
-
-# Exclude all docs except plans folder
-docs/*
-!docs/plans/
-!docs/plans/**
+docs/
