@@ -135,11 +135,11 @@ export class PortalGenerator {
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <title>${session.mapConfig.title}</title>
-  <link rel="stylesheet" href="./mastercode/3_10_0/css/masterportal.css">
+  <link rel="stylesheet" href="./mastercode/current/css/masterportal.css">
 </head>
 <body>
   <div id="masterportal-root"></div>
-  <script src="./mastercode/3_10_0/js/masterportal.js"></script>
+  <script src="./mastercode/current/js/masterportal.js"></script>
 </body>
 </html>
 `;

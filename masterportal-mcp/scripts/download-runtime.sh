@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="3.10.0"
+VERSION="3.18.0"
 DOWNLOAD_URL="https://www.masterportal.org/fileadmin/content/downloads/examples-${VERSION}.zip"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$SCRIPT_DIR/../runtime"
@@ -28,16 +28,24 @@ if [ ! -d "mastercode" ]; then
     exit 1
 fi
 
-# Copy the entire mastercode directory (preserving version folder structure)
+# Copy the mastercode directory and normalize the version folder name
 echo "Copying runtime files..."
-mkdir -p "$RUNTIME_DIR"
-rm -rf "$RUNTIME_DIR/mastercode"
-cp -r mastercode "$RUNTIME_DIR/"
+mkdir -p "$RUNTIME_DIR/mastercode"
+
+# Find the version folder (e.g., 3_18_0_dev_git_...) and copy as 'current'
+VERSION_FOLDER=$(ls -d mastercode/*/ | head -1)
+if [ -z "$VERSION_FOLDER" ]; then
+    echo "Error: Could not find version folder in mastercode"
+    exit 1
+fi
+
+rm -rf "$RUNTIME_DIR/mastercode/current"
+cp -r "$VERSION_FOLDER" "$RUNTIME_DIR/mastercode/current"
 
 # Cleanup
 cd "$SCRIPT_DIR"
 rm -rf "$TEMP_DIR"
 
-echo "Done! Masterportal runtime installed to: $RUNTIME_DIR/mastercode"
+echo "Done! Masterportal ${VERSION} runtime installed to: $RUNTIME_DIR/mastercode/current"
 echo "Contents:"
-ls -la "$RUNTIME_DIR/mastercode/"
+ls -la "$RUNTIME_DIR/mastercode/current/"
