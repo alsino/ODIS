@@ -8,6 +8,7 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 - 📊 **Dataset Discovery**: Browse datasets by category, organization, or explore all available data
 - 📈 **Portal Overview**: Get statistics and understand the data landscape
 - 💾 **Data Fetching**: Download and parse dataset contents (CSV, JSON, Excel, GeoJSON, KML, WFS)
+- 🧮 **Code Execution**: Run JavaScript code on cached data for calculations, aggregations, and filtering
 - 📑 **Excel Support**: Automatically parses XLS and XLSX files (545 datasets, 20.6% of portal)
 - 🗺️ **Geodata Support**: Parse GeoJSON, KML, and WFS geospatial formats (674 datasets, 25.3% of portal)
   - Automatic feature-to-table conversion
@@ -17,7 +18,7 @@ A Model Context Protocol (MCP) server for natural language discovery of Berlin's
 - 🌐 **Browser Automation**: Optional Puppeteer support for JavaScript-rendered downloads (182 datasets, 6.9% of portal)
 - 🎯 **Smart Sampling**: Automatic data sampling with statistics to prevent context overflow
 - 🔗 **Direct API Integration**: Connects to Berlin's official CKAN-based data portal
-- 🤖 **Agentic Workflows**: Tools can be chained together for complex analysis tasks
+- 🤖 **Standalone Operation**: Works with any MCP client (Claude.ai, Le Chat, Claude Desktop) without additional infrastructure
 
 **Total Portal Coverage**: 1,709 datasets (64.2% of portal)
 
@@ -56,8 +57,9 @@ The server implements the MCP protocol and provides these tools:
 
 **Data Fetching & Analysis:**
 
-5. **fetch_dataset_data**: View dataset contents in chat for analysis (returns sample/preview)
+5. **fetch_dataset_data**: View dataset contents in chat for analysis (returns preview, caches full data)
 6. **download_dataset**: Download dataset as a file to user's computer (triggers browser download)
+7. **execute_code**: Run JavaScript code on cached dataset for calculations and aggregations
 
 ### Example Queries
 
@@ -77,11 +79,11 @@ User: "What's available in the Berlin Open Data Portal?"
 
 **Find and analyze data:**
 ```
-User: "Which Berlin district has the most green space per capita?"
-→ Uses search_berlin_datasets for green space data
-→ Uses fetch_dataset_data to view the data in chat
-→ Performs calculation using fetched data
-→ Returns answer with methodology
+User: "Wie viele Einwohner hat jeder Bezirk?"
+→ Uses search_berlin_datasets for population data
+→ Uses fetch_dataset_data (returns preview, caches full data server-side)
+→ Uses execute_code to aggregate: data.reduce((acc, row) => { acc[row.BEZIRK_NAME] = (acc[row.BEZIRK_NAME] || 0) + parseInt(row.E_E); return acc; }, {})
+→ Returns results: { "Mitte": 397004, "Friedrichshain-Kreuzberg": 292624, ... }
 ```
 
 **Download data for local use:**
@@ -100,6 +102,36 @@ User: "Is there correlation between air quality and traffic?"
 → Fetches both datasets
 → Analyzes correlation
 → Returns findings
+```
+
+### Data Caching & Code Execution
+
+The server uses session-based data caching to enable analysis without context overflow:
+
+1. **fetch_dataset_data** fetches full data but returns only a 3-row preview
+2. Full data is cached server-side (per MCP session)
+3. **execute_code** runs JavaScript on cached data in a sandboxed environment
+
+**execute_code features:**
+- Sandboxed execution using Node.js `vm` module
+- 5-second timeout protection
+- 1MB output size limit
+- Access to cached data via `data` variable (array of row objects)
+- Safe globals: Math, Date, JSON, Array, Object, String, Number, Boolean
+
+**Example code patterns:**
+```javascript
+// Count rows per category
+data.reduce((acc, row) => { acc[row.category] = (acc[row.category] || 0) + 1; return acc; }, {})
+
+// Sum a numeric column
+data.reduce((sum, row) => sum + parseInt(row.value), 0)
+
+// Filter and transform
+data.filter(row => row.year === "2024").map(row => ({ name: row.name, total: row.count }))
+
+// Find max/min
+data.reduce((max, row) => parseInt(row.value) > parseInt(max.value) ? row : max, data[0])
 ```
 
 ### Running the Server
