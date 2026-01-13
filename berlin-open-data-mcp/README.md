@@ -223,6 +223,30 @@ Connects to Berlin's open data portal at `daten.berlin.de` using the CKAN API:
 - Tag and organization browsing
 - Autocomplete functionality
 
+## MCP Client Compatibility
+
+The server works with any MCP-compatible client, but client behaviors vary:
+
+### Claude.ai (Recommended)
+- Passes user queries directly to search tools
+- Maintains stable interaction with MCP tools
+- Best results for data discovery and analysis
+
+### Le Chat (Mistral)
+- May reformulate queries before passing to tools
+- Examples observed:
+  - User: "Wie viele Einwohner hat Berlin?" → Tool receives: "Bevölkerungszahl Berliner Bezirke aktuell"
+  - User asks about population → Query modified to include "2026" (current year)
+- Query reformulation can affect search results since it changes the search terms
+- The server includes synonym expansion (e.g., "Bevölkerungszahl" → "Einwohnerinnen") to mitigate this
+
+### Claude Desktop
+- Direct MCP integration via stdio
+- Reliable query passthrough
+- See [Claude Desktop Setup Guide](docs/CLAUDE_DESKTOP_SETUP.md)
+
+**Note**: If search results seem unexpected, the client may have reformulated your query. Try rephrasing or using specific German dataset terminology like "Einwohnerinnen" instead of "Bevölkerung".
+
 ## Development
 
 ```bash
