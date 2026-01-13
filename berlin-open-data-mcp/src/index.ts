@@ -16,6 +16,11 @@ import { DataFetcher } from './data-fetcher.js';
 import { DataSampler } from './data-sampler.js';
 import { GeoJSONTransformer } from './geojson-transformer.js';
 import { LORLookupService } from './lor-lookup.js';
+import { CodeExecutor } from './code-executor.js';
+
+export interface BerlinOpenDataMCPServerOptions {
+  sessionCache?: Map<string, any[]>;
+}
 
 export class BerlinOpenDataMCPServer {
   private server: Server;
@@ -25,8 +30,12 @@ export class BerlinOpenDataMCPServer {
   private dataSampler: DataSampler;
   private geoJSONTransformer: GeoJSONTransformer;
   private lorLookup: LORLookupService;
+  private codeExecutor: CodeExecutor;
+  private sessionCache: Map<string, any[]>;
 
-  constructor() {
+  constructor(options: BerlinOpenDataMCPServerOptions = {}) {
+    this.sessionCache = options.sessionCache || new Map();
+    this.codeExecutor = new CodeExecutor();
     this.server = new Server(
       {
         name: 'berlin-opendata-server',
@@ -157,6 +166,24 @@ export class BerlinOpenDataMCPServer {
               },
             },
             required: ['dataset_id'],
+          },
+        },
+        {
+          name: 'execute_code',
+          description: 'Execute JavaScript code to analyze cached dataset data. Use this after fetch_dataset_data to perform calculations, aggregations, filtering, or transformations on the data. The full dataset is available as the `data` variable (array of objects).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              code: {
+                type: 'string',
+                description: 'JavaScript code to execute. The dataset is available as `data` (array of row objects). Return the result as the last expression. Example: `data.filter(r => r.bezirk === "Mitte").length`',
+              },
+              dataset_id: {
+                type: 'string',
+                description: 'Dataset ID to use. If not provided, uses the most recently fetched dataset.',
+              },
+            },
+            required: ['code'],
           },
         },
       ],
@@ -597,6 +624,10 @@ export class BerlinOpenDataMCPServer {
                 console.log('[fetch_dataset_data] Enriched dataset with LOR names');
               }
 
+              // Cache the full data for execute_code
+              this.sessionCache.set(dataset_id, enrichedRows);
+              console.log(`[fetch_dataset_data] Cached ${enrichedRows.length} rows for dataset ${dataset_id}`);
+
               responseText += `Dataset has ${totalRows} rows. This is a **${sizeLabel} dataset**.\n\n`;
 
               // Show enriched columns
@@ -620,21 +651,18 @@ export class BerlinOpenDataMCPServer {
               responseText += `## Preview (first 3 rows)\n\n`;
               responseText += `\`\`\`json\n${JSON.stringify(preview, null, 2)}\n\`\`\`\n\n`;
 
-              responseText += `## Full Dataset Available\n\n`;
-              responseText += `The complete dataset (${totalRows} rows) has been fetched and cached.\n\n`;
-              responseText += `**IMPORTANT:** To perform calculations, aggregations, or filtering:\n`;
-              responseText += `- Use \`execute_code\` with \`dataset_id: "${dataset_id}"\`\n`;
-              responseText += `- The full data is available as the \`data\` variable (array of ${totalRows} objects)\n`;
+              responseText += `## Full Dataset Cached\n\n`;
+              responseText += `The complete dataset (${totalRows} rows) has been cached server-side.\n\n`;
+              responseText += `**To perform calculations, aggregations, or filtering:**\n`;
+              responseText += `Use \`execute_code\` - the full data is available as the \`data\` variable.\n\n`;
 
+              responseText += `**Example code:**\n`;
               if (lorInfo.hasBEZ) {
-                responseText += `- Use \`BEZIRK_NAME\` to filter by bezirk name (e.g., "Marzahn-Hellersdorf")\n`;
-                responseText += `- Example: \`data.filter(row => row.BEZIRK_NAME === "Marzahn-Hellersdorf").reduce((sum, row) => sum + parseInt(row.E_E), 0)\`\n`;
+                responseText += `\`\`\`javascript\n// Count rows per bezirk\ndata.reduce((acc, row) => {\n  acc[row.BEZIRK_NAME] = (acc[row.BEZIRK_NAME] || 0) + 1;\n  return acc;\n}, {})\n\`\`\`\n`;
               } else {
-                responseText += `- Example: \`data.reduce((acc, row) => { acc[row.bezirk] = (acc[row.bezirk] || 0) + row.einwohner; return acc; }, {})\`\n`;
+                const firstCol = displayColumns[0];
+                responseText += `\`\`\`javascript\n// Count unique values in first column\ndata.reduce((acc, row) => {\n  acc[row["${firstCol}"]] = (acc[row["${firstCol}"]] || 0) + 1;\n  return acc;\n}, {})\n\`\`\`\n`;
               }
-
-              // Return full data in JSON block for backend caching (backend will parse this)
-              responseText += `\n\`\`\`json\n${JSON.stringify(enrichedRows, null, 2)}\n\`\`\`\n`;
 
               return {
                 content: [{ type: 'text', text: responseText }],
@@ -954,6 +982,70 @@ export class BerlinOpenDataMCPServer {
 
             responseText += `[DOWNLOAD:${filename}:${mimeType}]\n`;
             responseText += fileContent;
+
+            return {
+              content: [{ type: 'text', text: responseText }],
+            };
+          }
+
+          case 'execute_code': {
+            const { code, dataset_id } = args as { code: string; dataset_id?: string };
+
+            // Find cached data - either by dataset_id or use most recent
+            let data: any[] | undefined;
+            let usedDatasetId: string | undefined;
+
+            if (dataset_id) {
+              data = this.sessionCache.get(dataset_id);
+              usedDatasetId = dataset_id;
+              if (!data) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `❌ No cached data found for dataset "${dataset_id}". Use \`fetch_dataset_data\` first to load the dataset.`,
+                  }],
+                };
+              }
+            } else {
+              // Use most recently cached dataset
+              const keys = Array.from(this.sessionCache.keys());
+              if (keys.length === 0) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `❌ No dataset cached. Use \`fetch_dataset_data\` first to load a dataset before running code.`,
+                  }],
+                };
+              }
+              usedDatasetId = keys[keys.length - 1];
+              data = this.sessionCache.get(usedDatasetId);
+            }
+
+            if (!data || data.length === 0) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ Cached dataset "${usedDatasetId}" is empty.`,
+                }],
+              };
+            }
+
+            // Execute code with data in context
+            const result = await this.codeExecutor.execute(code, { data });
+
+            if (!result.success) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `❌ Code execution error: ${result.error}\n\n**Code:**\n\`\`\`javascript\n${code}\n\`\`\``,
+                }],
+              };
+            }
+
+            let responseText = `## Code Execution Result\n\n`;
+            responseText += `**Dataset:** ${usedDatasetId} (${data.length} rows)\n`;
+            responseText += `**Execution time:** ${result.executionTime}ms\n\n`;
+            responseText += `**Result:**\n\`\`\`json\n${JSON.stringify(result.output, null, 2)}\n\`\`\`\n`;
 
             return {
               content: [{ type: 'text', text: responseText }],
