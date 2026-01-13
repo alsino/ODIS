@@ -23,7 +23,7 @@ export class ZipBuilder {
 
   constructor() {
     this.downloadsDir = join(__dirname, '..', 'downloads');
-    this.runtimeDir = join(__dirname, '..', 'runtime', 'masterportal');
+    this.runtimeDir = join(__dirname, '..', 'runtime', 'mastercode');
     this.portalGenerator = new PortalGenerator();
 
     // Ensure downloads directory exists

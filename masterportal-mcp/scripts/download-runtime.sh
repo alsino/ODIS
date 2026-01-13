@@ -28,23 +28,15 @@ if [ ! -d "mastercode" ]; then
     exit 1
 fi
 
-# Find the version folder inside mastercode
-MASTERCODE_VERSION=$(ls -d mastercode/*/ 2>/dev/null | head -1)
-
-if [ -z "$MASTERCODE_VERSION" ]; then
-    echo "Error: Could not find version folder in mastercode"
-    exit 1
-fi
-
-# Copy built files to runtime directory
+# Copy the entire mastercode directory (preserving version folder structure)
 echo "Copying runtime files..."
-mkdir -p "$RUNTIME_DIR/masterportal"
-cp -r "$MASTERCODE_VERSION"* "$RUNTIME_DIR/masterportal/"
+rm -rf "$RUNTIME_DIR/mastercode"
+cp -r mastercode "$RUNTIME_DIR/"
 
 # Cleanup
 cd "$SCRIPT_DIR"
 rm -rf "$TEMP_DIR"
 
-echo "Done! Masterportal runtime installed to: $RUNTIME_DIR/masterportal"
+echo "Done! Masterportal runtime installed to: $RUNTIME_DIR/mastercode"
 echo "Contents:"
-ls -la "$RUNTIME_DIR/masterportal/"
+ls -la "$RUNTIME_DIR/mastercode/"

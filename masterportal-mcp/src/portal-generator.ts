@@ -132,12 +132,12 @@ export class PortalGenerator {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${session.mapConfig.title}</title>
-  <link rel="stylesheet" href="./mastercode/css/masterportal.css">
+  <link rel="stylesheet" href="./mastercode/3_10_0/css/masterportal.css">
   <script src="./config.js"></script>
 </head>
 <body>
   <div id="masterportal-root"></div>
-  <script src="./mastercode/js/masterportal.js"></script>
+  <script src="./mastercode/3_10_0/js/masterportal.js"></script>
 </body>
 </html>
 `;
