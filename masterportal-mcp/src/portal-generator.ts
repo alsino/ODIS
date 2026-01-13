@@ -122,7 +122,8 @@ export class PortalGenerator {
   }
 
   generateStyleJson(): string {
-    return JSON.stringify({}, null, 2);
+    // Masterportal expects an array of style definitions
+    return JSON.stringify([], null, 2);
   }
 
   generateIndexHtml(session: PortalSession): string {
@@ -131,9 +132,10 @@ export class PortalGenerator {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>${session.mapConfig.title}</title>
   <link rel="stylesheet" href="./mastercode/3_10_0/css/masterportal.css">
-  <script src="./config.js"></script>
 </head>
 <body>
   <div id="masterportal-root"></div>
