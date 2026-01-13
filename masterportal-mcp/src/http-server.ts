@@ -72,15 +72,18 @@ async function main() {
 
   // MCP endpoint
   app.all('/mcp', async (req, res) => {
-    console.log(`Received ${req.method} request to /mcp`);
+    const sessionId = req.headers['mcp-session-id'] as string;
+    const isInit = isInitializeRequest(req.body);
+    console.log(`[MCP] ${req.method} sessionId=${sessionId || 'none'} isInit=${isInit} existingTransport=${!!transports[sessionId]}`);
 
     try {
-      const sessionId = req.headers['mcp-session-id'] as string;
       let transport: StreamableHTTPServerTransport | undefined;
 
       if (sessionId && transports[sessionId]) {
+        console.log(`[MCP] Reusing existing transport for session ${sessionId}`);
         transport = transports[sessionId];
-      } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+      } else if (!sessionId && req.method === 'POST' && isInit) {
+        console.log(`[MCP] Creating NEW session`);
         const newTransport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {

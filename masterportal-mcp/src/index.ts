@@ -111,14 +111,19 @@ const DEFAULT_MAP_CONFIG: MapConfig = {
   zoom: 10,
 };
 
+let serverInstanceCounter = 0;
+
 export class MasterportalMCPServer {
   private server: Server;
   private session: PortalSession;
   private dataFetcher: DataFetcher;
   private zipBuilder: ZipBuilder;
   private baseUrl: string;
+  private instanceId: number;
 
   constructor(baseUrl?: string) {
+    this.instanceId = ++serverInstanceCounter;
+    console.error(`[Server ${this.instanceId}] Created new MasterportalMCPServer instance`);
     this.baseUrl = baseUrl || 'http://localhost:3000';
 
     this.server = new Server(
@@ -175,6 +180,7 @@ export class MasterportalMCPServer {
   }
 
   private async handleAddLayer(params: AddLayerParams) {
+    console.error(`[Server ${this.instanceId}] handleAddLayer called, current layers: ${this.session.layers.length}`);
     try {
       const { id, name, type, data, url, style } = params;
 
@@ -262,6 +268,7 @@ Use generate_portal when ready to create the zip package.`,
   }
 
   private async handleGeneratePortal(params: GeneratePortalParams) {
+    console.error(`[Server ${this.instanceId}] handleGeneratePortal called, current layers: ${this.session.layers.length}`);
     try {
       if (this.session.layers.length === 0) {
         throw new Error('No layers added. Use add_layer first to add at least one layer.');
