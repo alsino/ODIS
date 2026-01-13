@@ -31,6 +31,16 @@ MCP server for creating data visualizations using the Datawrapper API. Enables a
 
 See [datawrapper-mcp/README.md](datawrapper-mcp/README.md) for setup and API token configuration.
 
+### `/masterportal-mcp`
+
+MCP server for generating ready-to-host [Masterportal](https://www.masterportal.org/) geodata portals. Creates complete zip packages from GeoJSON or WFS data:
+- Multi-layer support with configurable styling
+- Map configuration (title, center, zoom, basemap)
+- Complete Masterportal v3 runtime bundled
+- Download as zip, extract to any web server
+
+See [masterportal-mcp/README.md](masterportal-mcp/README.md) for details.
+
 ### `/interface-prototype`
 
 Web-based chat interface for exploring Berlin open data through natural language. Integrates the Berlin Open Data MCP server with Claude to enable:
@@ -51,7 +61,8 @@ The MCP servers are deployed independently and can be used in multiple ways:
 |---------|-----|-------------|
 | Berlin Open Data MCP | https://bod-mcp.up.railway.app | Dataset search and fetching |
 | Datawrapper MCP | https://datawrapper-mcp.up.railway.app | Chart creation |
-| Chat Interface | https://interface-prototype.up.railway.app | Web UI combining both |
+| Masterportal MCP | https://masterportal-mcp.up.railway.app | Geodata portal generation |
+| Chat Interface | https://interface-prototype.up.railway.app | Web UI combining all MCPs |
 
 ### Remote Access (Claude Desktop)
 
@@ -62,10 +73,15 @@ Connect directly from Claude Desktop to access Berlin Open Data tools in any con
   "mcpServers": {
     "berlin-data": {
       "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://bod-mcp.up.railway.app/mcp"
-      ]
+      "args": ["mcp-remote", "https://bod-mcp.up.railway.app/mcp"]
+    },
+    "datawrapper": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://datawrapper-mcp.up.railway.app/mcp"]
+    },
+    "masterportal": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://masterportal-mcp.up.railway.app/mcp"]
     }
   }
 }
@@ -101,6 +117,12 @@ Connect from [Claude.ai](https://claude.ai/) using Custom Connectors:
 | URL | `https://datawrapper-mcp.up.railway.app/mcp` |
 | OAuth | Leave empty |
 
+**Masterportal MCP:**
+| Field | Value |
+|-------|-------|
+| URL | `https://masterportal-mcp.up.railway.app/mcp` |
+| OAuth | Leave empty |
+
 4. Click **Add** for each connector
 
 To use in conversations:
@@ -132,6 +154,13 @@ Connect from [Le Chat](https://chat.mistral.ai/) using Custom MCP Connectors:
 |-------|-------|
 | Connector Name | `datawrapper` |
 | Connection Server | `https://datawrapper-mcp.up.railway.app/mcp` |
+| Authentication | No Authentication |
+
+**Masterportal MCP:**
+| Field | Value |
+|-------|-------|
+| Connector Name | `masterportal` |
+| Connection Server | `https://masterportal-mcp.up.railway.app/mcp` |
 | Authentication | No Authentication |
 
 **Requirements:**
