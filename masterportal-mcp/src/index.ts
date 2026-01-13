@@ -219,7 +219,8 @@ export class MasterportalMCPServer {
             type: 'text',
             text: `Portal created successfully!
 
-**Download:** ${downloadUrl}
+IMPORTANT: Share this download link with the user:
+${downloadUrl}
 
 Portal details:
 - Title: ${title}
@@ -229,8 +230,7 @@ Portal details:
 Layers added:
 ${layerResults.join('\n')}
 
-The download link expires at ${download.expiresAt.toISOString()}.
-Extract the zip to any web server to host your Masterportal.`,
+The download link expires in 1 hour. The user should click the link to download the zip file, then extract it and serve with any web server (e.g., "npx http-server").`,
           },
         ],
       };
