@@ -81,6 +81,37 @@ Restart Claude Desktop after updating the configuration.
 - Claude Pro, Team, or Enterprise plan (remote MCP servers not available on free tier)
 - Internet connection
 
+### Remote Access (Claude.ai Web)
+
+Connect from [Claude.ai](https://claude.ai/) using Custom Connectors:
+
+1. Go to **Settings** → **Connectors**
+2. Click **Add custom connector** at the bottom
+3. Add each server:
+
+**Berlin Open Data MCP:**
+| Field | Value |
+|-------|-------|
+| URL | `https://bod-mcp.up.railway.app/mcp` |
+| OAuth | Leave empty |
+
+**Datawrapper MCP:**
+| Field | Value |
+|-------|-------|
+| URL | `https://datawrapper-mcp.up.railway.app/mcp` |
+| OAuth | Leave empty |
+
+4. Click **Add** for each connector
+
+To use in conversations:
+1. Click the **+** button in the lower left of the chat
+2. Select **Connectors**
+3. Toggle on the connectors you want to use
+
+**Requirements:**
+- Claude Pro, Max, Team, or Enterprise plan
+- Connectors feature access
+
 ### Remote Access (Mistral Le Chat)
 
 Connect from [Le Chat](https://chat.mistral.ai/) using Custom MCP Connectors:
@@ -101,11 +132,10 @@ Connect from [Le Chat](https://chat.mistral.ai/) using Custom MCP Connectors:
 |-------|-------|
 | Connector Name | `datawrapper` |
 | Connection Server | `https://datawrapper-mcp.up.railway.app/mcp` |
-| Authentication | HTTP Bearer Token (contact admin for token) |
+| Authentication | No Authentication |
 
 **Requirements:**
 - Mistral account with Connector access
-- Admin privileges for adding custom connectors
 
 ### Web Chat Interface
 
