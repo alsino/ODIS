@@ -390,7 +390,7 @@ export class DatawrapperMCPServer {
 ✏️ **Edit & Preview**: ${editUrl}
 🆔 **Chart ID**: ${chart.id}
 
-The chart is ready for review. Use \`publish_visualization\` with the chart ID to publish it.`;
+**IMPORTANT: Do NOT publish automatically.** Present this edit link to the user and ask: "Would you like me to publish this chart, or do you want to make changes first?"`;
 
       if (chart_type === 'map' && sampleFeature) {
         responseText += `
@@ -559,7 +559,7 @@ ${JSON.stringify(sampleFeature, null, 2)}
 📈 **Value column**: ${valueCol}
 📦 **Regions**: ${processedData.length}
 
-The map is ready for review. Use \`publish_visualization\` with the chart ID to publish it.`;
+**IMPORTANT: Do NOT publish automatically.** Present this edit link to the user and ask: "Would you like me to publish this map, or do you want to make changes first?"`;
 
     return {
       content: [
