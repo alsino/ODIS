@@ -19,14 +19,15 @@ const DOWNLOADS_DIR = join(__dirname, '..', 'downloads');
 
 const PORT = process.env.PORT || 3000;
 
-// Auto-detect Railway URL, fall back to BASE_URL env var, then localhost
-function getBaseUrl(): string {
-  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+// Derive base URL from request headers (works with any domain)
+function getBaseUrlFromRequest(req: express.Request): string {
+  const host = req.get('host');
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+  if (host) {
+    return `${protocol}://${host}`;
   }
   return process.env.BASE_URL || `http://localhost:${PORT}`;
 }
-const BASE_URL = getBaseUrl();
 
 // Store transports and servers by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
@@ -100,7 +101,8 @@ async function main() {
           }
         };
 
-        const mcpServer = new MasterportalMCPServer(BASE_URL);
+        const baseUrl = getBaseUrlFromRequest(req);
+        const mcpServer = new MasterportalMCPServer(baseUrl);
 
         // Set session ID after transport is initialized
         newTransport.sessionId && mcpServer.setSessionId(newTransport.sessionId);
@@ -149,9 +151,9 @@ async function main() {
   const server = createServer(app);
   server.listen(PORT, () => {
     console.log(`Masterportal MCP HTTP server running on port ${PORT}`);
-    console.log(`MCP endpoint: ${BASE_URL}/mcp`);
-    console.log(`Downloads: ${BASE_URL}/downloads/:filename`);
-    console.log(`Health check: ${BASE_URL}/health`);
+    console.log(`MCP endpoint: /mcp`);
+    console.log(`Downloads: /downloads/:filename`);
+    console.log(`Health check: /health`);
   });
 }
 
