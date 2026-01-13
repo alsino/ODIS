@@ -34,7 +34,8 @@ async function main() {
 
       if (sessionId && transports[sessionId]) {
         transport = transports[sessionId];
-      } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+      } else if (req.method === 'POST' && isInitializeRequest(req.body)) {
+        // Create new session (handles both fresh connections and stale session IDs)
         const newTransport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
