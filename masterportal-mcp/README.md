@@ -4,7 +4,8 @@ A Model Context Protocol (MCP) server for generating ready-to-host [Masterportal
 
 ## Features
 
-- **Layer Management**: Add multiple GeoJSON or WFS layers to your portal
+- **Single-Call Portal Creation**: Create complete portals with one tool call
+- **Multi-Layer Support**: Include multiple GeoJSON or WFS layers
 - **Map Configuration**: Set title, center, zoom, and basemap
 - **Complete Package**: Generates zip files with Masterportal runtime included
 - **Ready to Host**: Extract and serve from any web server
@@ -28,30 +29,62 @@ This downloads pre-built Masterportal (v3.10.0) from the official website.
 
 ## Usage
 
-The server implements the MCP protocol and provides three tools:
+The server provides a single `create_portal` tool that accepts all configuration and layers in one call.
 
-### Tools
+### create_portal
 
-1. **add_layer**: Add a geodata layer to the portal
-   - Supports inline GeoJSON or URL to GeoJSON/WFS endpoint
-   - Can be called multiple times for multiple layers
-   - Optional styling (color, opacity)
+Creates a complete Masterportal and returns a download URL.
 
-2. **configure_map**: Set portal metadata and map defaults
-   - Title, center coordinates, zoom level
-   - Custom WMS basemap URL (default: OpenStreetMap)
+**Parameters:**
+- `title` (required): Portal title displayed in the header
+- `layers` (required): Array of layers to include
+- `center`: Initial map center `[longitude, latitude]` (default: Berlin `[13.4, 52.52]`)
+- `zoom`: Initial zoom level 1-18 (default: 10)
+- `basemap_url`: Custom WMS basemap URL (default: OpenStreetMap)
+- `filename`: Output filename without .zip extension
 
-3. **generate_portal**: Generate downloadable zip package
-   - Bundles all layers with Masterportal runtime
-   - Returns download URL
+**Layer format:**
+- `id`: Unique layer identifier
+- `name`: Display name in layer tree
+- `type`: `"geojson"` or `"wfs"`
+- `data`: Inline GeoJSON (string or object)
+- `url`: URL to GeoJSON file or WFS endpoint
+- `style`: Optional `{ color, opacity, icon }`
 
-### Example Workflow
+### Example
 
-```
-1. add_layer: Add GeoJSON with Berlin districts
-2. add_layer: Add WFS layer with public facilities
-3. configure_map: Set title "Berlin Infrastructure"
-4. generate_portal: Get download URL for complete portal
+```json
+{
+  "name": "create_portal",
+  "arguments": {
+    "title": "Berlin Points of Interest",
+    "center": [13.4, 52.52],
+    "zoom": 11,
+    "layers": [
+      {
+        "id": "landmarks",
+        "name": "Landmarks",
+        "type": "geojson",
+        "data": {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "geometry": { "type": "Point", "coordinates": [13.377, 52.516] },
+              "properties": { "name": "Brandenburg Gate" }
+            }
+          ]
+        }
+      },
+      {
+        "id": "districts",
+        "name": "Districts",
+        "type": "geojson",
+        "url": "https://example.com/berlin-districts.geojson"
+      }
+    ]
+  }
+}
 ```
 
 ### Running the Server
@@ -108,62 +141,6 @@ The server is configured for Railway deployment:
 docker build -t masterportal-mcp .
 docker run -p 8080:8080 masterportal-mcp
 ```
-
-## API Reference
-
-### add_layer
-
-```json
-{
-  "name": "add_layer",
-  "arguments": {
-    "id": "districts",
-    "name": "Berlin Districts",
-    "type": "geojson",
-    "data": { "type": "FeatureCollection", "features": [...] },
-    "style": { "color": "#ff0000", "opacity": 0.7 }
-  }
-}
-```
-
-Or with URL:
-```json
-{
-  "arguments": {
-    "id": "facilities",
-    "name": "Public Facilities",
-    "type": "wfs",
-    "url": "https://example.com/wfs?service=WFS&request=GetFeature&typeName=facilities"
-  }
-}
-```
-
-### configure_map
-
-```json
-{
-  "name": "configure_map",
-  "arguments": {
-    "title": "My Berlin Portal",
-    "center": [13.4, 52.52],
-    "zoom": 11,
-    "basemap_url": "https://example.com/wms"
-  }
-}
-```
-
-### generate_portal
-
-```json
-{
-  "name": "generate_portal",
-  "arguments": {
-    "filename": "berlin-portal"
-  }
-}
-```
-
-Returns download URL for the generated zip file.
 
 ## Development
 

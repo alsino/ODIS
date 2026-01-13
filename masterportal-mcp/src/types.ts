@@ -45,24 +45,22 @@ export interface GeoJSON {
   }>;
 }
 
-export interface AddLayerParams {
+export interface LayerInput {
   id: string;
   name: string;
   type: 'geojson' | 'wfs';
-  data?: string;
-  url?: string;
+  data?: string | object;  // Inline GeoJSON (string or object)
+  url?: string;            // URL to GeoJSON or WFS endpoint
   style?: LayerStyle;
 }
 
-export interface ConfigureMapParams {
+export interface CreatePortalParams {
   title: string;
-  center?: [number, number];
-  zoom?: number;
-  basemap_url?: string;
-}
-
-export interface GeneratePortalParams {
-  filename?: string;
+  center?: [number, number];  // [lon, lat], default: Berlin [13.4, 52.52]
+  zoom?: number;              // 1-18, default: 10
+  basemap_url?: string;       // Custom WMS basemap URL
+  layers: LayerInput[];       // At least one layer required
+  filename?: string;          // Output filename (without .zip)
 }
 
 export interface GeneratePortalResult {
