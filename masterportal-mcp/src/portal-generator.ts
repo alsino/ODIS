@@ -83,13 +83,20 @@ export class PortalGenerator {
   generateServicesJson(session: PortalSession): string {
     const services: any[] = [];
 
-    // Add OSM basemap
+    // Add OSM basemap via WMS
     services.push({
       id: "osm_basemap",
       name: "OpenStreetMap",
-      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-      typ: "OSM",
-      attribution: "© OpenStreetMap contributors",
+      url: "https://ows.terrestris.de/osm/service",
+      typ: "WMS",
+      layers: "OSM-WMS",
+      format: "image/png",
+      version: "1.1.1",
+      singleTile: false,
+      transparent: false,
+      tilesize: 256,
+      gfiAttributes: "ignore",
+      layerAttribution: "© OpenStreetMap contributors",
     });
 
     // Add each layer
