@@ -28,24 +28,18 @@ if [ ! -d "mastercode" ]; then
     exit 1
 fi
 
-# Copy the mastercode directory and normalize the version folder name
+# Copy the mastercode directory preserving the version folder name
 echo "Copying runtime files..."
-mkdir -p "$RUNTIME_DIR/mastercode"
+mkdir -p "$RUNTIME_DIR"
 
-# Find the version folder (e.g., 3_18_0_dev_git_...) and copy as 'current'
-VERSION_FOLDER=$(ls -d mastercode/*/ | head -1)
-if [ -z "$VERSION_FOLDER" ]; then
-    echo "Error: Could not find version folder in mastercode"
-    exit 1
-fi
-
-rm -rf "$RUNTIME_DIR/mastercode/current"
-cp -r "$VERSION_FOLDER" "$RUNTIME_DIR/mastercode/current"
+# Copy the entire mastercode directory (includes version subfolder like 3_12_0)
+rm -rf "$RUNTIME_DIR/mastercode"
+cp -r "mastercode" "$RUNTIME_DIR/"
 
 # Cleanup
 cd "$SCRIPT_DIR"
 rm -rf "$TEMP_DIR"
 
-echo "Done! Masterportal ${VERSION} runtime installed to: $RUNTIME_DIR/mastercode/current"
+echo "Done! Masterportal ${VERSION} runtime installed to: $RUNTIME_DIR/mastercode/"
 echo "Contents:"
-ls -la "$RUNTIME_DIR/mastercode/current/"
+ls -la "$RUNTIME_DIR/mastercode/"

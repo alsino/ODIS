@@ -15,7 +15,7 @@ COPY . .
 RUN npm run build
 
 # Download Masterportal runtime (pre-built from official website)
-# Cache bust: v3 - using 3.12.0
+# Cache bust: v4 - preserve 3_12_0 folder name for webpack paths
 RUN chmod +x scripts/download-runtime.sh && ./scripts/download-runtime.sh
 
 # Create directories for downloads

@@ -3,6 +3,8 @@
 
 import { PortalSession } from './types.js';
 
+const MASTERPORTAL_VERSION = '3_12_0';
+
 export class PortalGenerator {
   generateConfigJson(session: PortalSession): string {
     const layerElements = session.layers.map((layer) => ({
@@ -135,11 +137,11 @@ export class PortalGenerator {
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <title>${session.mapConfig.title}</title>
-  <link rel="stylesheet" href="./mastercode/current/css/masterportal.css">
+  <link rel="stylesheet" href="./mastercode/${MASTERPORTAL_VERSION}/css/masterportal.css">
 </head>
 <body>
   <div id="masterportal-root"></div>
-  <script src="./mastercode/current/js/masterportal.js"></script>
+  <script src="./mastercode/${MASTERPORTAL_VERSION}/js/masterportal.js"></script>
 </body>
 </html>
 `;
