@@ -252,6 +252,9 @@ export class MasterportalMCPServer {
         throw new Error('At least one layer is required');
       }
 
+      // Reset session for new portal
+      this.session.layers = [];
+
       // Configure map
       this.session.mapConfig.title = title;
       if (center) this.session.mapConfig.center = center as [number, number];
