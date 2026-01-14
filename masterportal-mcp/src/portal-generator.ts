@@ -109,7 +109,7 @@ export class PortalGenerator {
       layerAttribution: "© OpenStreetMap contributors",
     });
 
-    // Add each layer
+    // Add each layer with styleId for vector layers
     for (const layer of session.layers) {
       if (layer.type === 'geojson') {
         services.push({
@@ -118,6 +118,7 @@ export class PortalGenerator {
           url: `./data/${layer.id}.geojson`,
           typ: "GeoJSON",
           epsg: "EPSG:4326",
+          styleId: layer.id,
           gfiAttributes: "showAll",
           gfiTheme: "default",
         });
@@ -127,6 +128,7 @@ export class PortalGenerator {
           name: layer.name,
           url: layer.url,
           typ: "WFS",
+          styleId: layer.id,
           gfiAttributes: "showAll",
           gfiTheme: "default",
           version: "2.0.0",
@@ -141,9 +143,36 @@ export class PortalGenerator {
     return JSON.stringify([], null, 2);
   }
 
-  generateStyleJson(): string {
-    // Masterportal expects an array of style definitions
-    return JSON.stringify([], null, 2);
+  generateStyleJson(session: PortalSession): string {
+    // Generate style definitions for each layer
+    const styles = session.layers.map((layer, index) => {
+      // Use different colors for different layers
+      const colors = [
+        [228, 26, 28, 1],    // red
+        [55, 126, 184, 1],   // blue
+        [77, 175, 74, 1],    // green
+        [152, 78, 163, 1],   // purple
+        [255, 127, 0, 1],    // orange
+      ];
+      const color = colors[index % colors.length];
+
+      return {
+        styleId: layer.id,
+        rules: [
+          {
+            style: {
+              type: "circle",
+              circleFillColor: color,
+              circleRadius: 8,
+              circleStrokeColor: [255, 255, 255, 1],
+              circleStrokeWidth: 2,
+            },
+          },
+        ],
+      };
+    });
+
+    return JSON.stringify(styles, null, 2);
   }
 
   generateIndexHtml(session: PortalSession): string {
