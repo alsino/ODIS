@@ -10,6 +10,41 @@ const MASTERPORTAL_VERSION = '3_10_0';
 proj4.defs('EPSG:25832', '+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
 proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
 
+// Convert hex color to RGBA array for Masterportal
+function hexToRgba(hex: string, alpha: number): [number, number, number, number] {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return [228, 26, 28, alpha]; // Default red
+  return [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16),
+    alpha
+  ];
+}
+
+// Darken a hex color for stroke
+function darkenColor(hex: string): [number, number, number, number] {
+  const rgba = hexToRgba(hex, 1);
+  return [
+    Math.max(0, rgba[0] - 68),
+    Math.max(0, rgba[1] - 26),
+    Math.max(0, rgba[2] - 28),
+    1
+  ];
+}
+
+// Extract feature type from WFS URL (last path segment)
+function extractFeatureType(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const pathname = new URL(url).pathname;
+    const segments = pathname.split('/').filter(s => s.length > 0);
+    return segments[segments.length - 1] || null;
+  } catch {
+    return null;
+  }
+}
+
 export class PortalGenerator {
   generateConfigJson(session: PortalSession): string {
     // Convert WGS84 [lon, lat] to EPSG:25832 [x, y]
@@ -54,13 +89,11 @@ export class PortalGenerator {
           ]
         },
         subjectlayer: {
-          elements: [
-            {
-              id: "kita_berlin",
-              visibility: true,
-              showInLayerTree: true
-            }
-          ]
+          elements: session.layers.map(layer => ({
+            id: layer.id,
+            visibility: true,
+            showInLayerTree: true
+          }))
         }
       }
     };
@@ -91,60 +124,70 @@ export class PortalGenerator {
 `;
   }
 
-  generateServicesJson(_session: PortalSession): string {
+  generateServicesJson(session: PortalSession): string {
     // German official basemap - supports EPSG:25832
-    const services = [
-      {
-        id: "basemap_de",
-        name: "basemap.de Web Raster",
-        url: "https://sgx.geodatenzentrum.de/wms_basemapde",
-        typ: "WMS",
-        layers: "de_basemapde_web_raster_farbe",
-        format: "image/png",
-        version: "1.3.0",
-        singleTile: false,
-        transparent: false,
-        tilesize: 512,
-        gutter: 0,
-        gfiAttributes: "ignore",
-        layerAttribution: "© basemap.de / BKG"
-      },
-      {
-        id: "kita_berlin",
-        name: "Kindertagesstätten Berlin",
-        url: "https://gdi.berlin.de/services/wfs/kita",
-        typ: "WFS",
-        featureType: "kita",
-        version: "2.0.0",
-        styleId: "kita_style",
-        gfiAttributes: "showAll"
-      }
-    ];
+    const basemap = {
+      id: "basemap_de",
+      name: "basemap.de Web Raster",
+      url: "https://sgx.geodatenzentrum.de/wms_basemapde",
+      typ: "WMS",
+      layers: "de_basemapde_web_raster_farbe",
+      format: "image/png",
+      version: "1.3.0",
+      singleTile: false,
+      transparent: false,
+      tilesize: 512,
+      gutter: 0,
+      gfiAttributes: "ignore",
+      layerAttribution: "© basemap.de / BKG"
+    };
 
-    return JSON.stringify(services, null, 2);
+    const layerServices = session.layers.map(layer => {
+      if (layer.type === 'wfs') {
+        return {
+          id: layer.id,
+          name: layer.name,
+          url: layer.url,
+          typ: "WFS",
+          featureType: extractFeatureType(layer.url) || layer.id,
+          version: "2.0.0",
+          styleId: `${layer.id}_style`,
+          gfiAttributes: "showAll"
+        };
+      } else {
+        return {
+          id: layer.id,
+          name: layer.name,
+          url: `./data/${layer.id}.geojson`,
+          typ: "GeoJSON",
+          styleId: `${layer.id}_style`,
+          gfiAttributes: "showAll"
+        };
+      }
+    });
+
+    return JSON.stringify([basemap, ...layerServices], null, 2);
   }
 
   generateRestServicesJson(): string {
     return JSON.stringify([], null, 2);
   }
 
-  generateStyleJson(): string {
-    const styles = [
-      {
-        styleId: "kita_style",
-        rules: [
-          {
-            style: {
-              type: "circle",
-              circleRadius: 8,
-              circleFillColor: [228, 26, 28, 0.8],
-              circleStrokeColor: [160, 0, 0, 1],
-              circleStrokeWidth: 2
-            }
+  generateStyleJson(session: PortalSession): string {
+    const styles = session.layers.map(layer => ({
+      styleId: `${layer.id}_style`,
+      rules: [
+        {
+          style: {
+            type: "circle",
+            circleRadius: 8,
+            circleFillColor: hexToRgba(layer.style?.color || '#e41a1c', layer.style?.opacity ?? 0.8),
+            circleStrokeColor: darkenColor(layer.style?.color || '#e41a1c'),
+            circleStrokeWidth: 2
           }
-        ]
-      }
-    ];
+        }
+      ]
+    }));
     return JSON.stringify(styles, null, 2);
   }
 

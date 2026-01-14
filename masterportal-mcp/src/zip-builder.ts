@@ -72,7 +72,7 @@ export class ZipBuilder {
       // Add resources
       archive.append(this.portalGenerator.generateServicesJson(session), { name: 'resources/services.json' });
       archive.append(this.portalGenerator.generateRestServicesJson(), { name: 'resources/rest-services.json' });
-      archive.append(this.portalGenerator.generateStyleJson(), { name: 'resources/style.json' });
+      archive.append(this.portalGenerator.generateStyleJson(session), { name: 'resources/style.json' });
 
       // Add GeoJSON data files for each layer
       for (const layer of session.layers) {

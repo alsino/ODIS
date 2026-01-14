@@ -190,21 +190,25 @@ export class MasterportalMCPServer {
         }
 
         let resolvedData;
-        if (data) {
-          resolvedData = this.dataFetcher.parseInlineGeoJSON(data);
-        } else if (url) {
-          if (type === 'geojson') {
+        // Only fetch/parse data for GeoJSON layers (bundled in zip)
+        // WFS layers are loaded directly by Masterportal at runtime
+        if (type === 'geojson') {
+          if (data) {
+            resolvedData = this.dataFetcher.parseInlineGeoJSON(data);
+          } else if (url) {
             resolvedData = await this.dataFetcher.fetchGeoJSON(url);
-          } else if (type === 'wfs') {
-            resolvedData = await this.dataFetcher.fetchWFS(url);
           }
         }
 
         const layer: Layer = { id, name, type, data: typeof data === 'string' ? data : JSON.stringify(data), url, style, resolvedData };
         this.session.layers.push(layer);
 
-        const featureCount = resolvedData?.features?.length || 0;
-        layerResults.push(`- ${name}: ${featureCount} features`);
+        if (type === 'wfs') {
+          layerResults.push(`- ${name}: WFS service`);
+        } else {
+          const featureCount = resolvedData?.features?.length || 0;
+          layerResults.push(`- ${name}: ${featureCount} features`);
+        }
       }
 
       // Generate the portal
