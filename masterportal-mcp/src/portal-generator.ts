@@ -18,13 +18,16 @@ export class PortalGenerator {
     const config = {
       portalConfig: {
         mainMenu: {
+          expanded: true,
+          currentComponent: "layerTree",
           title: {
             text: session.mapConfig.title,
           },
         },
         map: {
           mapView: {
-            startCenter: this.lonLatToEPSG25832(session.mapConfig.center),
+            epsg: "EPSG:4326",
+            startCenter: session.mapConfig.center,
             startZoomLevel: session.mapConfig.zoom,
           },
           controls: {
@@ -156,16 +159,5 @@ export class PortalGenerator {
 </body>
 </html>
 `;
-  }
-
-  // Convert WGS84 (lon, lat) to EPSG:25832 (UTM zone 32N)
-  // Simplified conversion for Berlin area
-  private lonLatToEPSG25832(lonLat: [number, number]): [number, number] {
-    const [lon, lat] = lonLat;
-    // Approximate conversion for Berlin area
-    // More accurate would use proj4, but this is sufficient for initial centering
-    const x = 500000 + (lon - 9) * 111320 * Math.cos(lat * Math.PI / 180);
-    const y = lat * 110540;
-    return [Math.round(x), Math.round(y)];
   }
 }
