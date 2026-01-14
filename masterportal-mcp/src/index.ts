@@ -11,6 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 import { PortalSession, Layer, MapConfig } from './types.js';
 import { DataFetcher } from './data-fetcher.js';
 import { ZipBuilder } from './zip-builder.js';
@@ -19,6 +20,21 @@ import { CreatePortalParams } from './types.js';
 dotenv.config();
 
 // Tool definition
+const LIST_WFS_LAYERS_TOOL: Tool = {
+  name: 'list_wfs_layers',
+  description: 'List available feature types (layers) from a WFS service. Use this to discover what layers are available before adding them to a portal. If a WFS has multiple feature types, ask the user which one(s) to include.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      url: {
+        type: 'string',
+        description: 'WFS service URL (e.g., https://gdi.berlin.de/services/wfs/gruene_wege)',
+      },
+    },
+    required: ['url'],
+  },
+};
+
 const CREATE_PORTAL_TOOL: Tool = {
   name: 'create_portal',
   description: 'Create a complete Masterportal in a single call. Provide all layers and configuration at once. Returns a download URL for the generated zip package. Use this tool for stateless clients like Claude.ai web.',
@@ -72,6 +88,10 @@ const CREATE_PORTAL_TOOL: Tool = {
             url: {
               type: 'string',
               description: 'URL to GeoJSON file or WFS endpoint',
+            },
+            featureType: {
+              type: 'string',
+              description: 'WFS feature type name (required if WFS has multiple feature types). Use list_wfs_layers to discover available types.',
             },
             style: {
               type: 'object',
@@ -149,7 +169,7 @@ export class MasterportalMCPServer {
   private setupHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        tools: [CREATE_PORTAL_TOOL],
+        tools: [LIST_WFS_LAYERS_TOOL, CREATE_PORTAL_TOOL],
       };
     });
 
@@ -157,12 +177,70 @@ export class MasterportalMCPServer {
       const { name, arguments: args } = request.params;
 
       switch (name) {
+        case 'list_wfs_layers':
+          return await this.handleListWfsLayers(args as { url: string });
         case 'create_portal':
           return await this.handleCreatePortal(args as unknown as CreatePortalParams);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
     });
+  }
+
+  private async handleListWfsLayers(params: { url: string }) {
+    try {
+      const { url } = params;
+      const capabilitiesUrl = `${url}?SERVICE=WFS&REQUEST=GetCapabilities`;
+
+      console.error(`Fetching WFS capabilities from: ${capabilitiesUrl}`);
+      const response = await axios.get(capabilitiesUrl, { timeout: 30000 });
+      const xml = response.data;
+
+      // Parse feature types from XML
+      const featureTypes: Array<{ name: string; title: string }> = [];
+      const nameRegex = /<Name>([^<]+)<\/Name>/g;
+      const titleRegex = /<Title>([^<]+)<\/Title>/g;
+
+      // Find all FeatureType blocks
+      const featureTypeBlocks = xml.match(/<FeatureType[^>]*>[\s\S]*?<\/FeatureType>/g) || [];
+
+      for (const block of featureTypeBlocks) {
+        const nameMatch = block.match(/<Name>([^<]+)<\/Name>/);
+        const titleMatch = block.match(/<Title>([^<]+)<\/Title>/);
+        if (nameMatch) {
+          featureTypes.push({
+            name: nameMatch[1],
+            title: titleMatch ? titleMatch[1] : nameMatch[1],
+          });
+        }
+      }
+
+      if (featureTypes.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: `No feature types found in WFS service at ${url}`,
+          }],
+        };
+      }
+
+      const layerList = featureTypes.map(ft => `- ${ft.name}: ${ft.title}`).join('\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Found ${featureTypes.length} feature type(s) in WFS service:\n\n${layerList}\n\nTo use a layer, specify the feature type name (e.g., "${featureTypes[0].name}") in the featureType parameter when calling create_portal.`,
+        }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to fetch WFS capabilities: ${error.message}`,
+        }],
+        isError: true,
+      };
+    }
   }
 
   private async handleCreatePortal(params: CreatePortalParams) {
@@ -183,7 +261,7 @@ export class MasterportalMCPServer {
       // Process all layers
       const layerResults: string[] = [];
       for (const layerInput of layers) {
-        const { id, name, type, data, url, style } = layerInput;
+        const { id, name, type, data, url, featureType, style } = layerInput;
 
         if (!data && !url) {
           throw new Error(`Layer "${name}" requires either "data" (inline GeoJSON) or "url"`);
@@ -200,7 +278,7 @@ export class MasterportalMCPServer {
           }
         }
 
-        const layer: Layer = { id, name, type, data: typeof data === 'string' ? data : JSON.stringify(data), url, style, resolvedData };
+        const layer: Layer = { id, name, type, data: typeof data === 'string' ? data : JSON.stringify(data), url, featureType, style, resolvedData };
         this.session.layers.push(layer);
 
         if (type === 'wfs') {

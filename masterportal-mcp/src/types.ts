@@ -13,6 +13,7 @@ export interface Layer {
   type: 'geojson' | 'wfs';
   data?: string;  // Inline GeoJSON string
   url?: string;   // URL to GeoJSON or WFS endpoint
+  featureType?: string;  // WFS feature type name (for WFS with multiple types)
   style?: LayerStyle;
   // Resolved data (fetched from URL or parsed from inline)
   resolvedData?: GeoJSON;
@@ -51,6 +52,7 @@ export interface LayerInput {
   type: 'geojson' | 'wfs';
   data?: string | object;  // Inline GeoJSON (string or object)
   url?: string;            // URL to GeoJSON or WFS endpoint
+  featureType?: string;    // WFS feature type name (for WFS with multiple types)
   style?: LayerStyle;
 }
 

@@ -149,7 +149,7 @@ export class PortalGenerator {
           name: layer.name,
           url: layer.url,
           typ: "WFS",
-          featureType: extractFeatureType(layer.url) || layer.id,
+          featureType: layer.featureType || extractFeatureType(layer.url) || layer.id,
           version: "2.0.0",
           styleId: `${layer.id}_style`,
           gfiAttributes: "showAll"
