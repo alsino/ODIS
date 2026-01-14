@@ -52,6 +52,15 @@ export class PortalGenerator {
               visibility: true
             }
           ]
+        },
+        subjectlayer: {
+          elements: [
+            {
+              id: "kita_berlin",
+              visibility: true,
+              showInLayerTree: true
+            }
+          ]
         }
       }
     };
@@ -99,6 +108,16 @@ export class PortalGenerator {
         gutter: 0,
         gfiAttributes: "ignore",
         layerAttribution: "© basemap.de / BKG"
+      },
+      {
+        id: "kita_berlin",
+        name: "Kindertagesstätten Berlin",
+        url: "https://gdi.berlin.de/services/wfs/kita",
+        typ: "WFS",
+        featureType: "kita",
+        version: "2.0.0",
+        styleId: "kita_style",
+        gfiAttributes: "showAll"
       }
     ];
 
@@ -110,7 +129,23 @@ export class PortalGenerator {
   }
 
   generateStyleJson(): string {
-    return JSON.stringify([], null, 2);
+    const styles = [
+      {
+        styleId: "kita_style",
+        rules: [
+          {
+            style: {
+              type: "circle",
+              circleRadius: 8,
+              circleFillColor: [228, 26, 28, 0.8],
+              circleStrokeColor: [160, 0, 0, 1],
+              circleStrokeWidth: 2
+            }
+          }
+        ]
+      }
+    ];
+    return JSON.stringify(styles, null, 2);
   }
 
   generateIndexHtml(session: PortalSession): string {
