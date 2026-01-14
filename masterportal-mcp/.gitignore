@@ -3,5 +3,4 @@ dist/
 downloads/
 .env
 *.log
-runtime/
 .temp-download/
