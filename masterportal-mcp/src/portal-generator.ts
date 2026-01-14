@@ -182,30 +182,20 @@ export class PortalGenerator {
         styleId: `${layer.id}_style`,
         rules: [
           {
-            // Point geometries
+            // Single rule with all geometry type styles - Masterportal auto-detects
             style: {
-              type: "circle",
+              // Point styles
               circleRadius: 8,
               circleFillColor: fillColor,
               circleStrokeColor: strokeColor,
-              circleStrokeWidth: 2
-            }
-          },
-          {
-            // Polygon/MultiPolygon geometries
-            style: {
-              type: "polygon",
+              circleStrokeWidth: 2,
+              // Polygon styles
               polygonFillColor: fillColor,
               polygonStrokeColor: strokeColor,
-              polygonStrokeWidth: 2
-            }
-          },
-          {
-            // Line geometries
-            style: {
-              type: "line",
-              lineStrokeColor: strokeColor,
-              lineStrokeWidth: 3
+              polygonStrokeWidth: 2,
+              // Line styles
+              lineStrokeColor: fillColor,
+              lineStrokeWidth: 4
             }
           }
         ]
