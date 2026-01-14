@@ -1,18 +1,18 @@
 // ABOUTME: Generates Masterportal configuration files from session state
-// ABOUTME: Produces config.json, config.js, services.json, and index.html for Berlin (EPSG:25833)
+// ABOUTME: Produces config.json, config.js, services.json, and index.html using EPSG:25832
 
 import proj4 from 'proj4';
 import { PortalSession } from './types.js';
 
-const MASTERPORTAL_VERSION = '3_12_0';
+const MASTERPORTAL_VERSION = '3_10_0';
 
-// Define projections - EPSG:25833 is UTM Zone 33N (correct for Berlin)
-proj4.defs('EPSG:25833', '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+// Define projections - EPSG:25832 is UTM Zone 32N (Masterportal's default)
+proj4.defs('EPSG:25832', '+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
 proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
 
 export class PortalGenerator {
   generateConfigJson(session: PortalSession): string {
-    // Convert WGS84 [lon, lat] to EPSG:25833 [x, y]
+    // Convert WGS84 [lon, lat] to EPSG:25832 [x, y]
     const centerUTM = this.lonLatToUTM(session.mapConfig.center);
 
     // Minimal config matching working example structure
@@ -27,7 +27,9 @@ export class PortalGenerator {
           },
           mapView: {
             startCenter: centerUTM,
-            startZoomLevel: session.mapConfig.zoom
+            startZoomLevel: session.mapConfig.zoom,
+            // Germany-wide extent in EPSG:25832 to allow panning anywhere
+            extent: [280000, 5200000, 920000, 6100000]
           }
         },
         mainMenu: {
@@ -46,7 +48,7 @@ export class PortalGenerator {
         baselayer: {
           elements: [
             {
-              id: "osm_basemap",
+              id: "basemap_de",
               visibility: true
             }
           ]
@@ -58,10 +60,10 @@ export class PortalGenerator {
   }
 
   generateConfigJs(_session: PortalSession): string {
-    // Match working example structure - only EPSG:25833 for Berlin
+    // Match working example structure - EPSG:25832 is Masterportal's default
     return `const Config = {
   namedProjections: [
-    ["EPSG:25833", "+title=ETRS89/UTM 33N +proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"]
+    ["EPSG:25832", "+title=ETRS89/UTM 32N +proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"]
   ],
   layerConf: "./resources/services.json",
   restConf: "./resources/rest-services.json",
@@ -81,23 +83,22 @@ export class PortalGenerator {
   }
 
   generateServicesJson(_session: PortalSession): string {
-    // Minimal services - just OSM basemap
+    // German official basemap - supports EPSG:25832
     const services = [
       {
-        id: "osm_basemap",
-        name: "OpenStreetMap",
-        url: "https://ows.terrestris.de/osm/service",
+        id: "basemap_de",
+        name: "basemap.de Web Raster",
+        url: "https://sgx.geodatenzentrum.de/wms_basemapde",
         typ: "WMS",
-        layers: "OSM-WMS",
+        layers: "de_basemapde_web_raster_farbe",
         format: "image/png",
         version: "1.3.0",
         singleTile: false,
-        transparent: true,
-        transparency: 0,
+        transparent: false,
         tilesize: 512,
         gutter: 0,
         gfiAttributes: "ignore",
-        layerAttribution: "© OpenStreetMap contributors"
+        layerAttribution: "© basemap.de / BKG"
       }
     ];
 
@@ -132,9 +133,9 @@ export class PortalGenerator {
 `;
   }
 
-  // Convert WGS84 [lon, lat] to EPSG:25833 (UTM Zone 33N)
+  // Convert WGS84 [lon, lat] to EPSG:25832 (UTM Zone 32N)
   private lonLatToUTM(lonLat: [number, number]): [number, number] {
-    const result = proj4('EPSG:4326', 'EPSG:25833', lonLat);
+    const result = proj4('EPSG:4326', 'EPSG:25832', lonLat);
     return [Math.round(result[0]), Math.round(result[1])];
   }
 }
