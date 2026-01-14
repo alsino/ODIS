@@ -1,33 +1,37 @@
 // ABOUTME: Generates Masterportal configuration files from session state
 // ABOUTME: Produces config.json, config.js, services.json, and index.html
 
+import proj4 from 'proj4';
 import { PortalSession } from './types.js';
 
 const MASTERPORTAL_VERSION = '3_12_0';
 
+// Define projections
+proj4.defs('EPSG:25832', '+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
 export class PortalGenerator {
   generateConfigJson(session: PortalSession): string {
+    // Convert WGS84 [lon, lat] to EPSG:25832 [x, y]
+    const centerEPSG25832 = this.lonLatToEPSG25832(session.mapConfig.center);
+
+    // Layer elements only need id and visibility - all other info is in services.json
     const layerElements = session.layers.map((layer) => ({
       id: layer.id,
-      name: layer.name,
-      typ: layer.type === 'geojson' ? 'GeoJSON' : 'WFS',
       visibility: true,
-      showInLayerTree: true,
     }));
 
     const config = {
       portalConfig: {
         mainMenu: {
           expanded: true,
-          currentComponent: "layerTree",
           title: {
             text: session.mapConfig.title,
           },
         },
         map: {
           mapView: {
-            epsg: "EPSG:4326",
-            startCenter: session.mapConfig.center,
+            startCenter: centerEPSG25832,
             startZoomLevel: session.mapConfig.zoom,
           },
           controls: {
@@ -44,10 +48,7 @@ export class PortalGenerator {
           elements: [
             {
               id: "osm_basemap",
-              name: "OpenStreetMap",
-              typ: "WMS",
               visibility: true,
-              showInLayerTree: true,
             },
           ],
         },
@@ -90,7 +91,7 @@ export class PortalGenerator {
   generateServicesJson(session: PortalSession): string {
     const services: any[] = [];
 
-    // Add OSM basemap via WMS
+    // Add OSM basemap via WMS (matching working example structure)
     services.push({
       id: "osm_basemap",
       name: "OpenStreetMap",
@@ -98,10 +99,12 @@ export class PortalGenerator {
       typ: "WMS",
       layers: "OSM-WMS",
       format: "image/png",
-      version: "1.1.1",
+      version: "1.3.0",
       singleTile: false,
-      transparent: false,
-      tilesize: 256,
+      transparent: true,
+      transparency: 0,
+      tilesize: 512,
+      gutter: 0,
       gfiAttributes: "ignore",
       layerAttribution: "© OpenStreetMap contributors",
     });
@@ -114,6 +117,7 @@ export class PortalGenerator {
           name: layer.name,
           url: `./data/${layer.id}.geojson`,
           typ: "GeoJSON",
+          epsg: "EPSG:4326",
           gfiAttributes: "showAll",
           gfiTheme: "default",
         });
@@ -159,5 +163,11 @@ export class PortalGenerator {
 </body>
 </html>
 `;
+  }
+
+  // Convert WGS84 [lon, lat] to EPSG:25832 using proj4
+  private lonLatToEPSG25832(lonLat: [number, number]): [number, number] {
+    const result = proj4('EPSG:4326', 'EPSG:25832', lonLat);
+    return [Math.round(result[0]), Math.round(result[1])];
   }
 }
