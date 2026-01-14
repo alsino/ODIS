@@ -77,6 +77,20 @@ export class PortalGenerator {
           highlightedFeatures: {
             active: true
           }
+        },
+        searchBar: {
+          searchInterfaces: [
+            {
+              type: "komootPhoton",
+              minChars: 3,
+              serviceId: "1",
+              limit: 10,
+              lang: "de",
+              lat: 52.52,
+              lon: 13.4,
+              bbox: "13.0,52.3,13.8,52.7"
+            }
+          ]
         }
       },
       layerConfig: {
@@ -170,7 +184,16 @@ export class PortalGenerator {
   }
 
   generateRestServicesJson(): string {
-    return JSON.stringify([], null, 2);
+    // Geocoding service for address search
+    const restServices = [
+      {
+        id: "1",
+        name: "Komoot Photon Suche",
+        url: "https://photon.komoot.io/api/?",
+        typ: "WFS"
+      }
+    ];
+    return JSON.stringify(restServices, null, 2);
   }
 
   generateStyleJson(session: PortalSession): string {
