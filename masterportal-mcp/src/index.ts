@@ -34,11 +34,11 @@ const CREATE_PORTAL_TOOL: Tool = {
         items: { type: 'number' },
         minItems: 2,
         maxItems: 2,
-        description: 'Initial map center [longitude, latitude]. Default: Berlin [13.4, 52.52]',
+        description: 'Initial map center [longitude, latitude]. Default: Berlin [13.30, 52.52]',
       },
       zoom: {
         type: 'number',
-        description: 'Initial zoom level (1-18). Default: 10',
+        description: 'Initial zoom level (1-18). Default: 1 (shows all of Berlin)',
       },
       basemap_url: {
         type: 'string',
@@ -97,8 +97,8 @@ const CREATE_PORTAL_TOOL: Tool = {
 
 const DEFAULT_MAP_CONFIG: MapConfig = {
   title: 'Masterportal',
-  center: [13.4, 52.52], // Berlin center
-  zoom: 10,
+  center: [13.30, 52.52], // Berlin center
+  zoom: 1, // Shows all of Berlin
 };
 
 let serverInstanceCounter = 0;
