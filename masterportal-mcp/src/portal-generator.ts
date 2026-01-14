@@ -174,20 +174,43 @@ export class PortalGenerator {
   }
 
   generateStyleJson(session: PortalSession): string {
-    const styles = session.layers.map(layer => ({
-      styleId: `${layer.id}_style`,
-      rules: [
-        {
-          style: {
-            type: "circle",
-            circleRadius: 8,
-            circleFillColor: hexToRgba(layer.style?.color || '#e41a1c', layer.style?.opacity ?? 0.8),
-            circleStrokeColor: darkenColor(layer.style?.color || '#e41a1c'),
-            circleStrokeWidth: 2
+    const styles = session.layers.map(layer => {
+      const fillColor = hexToRgba(layer.style?.color || '#e41a1c', layer.style?.opacity ?? 0.8);
+      const strokeColor = darkenColor(layer.style?.color || '#e41a1c');
+
+      return {
+        styleId: `${layer.id}_style`,
+        rules: [
+          {
+            // Point geometries
+            style: {
+              type: "circle",
+              circleRadius: 8,
+              circleFillColor: fillColor,
+              circleStrokeColor: strokeColor,
+              circleStrokeWidth: 2
+            }
+          },
+          {
+            // Polygon/MultiPolygon geometries
+            style: {
+              type: "polygon",
+              polygonFillColor: fillColor,
+              polygonStrokeColor: strokeColor,
+              polygonStrokeWidth: 2
+            }
+          },
+          {
+            // Line geometries
+            style: {
+              type: "line",
+              lineStrokeColor: strokeColor,
+              lineStrokeWidth: 3
+            }
           }
-        }
-      ]
-    }));
+        ]
+      };
+    });
     return JSON.stringify(styles, null, 2);
   }
 
