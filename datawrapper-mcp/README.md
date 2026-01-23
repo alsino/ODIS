@@ -180,28 +180,22 @@ npm test
 npm run build && node dist/tests/test-chart-types.js
 ```
 
-## Documentation
-
-- [Design Specification](docs/plans/design-spec.md) - Complete design and architecture
-- [Implementation Plan](docs/plans/implementation-plan-extended-charts.md) - Extended chart types implementation
-
 ## Project Structure
 
 ```
 datawrapper-mcp/
 ├── src/
 │   ├── index.ts              # MCP server entry point
+│   ├── http-server.ts        # HTTP server for remote access
 │   ├── datawrapper-client.ts # Datawrapper API wrapper
 │   ├── chart-builder.ts      # Smart defaults engine & validation
+│   ├── basemap-matcher.ts    # LOR region detection for choropleth maps
 │   ├── chart-logger.ts       # Chart provenance logging
 │   └── types.ts              # TypeScript interfaces
 ├── src/tests/
-│   ├── chart-builder.test.ts # Unit tests for chart builder
-│   ├── index.test.ts         # Integration tests
-│   └── test-chart-types.ts   # Live API tests
+│   ├── basemap-matcher.test.ts # Unit tests for basemap matcher
+│   └── test-choropleth-integration.ts # Choropleth integration tests
 ├── dist/                     # Compiled JavaScript
-├── docs/plans/               # Design documents
-├── charts-log.json          # Created charts log (generated)
 └── README.md
 ```
 

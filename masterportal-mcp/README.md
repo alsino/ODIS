@@ -29,7 +29,16 @@ This downloads pre-built Masterportal (v3.10.0) from the official website.
 
 ## Usage
 
-The server provides a single `create_portal` tool that accepts all configuration and layers in one call.
+The server provides two tools:
+
+### list_wfs_layers
+
+Discover available feature types from a WFS service before adding layers to a portal.
+
+**Parameters:**
+- `url` (required): WFS service URL (e.g., `https://gdi.berlin.de/services/wfs/gruene_wege`)
+
+**Returns:** List of available feature types with their names.
 
 ### create_portal
 
@@ -103,6 +112,8 @@ The HTTP server exposes:
 - `/mcp` - MCP endpoint (Streamable HTTP transport)
 - `/downloads/:filename` - Download generated zip files
 - `/health` - Health check endpoint
+
+**Deployed instance**: https://masterportal-mcp.up.railway.app
 
 ## Generated Portal Structure
 

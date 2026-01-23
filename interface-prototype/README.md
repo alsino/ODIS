@@ -54,11 +54,12 @@ npm run build
 npm start
 ```
 
+**Deployed instance**: https://interface-prototype.up.railway.app
+
 ## Project Structure
 
 - `backend/` - Express server, MCP client, Claude API integration
 - `frontend/` - Svelte chat interface
-- `docs/plans/` - Design spec and implementation plan
 
 ## How It Works
 
@@ -134,6 +135,13 @@ npm test
 
 ## Environment Variables
 
-- `ANTHROPIC_API_KEY` - Required. Your Claude API key
-- `PORT` - Optional. Backend port (default: 3000)
-- `BERLIN_MCP_PATH` - Optional. Path to Berlin MCP server
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Your Claude API key |
+| `PORT` | No | Backend port (default: 3000) |
+| `BOD_MCP_URL` | No | URL to remote Berlin Open Data MCP (e.g., `https://bod-mcp.up.railway.app`) |
+| `DATAWRAPPER_MCP_URL` | No | URL to remote Datawrapper MCP |
+| `DATAWRAPPER_MCP_AUTH_TOKEN` | No | Auth token if Datawrapper MCP requires it |
+| `BERLIN_MCP_PATH` | No | Path to local Berlin MCP server (auto-detected if not set) |
+
+When `BOD_MCP_URL` is set, the backend connects to the remote MCP server via HTTP instead of spawning a local process.
