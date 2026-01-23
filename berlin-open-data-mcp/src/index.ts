@@ -563,6 +563,15 @@ export class BerlinOpenDataMCPServer {
               full_data?: boolean;
             };
 
+            if (!dataset_id) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: '❌ Missing required parameter: dataset_id. Use `search_berlin_datasets` to find dataset IDs.',
+                }],
+              };
+            }
+
             const LARGE_DATASET_THRESHOLD = 1000;
 
             // Get dataset to find resources
@@ -598,7 +607,8 @@ export class BerlinOpenDataMCPServer {
             }
 
             // Check if this is a ZIP file - cannot preview/analyze
-            if (resource.format?.toUpperCase() === 'ZIP') {
+            const formatUpper = resource.format?.toUpperCase() || '';
+            if (formatUpper === 'ZIP' || formatUpper.startsWith('ZIP:') || formatUpper.includes(':ZIP')) {
               return {
                 content: [{
                   type: 'text',
