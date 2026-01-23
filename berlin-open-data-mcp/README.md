@@ -243,3 +243,38 @@ The server works with any MCP-compatible client, but client behaviors vary:
 npm run dev  # Development mode with tsx
 npm run build  # Production build
 ```
+
+## Maintenance
+
+### Updating the Query Expansion List
+
+The server uses a pre-generated vocabulary mapping to expand search queries. This mapping is based on the actual content of the Berlin Open Data Portal. When new datasets are added to the portal, the expansion list should be regenerated to include the new vocabulary.
+
+**When to regenerate:**
+- Monthly, or when deploying updates
+- When new datasets are added to the portal
+- When users report that certain search terms don't find expected datasets
+
+**How to regenerate:**
+
+```bash
+npm run generate-expansions  # Analyzes all portal datasets, generates src/generated-expansions.ts
+npm run build                 # Rebuild with new expansions
+```
+
+The script fetches all ~2,600 datasets from the portal and analyzes word co-occurrences to build the expansion mappings. This takes a few minutes to complete.
+
+**Manual seed mappings:**
+
+For common user terms that don't appear in portal metadata (e.g., English terms or colloquial German), add manual mappings to `src/query-processor.ts` in the `SEED_MAPPINGS` constant:
+
+```typescript
+const SEED_MAPPINGS: Record<string, string[]> = {
+  'miete': ['mietspiegel'],
+  'wohnung': ['wohnen', 'wohn'],
+  'apartment': ['wohnen', 'wohn'],  // English support
+  // ... add new mappings here
+};
+```
+
+These seed mappings are automatically expanded using the generated portal vocabulary.
