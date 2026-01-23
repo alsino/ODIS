@@ -1,4 +1,4 @@
-# Berlin Soda: Erkenntnisse aus der Entwicklung von MCP-Servern für Open Data
+# Berlin Simple Open Data: Erkenntnisse aus der Entwicklung von drei MCP-Servern für Open Data
 
 Dieses Dokument fasst die wichtigsten Herausforderungen und Erkenntnisse aus der Entwicklung des Berlin Soda-Projekts zusammen – einer Sammlung von MCP-Servern (Model Context Protocol), die KI-Systemen den Zugang zu Berlins Open-Data-Ökosystem ermöglichen.
 

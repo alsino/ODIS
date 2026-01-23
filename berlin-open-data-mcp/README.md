@@ -243,10 +243,3 @@ The server works with any MCP-compatible client, but client behaviors vary:
 npm run dev  # Development mode with tsx
 npm run build  # Production build
 ```
-
-## Documentation
-
-- [Claude Desktop Setup Guide](docs/CLAUDE_DESKTOP_SETUP.md)
-- [Conversational AI Workflow](docs/CONVERSATIONAL_AI_WORKFLOW.md)
-- [MCP Innovation Ideas](docs/MCP_INNOVATION_IDEAS.md)
-- [Usage Examples](docs/USAGE.md)
