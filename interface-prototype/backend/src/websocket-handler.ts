@@ -87,7 +87,9 @@ export class WebSocketHandler {
 
     try {
       // Get available tools from both MCP clients
-      const berlinTools = this.berlinMcpClient.getTools();
+      // Filter out execute_code from MCP tools since we provide our own local version
+      // that has access to cached datasets
+      const berlinTools = this.berlinMcpClient.getTools().filter(t => t.name !== 'execute_code');
       const datawrapperTools = this.datawrapperMcpClient?.getTools() || [];
       const mcpTools = [...berlinTools, ...datawrapperTools];
 
