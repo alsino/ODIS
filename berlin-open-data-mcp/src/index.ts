@@ -699,6 +699,10 @@ export class BerlinOpenDataMCPServer {
                 responseText += `\`\`\`javascript\ndata.reduce((acc, row) => {\n  acc[row["${firstCol}"]] = (acc[row["${firstCol}"]] || 0) + 1;\n  return acc;\n}, {})\n\`\`\`\n`;
               }
 
+              // Add full data as second JSON block for interface-prototype to cache
+              // This block is stripped by the interface before sending to Claude
+              responseText += `\n\`\`\`json\n${JSON.stringify(enrichedRows)}\n\`\`\`\n`;
+
               return {
                 content: [{ type: 'text', text: responseText }],
               };
